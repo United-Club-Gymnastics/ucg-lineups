@@ -6,11 +6,10 @@ export type TnTCode = 'TR' | 'DM' | 'TU' | 'SY';
 export type TnTLevels = Partial<Record<TnTCode, string>>;
 
 export interface Athlete {
-  /** `<DISC>_<bib>`, e.g. `WAG_0398`. */
+  /** `<DISC>_<club slug>_<name slug>`, e.g. `WAG_alpha-gymnastics_ada-test` (+ `_<YYYY-MM-DD>`
+   *  birth date when two athletes in one club and discipline share a name). UCG doesn't use bibs. */
   id: string;
   discipline: Discipline;
-  /** Kept as a string: bibs can have leading zeros. */
-  bib: string;
   first: string;
   last: string;
   clubId: string;

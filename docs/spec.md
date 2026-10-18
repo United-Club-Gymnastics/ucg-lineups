@@ -36,9 +36,9 @@ comes from SF Events and goes stale).
 | `Athletes_Export.xlsx` | every entry: Bib, FirstName, LastName, Type (WAG/MAG/T&T), Club (**full name — always print this, never Team/short name**), Level, Session (`Session 1 - Orange` = session number + gym colour) |
 | `WAG_Export.xlsx`, `MAG_Export.xlsx` | per-apparatus `*_Event_Status` (Included / Scratched) → the athlete's apparatus list |
 | `TnT_Export.xlsx` | per-event level and status: Tumbling, Trampoline, Synch_Trampoline, DMT |
-| `Club_Emails.xlsx` | club contact emails (a cell may hold several, `;`-separated); editable in the app |
+| `League_Communications_Export.xlsx` (preferred) or `Club_Emails.xlsx` | club contact emails: League export = Club, Contact, Role (only email roles used); Club_Emails = Club, Email (a cell may hold several, `;`-separated). Clubs in the list with no athletes are summarised in one warning. Editable in the app |
 
-- Athlete key = **discipline + bib** (the same person appears in several disciplines with the same bib).
+- **UCG doesn't use bibs** (Julia 2026-10-18) — they are ignored everywhere. Athlete key = **discipline + full club name + first/last name**; birth date is added only when two athletes in one club and discipline share a name. Discipline exports are matched the same way (club + name, then name alone, birth date as tiebreak).
 - `SquadName` in the export is ignored — squads are built here, not in ScoreFlippers.
 - Level `NAIGC Open Scoring` is renamed **Infinity** (WAG). Other levels keep their export names
   with short codes (MAG Dev/Int/Adv; WAG Silver XS, Platinum XP, Diamond XD, Level 9 L9, Infinity

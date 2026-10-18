@@ -9,10 +9,9 @@ import { readWorkbook } from '../src/lib/import/read-workbook.ts';
 
 const dir = process.argv[2] ?? process.env.UCG_EXPORTS_DIR;
 if (!dir) throw new Error('Pass the exports folder as an argument or set UCG_EXPORTS_DIR');
-const wanted = ['Athletes_Export.xlsx', 'WAG_Export.xlsx', 'MAG_Export.xlsx', 'TnT_Export.xlsx', 'Club_Emails.xlsx'];
 
 const found: Detected[] = [];
-for (const f of readdirSync(dir).filter((n) => wanted.includes(n))) {
+for (const f of readdirSync(dir).filter((n) => n.toLowerCase().endsWith('.xlsx') && !n.startsWith('~'))) {
   const buf = readFileSync(join(dir, f));
   const d = detectWorkbook(await readWorkbook(new Uint8Array(buf)));
   console.log(`${f} -> ${d ? `${d.kind} (sheet "${d.sheet.name}", ${d.sheet.rows.length} rows)` : 'NOT RECOGNISED'}`);

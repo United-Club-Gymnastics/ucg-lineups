@@ -11,7 +11,7 @@ export interface ImportDiff {
 }
 
 const FIELDS: (keyof Athlete)[] = [
-  'discipline', 'bib', 'first', 'last', 'clubId', 'clubName', 'independent', 'levelCode', 'levelName',
+  'discipline', 'first', 'last', 'clubId', 'clubName', 'independent', 'levelCode', 'levelName',
   'sessionId', 'apparatus', 'tnt', 'competes',
 ];
 

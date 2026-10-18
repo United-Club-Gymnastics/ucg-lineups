@@ -127,18 +127,27 @@ export function normalizeImport(input: ImportInput): ImportModel {
   const warn = (code: string, message: string) => warnings.push({ code, message });
   const gymOrder = input.gymOrder ?? DEFAULT_GYM_ORDER;
 
-  const byBib = (rows: Row[] | undefined) => {
-    const m = new Map<string, Row[]>();
+  // UCG doesn't use bibs (Julia 2026-10-18): an athlete is identified by discipline + club +
+  // name, with birth date only as a tiebreaker when two people in one club share a name.
+  const personKey = (club: string, first: string, last: string) => `${slug(club)}|${slug(`${first} ${last}`)}`;
+  const nameKey = (first: string, last: string) => slug(`${first} ${last}`);
+  const dobOf = (r: Row) => g(r, 'dob').slice(0, 10);
+  const index = (rows: Row[] | undefined) => {
+    const byPerson = new Map<string, Row[]>();
+    const byName = new Map<string, Row[]>();
     for (const r of rows ?? []) {
-      const b = g(r, 'bib');
-      if (b) m.set(b, [...(m.get(b) ?? []), r]);
+      const first = g(r, 'firstname'), last = g(r, 'lastname');
+      if (!first && !last) continue;
+      const club = g(r, 'club_name') || g(r, 'club');
+      if (club) byPerson.set(personKey(club, first, last), [...(byPerson.get(personKey(club, first, last)) ?? []), r]);
+      byName.set(nameKey(first, last), [...(byName.get(nameKey(first, last)) ?? []), r]);
     }
-    return m;
+    return { byPerson, byName };
   };
-  const exports: Record<Discipline, { rows?: Row[]; map: Map<string, Row[]>; used: Set<Row> }> = {
-    WAG: { rows: input.wag, map: byBib(input.wag), used: new Set() },
-    MAG: { rows: input.mag, map: byBib(input.mag), used: new Set() },
-    TNT: { rows: input.tnt, map: byBib(input.tnt), used: new Set() },
+  const exports: Record<Discipline, { rows?: Row[]; idx: ReturnType<typeof index>; used: Set<Row> }> = {
+    WAG: { rows: input.wag, idx: index(input.wag), used: new Set() },
+    MAG: { rows: input.mag, idx: index(input.mag), used: new Set() },
+    TNT: { rows: input.tnt, idx: index(input.tnt), used: new Set() },
   };
   const names: Record<Discipline, string> = { WAG: 'WAG', MAG: 'MAG', TNT: 'T&T' };
 
@@ -146,54 +155,60 @@ export function normalizeImport(input: ImportInput): ImportModel {
   const ids = new Set<string>();
   const missingApparatus: Record<Discipline, number> = { WAG: 0, MAG: 0, TNT: 0 };
 
-  const warnedBibs = new Set<string>();
-  const bibCount = new Map<string, number>();
+  // How many rows share discipline + club + name: those ids get the birth date added.
+  const sameName = new Map<string, number>();
   for (const r of input.athletes) {
     const d = parseDiscipline(g(r, 'type'));
-    const b = g(r, 'bib');
-    if (d && b) bibCount.set(`${d}_${b}`, (bibCount.get(`${d}_${b}`) ?? 0) + 1);
+    if (d) {
+      const k = `${d}|${personKey(g(r, 'club'), g(r, 'firstname'), g(r, 'lastname'))}`;
+      sameName.set(k, (sameName.get(k) ?? 0) + 1);
+    }
   }
 
   input.athletes.forEach((r, i) => {
     const line = i + 2;
     const disc = parseDiscipline(g(r, 'type'));
-    const bib = g(r, 'bib');
     if (!disc) {
       warn('unknown-type', `Athletes row ${line}: unknown Type "${g(r, 'type')}" — skipped.`);
       return;
     }
-    if (!bib) {
-      warn('missing-bib', `Athletes row ${line}: no Bib — skipped.`);
-      return;
-    }
     const first = g(r, 'firstname');
     const last = g(r, 'lastname');
-    // The spec key is discipline + bib. Some bibs are shared by different people in the real
-    // exports (e.g. a placeholder bib); those keep every person with a name-suffixed id.
-    let id = `${disc}_${bib}`;
-    if ((bibCount.get(id) ?? 0) > 1) {
-      const base = `${id}~${slug(`${first} ${last}`)}`;
-      id = base;
-      for (let n = 2; ids.has(id); n++) id = `${base}~${n}`;
-      if (!warnedBibs.has(`${disc}_${bib}`)) {
-        warnedBibs.add(`${disc}_${bib}`);
-        warn('shared-bib', `${names[disc]} bib ${bib} is used by ${bibCount.get(`${disc}_${bib}`)} athletes — kept all, ids carry the name.`);
-      }
+    if (!first && !last) {
+      warn('missing-name', `Athletes row ${line}: no name — skipped.`);
+      return;
     }
+    const clubName = g(r, 'club');
+    const who = `${names[disc]} ${first} ${last}`.trim();
+    const dob = dobOf(r);
+    const pk = personKey(clubName, first, last);
+    let id = `${disc}_${slug(clubName) || 'no-club'}_${slug(`${first} ${last}`)}`;
+    if ((sameName.get(`${disc}|${pk}`) ?? 0) > 1) {
+      if (dob) id = `${id}_${dob}`;
+      if (!dob || ids.has(id)) warn('same-name', `${who} (${clubName}): two athletes share this name in one club${dob ? ' and birth date' : ''} — check them.`);
+    }
+    const base = id;
+    for (let n = 2; ids.has(id); n++) id = `${base}~${n}`;
     ids.add(id);
 
-    const clubName = g(r, 'club');
     const independent = isIndependent(clubName);
-    if (!clubName) warn('missing-club', `${names[disc]} bib ${bib}: no club.`);
+    if (!clubName) warn('missing-club', `${who}: no club.`);
     const lvl = mapLevel(g(r, 'level'), g(r, 'levelshortname'));
     const sess = parseSession(g(r, 'session'));
-    if (!sess) warn('bad-session', `${names[disc]} bib ${bib}: session "${g(r, 'session')}" not understood.`);
+    if (!sess) warn('bad-session', `${who}: session "${g(r, 'session')}" not understood.`);
 
     let apparatus: string[] = [];
     let tnt: TnTLevels | undefined;
     const ex = exports[disc];
-    const cands = (ex.map.get(bib) ?? []).filter((c) => !ex.used.has(c));
-    const row = cands.length <= 1 ? cands[0] : cands.find((c) => g(c, 'firstname').toLowerCase() === first.toLowerCase() && g(c, 'lastname').toLowerCase() === last.toLowerCase());
+    // match the discipline export by club + name; fall back to name alone; birth date breaks ties
+    const free = (rows?: Row[]) => (rows ?? []).filter((c) => !ex.used.has(c));
+    let cands = free(ex.idx.byPerson.get(pk));
+    if (cands.length === 0) cands = free(ex.idx.byName.get(nameKey(first, last))).filter((c) => !(g(c, 'club_name') || g(c, 'club')));
+    if (cands.length === 0) {
+      const byName = free(ex.idx.byName.get(nameKey(first, last)));
+      if (byName.length === 1) cands = byName;
+    }
+    const row = cands.length <= 1 ? cands[0] : (cands.find((c) => dob && dobOf(c) === dob) ?? cands[0]);
     if (row) ex.used.add(row);
     if (row) {
       if (disc === 'TNT') {
@@ -204,14 +219,13 @@ export function normalizeImport(input: ImportInput): ImportModel {
       }
     } else {
       missingApparatus[disc]++;
-      if (ex.rows) warn('not-in-export', `${names[disc]} bib ${bib} is not in the ${names[disc]} export — no apparatus.`);
+      if (ex.rows) warn('not-in-export', `${who} (${clubName}) is not in the ${names[disc]} export — no apparatus.`);
       if (disc === 'TNT') tnt = {};
     }
 
     athletes.push({
       id,
       discipline: disc,
-      bib,
       first,
       last,
       clubId: slug(clubName),
@@ -231,9 +245,10 @@ export function normalizeImport(input: ImportInput): ImportModel {
     if (!ex.rows && missingApparatus[d] > 0) {
       warn('no-export', `No ${names[d]} export provided — ${missingApparatus[d]} ${names[d]} athletes have no apparatus.`);
     }
-    for (const [bib, rows] of ex.map) {
-      const left = rows.filter((x) => !ex.used.has(x)).length;
-      if (left > 0) warn('unmatched-row', `${names[d]} export: bib ${bib} has ${left} row(s) not matched to the athletes export — ignored.`);
+    for (const r of ex.rows ?? []) {
+      if (!ex.used.has(r) && (g(r, 'firstname') || g(r, 'lastname'))) {
+        warn('unmatched-row', `${names[d]} export: ${g(r, 'firstname')} ${g(r, 'lastname')} (${g(r, 'club_name') || g(r, 'club') || 'no club'}) is not in the athletes export — ignored.`);
+      }
     }
   }
 
@@ -277,16 +292,25 @@ export function normalizeImport(input: ImportInput): ImportModel {
   }
   if (input.clubEmails) {
     const matched = new Set<string>();
+    const unmatched = new Set<string>();
     for (const r of input.clubEmails) {
       const name = g(r, 'club');
       if (!name) continue;
+      // Club_Emails.xlsx has an Email column; the League Communications export has Contact + Role
+      // ("Club Email") instead, and only email roles count.
+      const role = g(r, 'role');
+      if (role && !/e-?mail/i.test(role)) continue;
+      const cell = g(r, 'email') || g(r, 'contact');
       const club = clubs.get(slug(name));
       if (!club) {
-        if (!isIndependent(name)) warn('email-unmatched', `Club emails: "${name}" has no athletes in this import.`);
+        if (!isIndependent(name)) unmatched.add(name);
         continue;
       }
       matched.add(club.id);
-      for (const e of splitEmails(g(r, 'email'))) if (!club.emails.includes(e)) club.emails.push(e);
+      for (const e of splitEmails(cell)) if (!club.emails.includes(e)) club.emails.push(e);
+    }
+    if (unmatched.size > 0) {
+      warn('email-unmatched', `Club emails: ${unmatched.size} club${unmatched.size === 1 ? '' : 's'} in the email list have no athletes in this import (not used).`);
     }
     for (const c of clubs.values()) {
       if (c.emails.length === 0) warn('no-email', `${c.name} has no contact email.`);

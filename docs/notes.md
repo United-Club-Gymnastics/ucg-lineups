@@ -35,3 +35,19 @@
 - **Cross-group drag (deviation from the platform card, Julia's request):** one `DndContext` holds every group's list for the shown apparatus (one `SortableContext` per group, each group also a droppable; collision prefers the athlete under the pointer, else the group, rectangle overlap for the keyboard). Drop on an athlete = that spot on this apparatus; drop on a group's header/empty area = appended. On the other apparatus the athlete goes first in the new group (`moveAthleteToGroup` + `sectionsFromGroups`, pure `dropAthlete`), and `splitDecided` is set. Caps are not enforced on drop, same as the platform's buttons: an over-cap group is flagged "Split required". The card now shows one apparatus at a time (the page's event tabs). The "→ B" buttons remain as the non-drag way; drop line, Pointer/Touch/Keyboard sensors and announcements (landing position via `dropLandingPosition`) are kept. jsdom can't drag, so component tests feed drag events to the captured `DndContext` handlers.
 - **Fixed a Step 1 bug:** an unterminated comment in `src/index.css` hid every `.badge` rule (badges rendered as plain text, including on the admin Import screen).
 - **Checked in a browser** against the local Firestore emulator (project id `ucg-lineups`, seeded with invented data): link load, default A–Z, split banner + Keep this split (write accepted by the real rules), status pills, a real pointer drag-reorder and a cross-group drag (right spot on Vault, first on Uneven Bars) persisting across reload, and no horizontal overflow at 375, 768 and 1280 px. Not checked: touch drag on a real device, screen-reader output, the deadline lock in a browser (covered by unit and rules tests), the admin "Apply import" → publish path against a real project.
+
+## Import update — no bibs, League Communications emails (2026-10-18, controller)
+
+- Julia: UCG doesn't use bibs; name + club identify an athlete (birth date as a tiebreaker).
+  Athlete id is now `<DISC>_<club slug>_<name slug>` (+ `_<YYYY-MM-DD>` only for same-name
+  athletes in one club and discipline). `bib` is gone from `Athlete`; the `shared-bib` and
+  `missing-bib` warnings are replaced by `same-name` and `missing-name`.
+- Discipline exports are matched by club + name, then by name alone (only when unique or the row
+  has no club), with birth date breaking ties. On the 2026 files this cut warnings from 80 to 8 and
+  matched 12 more athletes' apparatus.
+- The League Communications export (Club, Contact, Role, Season, State) is detected as a club
+  email list; only rows whose Role mentions email are used. Unmatched clubs in an email list are now
+  one summary warning instead of one per club.
+- Any test data imported before this change used bib ids: re-importing marks those as removed and
+  adds the new ids (orders saved against old ids would be lost — none exist yet).
+- `scripts/check-real-exports.mts` now reads every .xlsx in the folder.

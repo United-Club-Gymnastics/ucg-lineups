@@ -5,7 +5,7 @@ import { assignTokens, newClubToken } from '../../src/lib/import/token';
 import type { Athlete, ImportModel } from '../../src/lib/import/types';
 
 const ath = (bib: string, over: Partial<Athlete> = {}): Athlete => ({
-  id: `WAG_${bib}`, discipline: 'WAG', bib, first: 'Ada', last: 'Test', clubId: 'alpha', clubName: 'Alpha',
+  id: `WAG_${bib}`, discipline: 'WAG', first: 'Ada', last: 'Test', clubId: 'alpha', clubName: 'Alpha',
   independent: false, levelCode: 'XP', levelName: 'Platinum', sessionId: 's1-orange', apparatus: ['VT', 'UB'], competes: true, ...over,
 });
 

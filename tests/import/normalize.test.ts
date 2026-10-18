@@ -5,11 +5,11 @@ import { mapLevel, normalizeImport, parseSession, slug, splitEmails, tntLevelCod
 import { readWorkbook } from '../../src/lib/import/read-workbook';
 import { ATH_HEADERS, MAG_HEADERS, TNT_HEADERS, WAG_HEADERS, athRow, makeWorkbook } from './helpers';
 
-const a = (o: Partial<Parameters<typeof athRow>[0]> & { bib: string }) =>
-  athRow({ first: 'Ada', last: 'Test', level: 'Platinum', short: 'XP', type: 'WAG', club: 'Alpha Gymnastics', session: 'Session 1 - Orange', ...o });
+const a = (o: Partial<Parameters<typeof athRow>[0]> & { bib?: string }) =>
+  athRow({ bib: '', first: 'Ada', last: 'Test', level: 'Platinum', short: 'XP', type: 'WAG', club: 'Alpha Gymnastics', session: 'Session 1 - Orange', ...o });
 
 async function run(sheets: {
-  ath: unknown[][]; wag?: unknown[][]; mag?: unknown[][]; tnt?: unknown[][]; emails?: unknown[][];
+  ath: unknown[][]; wag?: unknown[][]; mag?: unknown[][]; tnt?: unknown[][]; emails?: unknown[][]; emailHeaders?: string[];
 }) {
   const found: Detected[] = [];
   const add = async (rows?: unknown[][], headers?: string[]) => {
@@ -21,7 +21,7 @@ async function run(sheets: {
   await add(sheets.wag, WAG_HEADERS);
   await add(sheets.mag, MAG_HEADERS);
   await add(sheets.tnt, TNT_HEADERS);
-  await add(sheets.emails, ['Club', 'Email']);
+  await add(sheets.emails, sheets.emailHeaders ?? ['Club', 'Email']);
   return normalizeImport(assembleInput(found)!);
 }
 
@@ -70,15 +70,16 @@ describe('normalizeImport', () => {
       mag: [['Ada', 'Test', '12', 'Included', 'Included', 'Scratched', 'Included', 'Included', 'Included']],
       emails: [['Alpha Gymnastics', 'a@alpha.org; b@alpha.org'], ['Beta Club', 'c@beta.org']],
     });
-    const wag = m.athletes.find((x) => x.id === 'WAG_0398')!;
+    const wag = m.athletes.find((x) => x.id === 'WAG_alpha-gymnastics_bo-test')!;
+    expect(wag).not.toHaveProperty('bib');
     expect(wag).toMatchObject({
-      discipline: 'WAG', bib: '0398', first: 'Bo', clubId: 'alpha-gymnastics', clubName: 'Alpha Gymnastics',
+      discipline: 'WAG', first: 'Bo', clubId: 'alpha-gymnastics', clubName: 'Alpha Gymnastics',
       independent: false, levelCode: 'XP', levelName: 'Platinum', sessionId: 's1-orange',
       apparatus: ['VT', 'BB', 'FX'], competes: true,
     });
     expect(wag.tnt).toBeUndefined();
     expect(JSON.stringify(m)).not.toContain('IGNORED');
-    const mag = m.athletes.find((x) => x.id === 'MAG_12')!;
+    const mag = m.athletes.find((x) => x.id === 'MAG_beta-club_ada-test')!;
     expect(mag.apparatus).toEqual(['FX', 'PH', 'VT', 'PB', 'HB']);
     expect(mag.levelName).toBe('Developmental');
     expect(m.sessions.map((s) => s.id)).toEqual(['s1-orange', 's2-green']);
@@ -101,30 +102,50 @@ describe('normalizeImport', () => {
       ath: [a({ bib: '1', club: 'Independent Community Athlete' }), a({ bib: '2', club: 'Independent Student Athlete' }), a({ bib: '3' })],
       emails: [['Alpha Gymnastics', 'x@alpha.org'], ['Independent Community Athlete', 'nope@x.org']],
     });
-    expect(m.athletes.filter((x) => x.independent).map((x) => x.bib)).toEqual(['1', '2']);
+    expect(m.athletes.filter((x) => x.independent).map((x) => x.clubName)).toEqual(['Independent Community Athlete', 'Independent Student Athlete']);
     expect(m.clubs.map((c) => c.name)).toEqual(['Alpha Gymnastics']);
     expect(noNoise(m)).toEqual([]);
   });
 
-  it('keys by discipline + bib so one person in several disciplines is separate', async () => {
+  it('keys by discipline + club + name (no bibs) so one person in several disciplines is separate', async () => {
     const m = await run({
       ath: [a({ bib: '55' }), a({ bib: '55', type: 'MAG', level: 'NAIGC Intermediate', short: 'Int' }), a({ bib: '55', type: 'T&T', level: 'New Flyers', short: 'NF' })],
     });
-    expect(m.athletes.map((x) => x.id)).toEqual(['WAG_55', 'MAG_55', 'TNT_55']);
+    expect(m.athletes.map((x) => x.id)).toEqual(['WAG_alpha-gymnastics_ada-test', 'MAG_alpha-gymnastics_ada-test', 'TNT_alpha-gymnastics_ada-test']);
   });
 
-  it('keeps different people who share a bib, with name-suffixed ids and one warning', async () => {
+  it('ignores bibs: people sharing a bib are separate; same name in different clubs is matched by club', async () => {
     const m = await run({
-      ath: [a({ bib: '1014', first: 'Una', club: 'Alpha Gymnastics' }), a({ bib: '1014', first: 'Dos', club: 'Beta Club' })],
+      ath: [a({ bib: '1014', first: 'Una', club: 'Alpha Gymnastics' }), a({ bib: '1014', first: 'Una', club: 'Beta Club' })],
       wag: [
-        ['Una', 'Test', '1014', 'Platinum', 'Included', 'Included', 'Scratched', 'Scratched'],
-        ['Dos', 'Test', '1014', 'Platinum', 'Scratched', 'Scratched', 'Scratched', 'Included'],
+        ['Una', 'Test', '9', 'Platinum', 'Scratched', 'Scratched', 'Scratched', 'Included', 'Beta Club'],
+        ['Una', 'Test', '9', 'Platinum', 'Included', 'Included', 'Scratched', 'Scratched', 'Alpha Gymnastics'],
       ],
     });
-    expect(m.athletes.map((x) => x.id)).toEqual(['WAG_1014~una-test', 'WAG_1014~dos-test']);
+    expect(m.athletes.map((x) => x.id)).toEqual(['WAG_alpha-gymnastics_una-test', 'WAG_beta-club_una-test']);
     expect(m.athletes[0].apparatus).toEqual(['VT', 'UB']);
     expect(m.athletes[1].apparatus).toEqual(['FX']);
-    expect(m.warnings.filter((w) => w.code === 'shared-bib')).toHaveLength(1);
+    expect(noNoise(m)).toEqual([]);
+  });
+
+  it('adds the birth date to the id when two athletes in one club share a name, and matches by it', async () => {
+    const m = await run({
+      ath: [a({ dob: '2001-02-03' }), a({ dob: '1999-09-09' })],
+      wag: [
+        ['Ada', 'Test', '', 'Platinum', 'Scratched', 'Scratched', 'Scratched', 'Included', 'Alpha Gymnastics', '1999-09-09'],
+        ['Ada', 'Test', '', 'Platinum', 'Included', 'Scratched', 'Scratched', 'Scratched', 'Alpha Gymnastics', '2001-02-03'],
+      ],
+    });
+    expect(m.athletes.map((x) => x.id)).toEqual(['WAG_alpha-gymnastics_ada-test_2001-02-03', 'WAG_alpha-gymnastics_ada-test_1999-09-09']);
+    expect(m.athletes[0].apparatus).toEqual(['VT']);
+    expect(m.athletes[1].apparatus).toEqual(['FX']);
+    expect(noNoise(m)).toEqual([]);
+  });
+
+  it('warns when two athletes in one club share a name and no birth date tells them apart', async () => {
+    const m = await run({ ath: [a({}), a({})] });
+    expect(m.athletes.map((x) => x.id)).toEqual(['WAG_alpha-gymnastics_ada-test', 'WAG_alpha-gymnastics_ada-test~2']);
+    expect(noNoise(m).map((w) => w.code)).toEqual(['same-name', 'same-name']);
   });
 
   it('treats Scratched/blank as not competing; no Included apparatus => competes false', async () => {
@@ -137,25 +158,25 @@ describe('normalizeImport', () => {
 
   it('warns and gives empty apparatus when an athlete is missing from the discipline export', async () => {
     const m = await run({
-      ath: [a({ bib: '1' }), a({ bib: '2' })],
+      ath: [a({ bib: '1' }), a({ bib: '2', first: 'Bea' })],
       wag: [['Ada', 'Test', '1', 'Platinum', 'Included', 'Included', 'Included', 'Included'], ['Zoe', 'Ghost', '99', 'Platinum', 'Included', 'Included', 'Included', 'Included']],
     });
-    const two = m.athletes.find((x) => x.bib === '2')!;
+    const two = m.athletes.find((x) => x.first === 'Bea')!;
     expect(two).toMatchObject({ apparatus: [], competes: false });
     expect(m.warnings.map((w) => w.code).sort()).toEqual(['not-in-export', 'unmatched-row']);
   });
 
   it('warns once per discipline when its export is not supplied at all', async () => {
-    const m = await run({ ath: [a({ bib: '1' }), a({ bib: '2' })] });
+    const m = await run({ ath: [a({ bib: '1' }), a({ bib: '2', first: 'Bea' })] });
     expect(m.warnings).toEqual([expect.objectContaining({ code: 'no-export' })]);
   });
 
   it('reads T&T per-event levels, only for Included events, incl. synchro-only', async () => {
     const m = await run({
       ath: [
-        a({ bib: '1', type: 'T&T', level: 'New Flyers', short: 'NF' }),
-        a({ bib: '2', type: 'T&T', level: 'High Flyers', short: 'HF' }),
-        a({ bib: '3', type: 'T&T', level: 'New Flyers', short: 'NF' }),
+        a({ bib: '1', first: 'A', last: 'One', type: 'T&T', level: 'New Flyers', short: 'NF' }),
+        a({ bib: '2', first: 'B', last: 'Two', type: 'T&T', level: 'High Flyers', short: 'HF' }),
+        a({ bib: '3', first: 'C', last: 'Three', type: 'T&T', level: 'New Flyers', short: 'NF' }),
       ],
       tnt: [
         ['A', 'One', '1', 'Alpha Gymnastics', 'New Flyers', 'Included', 'Intermediate Flyers', 'Included', 'New Flyers', 'Scratched', 'High Flyers', 'Included'],
@@ -177,19 +198,36 @@ describe('normalizeImport', () => {
     expect(noNoise(await run({ ath: [a({ bib: '1' })] }))).toEqual([]);
   });
 
-  it('flags unreadable sessions, missing bibs and unknown types, and sorts sessions by gym order', async () => {
+  it('reads the League Communications export (Club, Contact, Role) and summarises unmatched clubs in one warning', async () => {
+    const m = await run({
+      ath: [a({ bib: '1' })],
+      emailHeaders: ['', 'Name', 'Club', 'Contact', 'Role', 'Season', 'State'],
+      emails: [
+        ['', '', 'Alpha Gymnastics', 'alpha@x.org; coach@x.org', 'Club Email', 'Approved', 'CO'],
+        ['', '', 'Alpha Gymnastics', 'ignore@x.org', 'President', '', 'CO'],
+        ['', '', 'Ghost Club', 'g@x.org', 'Club Email', '', 'NY'],
+        ['', '', 'Other Ghost', 'o@x.org', 'Club Email', '', 'NY'],
+      ],
+    });
+    expect(m.clubs[0].emails).toEqual(['alpha@x.org', 'coach@x.org']);
+    const unmatched = m.warnings.filter((w) => w.code === 'email-unmatched');
+    expect(unmatched).toHaveLength(1);
+    expect(unmatched[0].message).toMatch(/2 clubs/);
+  });
+
+  it('flags unreadable sessions, missing names and unknown types, and sorts sessions by gym order', async () => {
     const m = await run({
       ath: [
-        a({ bib: '1', session: 'Session 2 - Green' }),
-        a({ bib: '2', session: 'Session 2 - Red' }),
-        a({ bib: '3', session: 'Session 1 - Purple' }),
-        a({ bib: '4', session: 'TBD' }),
-        a({ bib: '', first: 'No' }),
-        a({ bib: '6', type: 'Rhythmic' }),
+        a({ first: 'One', session: 'Session 2 - Green' }),
+        a({ first: 'Two', session: 'Session 2 - Red' }),
+        a({ first: 'Three', session: 'Session 1 - Purple' }),
+        a({ first: 'Four', session: 'TBD' }),
+        a({ first: '', last: '' }),
+        a({ first: 'Six', type: 'Rhythmic' }),
       ],
     });
     expect(m.sessions.map((s) => s.id)).toEqual(['s1-purple', 's2-green', 's2-red']);
-    expect(m.athletes.find((x) => x.bib === '4')!.sessionId).toBe('');
-    expect(m.warnings.map((w) => w.code).filter((c) => c !== 'no-export').sort()).toEqual(['bad-session', 'missing-bib', 'unknown-type']);
+    expect(m.athletes.find((x) => x.first === 'Four')!.sessionId).toBe('');
+    expect(m.warnings.map((w) => w.code).filter((c) => c !== 'no-export').sort()).toEqual(['bad-session', 'missing-name', 'unknown-type']);
   });
 });
