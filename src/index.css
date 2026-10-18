@@ -1,0 +1,271 @@
+/* Copied from ucg-platform@32fb372 src/index.css — keep in sync by hand.
+   Changed: only the font-faces, :root tokens, base element styles and the .btn/.badge/.field/.input/.tabs/.modal rules; the rest of the platform file is not copied.
+   Licensed webfonts load from the platform's public brand bucket; never commit woff2 files (EULA). */
+@font-face {
+  font-family: 'Greed Condensed';
+  src: url('https://wkyerxlgricfphopocoz.supabase.co/storage/v1/object/public/brand/fonts/GreedCondensed-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('https://wkyerxlgricfphopocoz.supabase.co/storage/v1/object/public/brand/fonts/SuisseIntl-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('https://wkyerxlgricfphopocoz.supabase.co/storage/v1/object/public/brand/fonts/SuisseIntl-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('https://wkyerxlgricfphopocoz.supabase.co/storage/v1/object/public/brand/fonts/SuisseIntl-RegularIt.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('https://wkyerxlgricfphopocoz.supabase.co/storage/v1/object/public/brand/fonts/SuisseIntl-BoldIt.woff2') format('woff2');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  /* UCG brand (2026 Brand Toolkit — exact hexes) */
+  --navy-900: #15212c;
+  --navy-800: #1e2b38; /* Navy Blue (brand primary) */
+  --navy-700: #313d48;
+  --navy-600: #46535f;
+  --ice-100: #eef5f7;
+  --ice-200: #dbebee; /* Light Blue (brand primary) */
+  --ice-300: #c3dadf;
+  --coral-500: #f4694a; /* Red Orange (brand secondary) — --navy-800 text OK for badge fills (2026-07-19) */
+  --coral-400: #f57b5f; /* Red Orange LIGHTENED 12% toward white — primary-button hover only (S1
+                           2026-07-25). Primary CTAs carry --navy-800 text, so the hover step has to
+                           get LIGHTER, not darker: every darker ramp step fails AA against navy
+                           (coral-600 3.84:1, coral-700 2.41:1). navy-800 on this = 5.41:1. */
+  --coral-600: #e2553b;
+  --coral-text: #bd3f27; /* Coral for TEXT ON LIGHT surfaces (a11y audit 2026-08-04, A3).
+                            --coral-600 on --surface/--white is only 3.66:1 — it fails AA for
+                            body text, and it was being used for validation copy, the text a
+                            user most needs to read. This darkened step is 5.24:1 on #fcfcfc.
+                            Do NOT darken --coral-600 itself: it is an approved FILL (badges,
+                            accents) where the ramp step matters. Use this token for coral
+                            TEXT on light only; on coral FILLS the text stays --navy-800. */
+  --coral-700: #b23a1f; /* AA-compliant text (~4.9:1) on --coral-100 */
+  --coral-100: #fde4dd;
+  --white: #fcfcfc;
+
+  /* New brand accents — FILLS ONLY unless noted; see docs/specs/2026-07-08-ucg-rebrand.md
+     §"Approved color pairings" before using any of these as text on a light surface.
+     --purple/--gold/--coral-500 are also approved as STATUS-BADGE fills carrying
+     --navy-800 text (2026-07-19: .badge.ok/.warn/.err, .member-banner.ok/.warn) —
+     that's the one sanctioned exception to "never text"; don't use them as
+     freestanding text color elsewhere without checking the approved-pairings list. */
+  --bluegreen: #a5c8cf; /* Blue Green (brand primary) — muted accent fill, never text */
+  --purple: #adbae9; /* Purple (brand secondary) — pale accent fill; --navy-800 text OK for badge fills only */
+  --teal-900: #184b56; /* Dark Blue Green (brand secondary) — OK as text on white/light-blue */
+  --gold: #f6c328; /* Golden Yellow (brand secondary) — accent fill; --navy-800 text OK for badge fills only */
+  --gold-100: #faebbc; /* Golden Yellow tint — warning-card fill, paired with default --ink text (2026-07-19) */
+  --leaf: #c0e388; /* Expressive-palette green — qualification-highlight fill, paired with --teal-900 text (2026-07-19) */
+
+  --bg: var(--ice-200);
+  --surface: var(--white);
+  --ink: var(--navy-800);
+  --ink-soft: #5a6a78;
+  --warn: #b45309; /* amber warning text — ~4.9:1 on --surface, AA for small text */
+  --line: #c8d8db;
+  --sunk: #eef1f4; /* recessed track surface (progress-bar tracks) — fill-only,
+                      never text; capacity rework T3. Distinct from --surface
+                      (white cards) so a fill reads against it at a glance. */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgba(20, 32, 44, 0.06), 0 8px 24px -12px rgba(20, 32, 44, 0.18);
+  --shadow-lg: 0 2px 4px rgba(20, 32, 44, 0.08), 0 24px 48px -16px rgba(20, 32, 44, 0.3);
+
+  --font-display: 'Greed Condensed', 'Anton', 'Archivo Black', 'Arial Black', sans-serif;
+  --font-body: 'Suisse Intl', 'Instrument Sans Variable', 'Instrument Sans', 'Helvetica Neue', sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(at 85% -10%, rgba(244, 105, 73, 0.07), transparent 50%),
+    radial-gradient(at -10% 110%, rgba(29, 42, 56, 0.08), transparent 45%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+h1, h2, h3 { margin: 0; }
+a { color: inherit; }
+button { font-family: inherit; }
+input, select, textarea { font-family: inherit; font-size: inherit; }
+/* Ensure native select/option text is always readable regardless of OS colour scheme */
+option { color: var(--ink); background: #fff; }
+
+/* navy-800 on coral-500 = 4.78:1; white was 2.94:1 (fail) — S1 sweep 2026-07-25 */
+::selection { background: var(--coral-500); color: var(--navy-800); }
+
+.display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 0.95;
+  font-weight: 400;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 99px;
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease;
+  background: var(--navy-800);
+  color: var(--white);
+}
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.btn:active { transform: translateY(0); }
+/* navy-800 on coral-500 = 4.78:1 (AA pass); white was 2.94:1 (fail) — S1 2026-07-25.
+   Hover LIGHTENS rather than darkens: primary CTAs now carry dark (navy) text, so
+   every darker step in the ramp fails AA against it (coral-600 3.84:1, coral-700
+   2.41:1) while a lighter one improves it. --coral-400 = 5.41:1. */
+.btn.primary { background: var(--coral-500); color: var(--navy-800); }
+.btn.primary:hover { background: var(--coral-400); }
+.btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+.btn.ghost:hover { border-color: var(--navy-600); }
+.btn.small { padding: 5px 12px; font-size: 12.5px; }
+/* Primary CTAs at "small" size still need a legible 14px floor (the plain small
+   ghost/danger buttons that populate dense admin tables are left at 12.5px —
+   out of scope and higher risk of layout breakage; see S1 report). */
+.btn.primary.small { font-size: 14px; }
+/* Danger ghost: coral TEXT token (--coral-text #bd3f27 = 5.24:1 on --surface;
+   --coral-600 was 3.66:1 and failed AA for this small text — C-01a 2026-10-04).
+   Hover tints the fill with --coral-100 and darkens the text to --coral-700 (4.9:1). */
+.btn.danger { background: transparent; border: 1.5px solid var(--coral-500); color: var(--coral-text); }
+.btn.danger:hover:not(:disabled) { background: var(--coral-100); color: var(--coral-700); }
+/* Flat gray disabled surface at opacity 1 (was coral/navy at opacity 0.45, which
+   read as "nearly enabled"). ink-soft on --line is only 3.80:1 (fails 4.5:1), so
+   this uses --ink (navy-800) on --line = 9.81:1 instead — S1 2026-07-25. */
+.btn:disabled { background: var(--line); color: var(--ink); opacity: 1; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* H7 (2026-07-04 UI/UX review): a real, keyboard/SR-reachable <button> styled
+   to look exactly like the plain-text "Details"/"Hide" toggles it replaces —
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.badge.ok { background: var(--purple); color: var(--navy-800); }
+.badge.warn { background: var(--gold); color: var(--navy-800); }
+.badge.err { background: var(--coral-500); color: var(--navy-800); }
+.badge.info { background: var(--ice-200); color: var(--navy-700); }
+.badge.navy { background: var(--navy-800); color: var(--ice-200); }
+
+/* forms */
+.field { margin-bottom: 14px; }
+.field > label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 5px;
+  color: var(--navy-700);
+}
+.field .hint { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+.input, .field input[type='text'], .field input[type='email'], .field input[type='date'],
+.field input[type='tel'], .field input[type='number'], .field input[type='password'],
+.field input[type='datetime-local'], .field input[type='time'], .field select, .field textarea {
+  width: 100%;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  padding: 9px 11px;
+  font-size: 14px;
+  color: var(--ink);
+  transition: border-color 0.12s;
+}
+.field input:focus, .field select:focus, .field textarea:focus, .input:focus {
+  outline: none;
+  border-color: var(--coral-500);
+  box-shadow: 0 0 0 3px rgba(244, 105, 73, 0.15);
+}
+.checkrow { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 6px; }
+.checkrow input { accent-color: var(--coral-500); width: 16px; height: 16px; }
+
+
+/* tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--navy-800); margin-bottom: 18px; flex-wrap: wrap; }
+.tab {
+  border: none;
+  background: transparent;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+}
+.tab:hover { color: var(--ink); background: var(--ice-100); }
+.tab.active { background: var(--navy-800); color: var(--white); }
+/* ARIA tabs (club roster, 2026-10-05): visible keyboard focus on a roving-
+   tabindex tab. navy-800 ring on the ice-200 page = 11.8:1; on the active
+   (navy) tab the 2px offset keeps the ring on the page background. */
+.tab:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }
+.tabs.tabs-pill { display: inline-flex; max-width: 100%; border-bottom: 0; background: var(--sunk); border-radius: 999px; padding: 3px; gap: 2px; margin-bottom: 0; }
+.tabs-pill .tab { padding: 6px 12px; border-radius: 999px; font-size: 13px; }
+.tabs-pill .tab:hover { background: var(--ice-200); }
+.tabs-pill .tab.active:hover { background: var(--navy-800); }
+
+/* modal */
+.modal-veil {
+  position: fixed; inset: 0;
+  background: rgba(20, 32, 44, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.modal {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  width: min(560px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 24px;
+  animation: pop 0.18s ease;
+}
+@keyframes pop { from { transform: scale(0.96) translateY(8px); opacity: 0; } }
+
+
+:root { color-scheme: light; }
+:where(input, select, textarea) { color-scheme: light; }
