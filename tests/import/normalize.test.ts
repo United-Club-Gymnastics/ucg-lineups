@@ -148,6 +148,19 @@ describe('normalizeImport', () => {
     expect(noNoise(m).map((w) => w.code)).toEqual(['same-name', 'same-name']);
   });
 
+  it('matches names when the T&T export strips spaces (St Pierre vs StPierre)', async () => {
+    const m = await run({
+      ath: [a({ first: 'Stefanie', last: 'St Pierre', type: 'T&T', level: 'New Flyers', short: 'NF' }), a({ first: 'Sean', last: 'Ultot Perez', type: 'T&T', level: 'New Flyers', short: 'NF' })],
+      tnt: [
+        ['Stefanie', 'StPierre', '', 'Alpha Gymnastics', 'New Flyers', 'Included', '', '', '', '', '', ''],
+        ['Sean', 'UltotPerez', '', 'Alpha Gymnastics', '', '', 'New Flyers', 'Included', '', '', '', ''],
+      ],
+    });
+    expect(m.athletes.map((x) => x.apparatus)).toEqual([['TU'], ['TR']]);
+    expect(m.athletes[0].last).toBe('St Pierre');
+    expect(noNoise(m)).toEqual([]);
+  });
+
   it('treats Scratched/blank as not competing; no Included apparatus => competes false', async () => {
     const m = await run({
       ath: [a({ bib: '1' })],
@@ -192,13 +205,13 @@ describe('normalizeImport', () => {
     expect(three).toMatchObject({ tnt: {}, apparatus: [], competes: false });
   });
 
-  it('warns about clubs without emails and email rows with no athletes (only when an email file is given)', async () => {
+  it('warns about clubs without emails (only when an email file is given); email rows for clubs with no athletes are ignored quietly', async () => {
     const m = await run({ ath: [a({ bib: '1' })], emails: [['Ghost Club', 'g@x.org']] });
-    expect(noNoise(m).map((w) => w.code).sort()).toEqual(['email-unmatched', 'no-email']);
+    expect(noNoise(m).map((w) => w.code).sort()).toEqual(['no-email']);
     expect(noNoise(await run({ ath: [a({ bib: '1' })] }))).toEqual([]);
   });
 
-  it('reads the League Communications export (Club, Contact, Role) and summarises unmatched clubs in one warning', async () => {
+  it('reads the League Communications export (Club, Contact, Role); clubs with no athletes are ignored quietly', async () => {
     const m = await run({
       ath: [a({ bib: '1' })],
       emailHeaders: ['', 'Name', 'Club', 'Contact', 'Role', 'Season', 'State'],
@@ -210,9 +223,7 @@ describe('normalizeImport', () => {
       ],
     });
     expect(m.clubs[0].emails).toEqual(['alpha@x.org', 'coach@x.org']);
-    const unmatched = m.warnings.filter((w) => w.code === 'email-unmatched');
-    expect(unmatched).toHaveLength(1);
-    expect(unmatched[0].message).toMatch(/2 clubs/);
+    expect(m.warnings.filter((w) => w.code === 'email-unmatched')).toEqual([]);
   });
 
   it('flags unreadable sessions, missing names and unknown types, and sorts sessions by gym order', async () => {

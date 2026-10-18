@@ -51,3 +51,5 @@
 - Any test data imported before this change used bib ids: re-importing marks those as removed and
   adds the new ids (orders saved against old ids would be lost — none exist yet).
 - `scripts/check-real-exports.mts` now reads every .xlsx in the folder.
+
+- Name matching ignores spaces and punctuation (the T&T export strips spaces: "StPierre"). Email-list clubs with no athletes are ignored without a warning (Julia: expected). 2026 files: only the 5 no-email warnings remain.

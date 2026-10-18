@@ -129,8 +129,11 @@ export function normalizeImport(input: ImportInput): ImportModel {
 
   // UCG doesn't use bibs (Julia 2026-10-18): an athlete is identified by discipline + club +
   // name, with birth date only as a tiebreaker when two people in one club share a name.
-  const personKey = (club: string, first: string, last: string) => `${slug(club)}|${slug(`${first} ${last}`)}`;
-  const nameKey = (first: string, last: string) => slug(`${first} ${last}`);
+  // Matching ignores spaces and punctuation: the T&T export strips spaces out of names
+  // ("St Pierre" -> "StPierre"), Julia 2026-10-18.
+  const compact = (x: string) => slug(x).replace(/-/g, '');
+  const personKey = (club: string, first: string, last: string) => `${slug(club)}|${compact(`${first}${last}`)}`;
+  const nameKey = (first: string, last: string) => compact(`${first}${last}`);
   const dobOf = (r: Row) => g(r, 'dob').slice(0, 10);
   const index = (rows: Row[] | undefined) => {
     const byPerson = new Map<string, Row[]>();
@@ -292,7 +295,6 @@ export function normalizeImport(input: ImportInput): ImportModel {
   }
   if (input.clubEmails) {
     const matched = new Set<string>();
-    const unmatched = new Set<string>();
     for (const r of input.clubEmails) {
       const name = g(r, 'club');
       if (!name) continue;
@@ -303,14 +305,10 @@ export function normalizeImport(input: ImportInput): ImportModel {
       const cell = g(r, 'email') || g(r, 'contact');
       const club = clubs.get(slug(name));
       if (!club) {
-        if (!isIndependent(name)) unmatched.add(name);
-        continue;
+        continue; // clubs in the email list with no athletes here are expected (not competing)
       }
       matched.add(club.id);
       for (const e of splitEmails(cell)) if (!club.emails.includes(e)) club.emails.push(e);
-    }
-    if (unmatched.size > 0) {
-      warn('email-unmatched', `Club emails: ${unmatched.size} club${unmatched.size === 1 ? '' : 's'} in the email list have no athletes in this import (not used).`);
     }
     for (const c of clubs.values()) {
       if (c.emails.length === 0) warn('no-email', `${c.name} has no contact email.`);
