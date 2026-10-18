@@ -22,7 +22,7 @@ let seq = 0;
 const ath = (clubId: string, clubName: string, levelCode: string, levelName: string, apparatus = WAG, extra: Partial<StoredAthlete> = {}): StoredAthlete => {
   seq++;
   return {
-    id: `WAG_${String(seq).padStart(3, '0')}`, discipline: 'WAG', bib: String(seq), first: `Gym${String(seq).padStart(3, '0')}`, last: 'Invented',
+    id: `WAG_${clubId || 'indep'}_gym${String(seq).padStart(3, '0')}`, discipline: 'WAG', first: `Gym${String(seq).padStart(3, '0')}`, last: 'Invented',
     clubId, clubName, independent: false, levelCode, levelName, sessionId: 's1-green', apparatus, competes: true, ...extra,
   };
 };

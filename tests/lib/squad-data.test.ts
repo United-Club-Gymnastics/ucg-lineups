@@ -10,7 +10,7 @@ const session: ArtisticSession = { id: 's1-orange', number: 1, gym: 'Orange', di
 
 let n = 0;
 const ath = (over: Partial<StoredAthlete>): StoredAthlete => ({
-  id: `WAG_${++n}`, discipline: 'WAG', bib: String(n), first: `F${String(n).padStart(2, '0')}`, last: 'Test', clubId: 'club-a', clubName: 'Club A',
+  id: `WAG_club-a_f${++n}`, discipline: 'WAG', first: `F${String(n).padStart(2, '0')}`, last: 'Test', clubId: 'club-a', clubName: 'Club A',
   independent: false, levelCode: 'XS', levelName: 'Silver XS', sessionId: 's1-orange', apparatus: ['VT', 'UB', 'BB', 'FX'], competes: true, ...over,
 });
 const many = (k: number, over: Partial<StoredAthlete>) => Array.from({ length: k }, () => ath(over));
