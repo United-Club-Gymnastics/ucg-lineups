@@ -1,0 +1,42 @@
+// Firestore access for the admin Squads screen (admins only; see firestore.rules).
+import { doc, getDoc, serverTimestamp, setDoc, type Firestore } from 'firebase/firestore';
+import { DEFAULT_GYM_ORDER, type Session } from '../import/types';
+import type { StoredAthlete } from '../import/diff';
+import type { LevelOrder } from '../club-order-model';
+import { parseSquadDoc, type StoredSquadDoc } from '../squad-data';
+import { loadLevelOrders } from './club-store';
+import { loadAthletes, loadClubs, loadSessions } from './store';
+
+export interface SquadsInput {
+  sessions: Session[];
+  athletes: StoredAthlete[];
+  gymOrder: string[];
+  /** clubId -> level key -> saved order. */
+  ordersByClub: Record<string, Record<string, LevelOrder>>;
+}
+
+export async function loadGymOrder(db: Firestore): Promise<string[]> {
+  const snap = await getDoc(doc(db, 'settings', 'meet'));
+  const v = snap.exists() ? snap.data().gymOrder : null;
+  return Array.isArray(v) && v.every((x) => typeof x === 'string') && v.length > 0 ? (v as string[]) : DEFAULT_GYM_ORDER;
+}
+
+/** Everything the screen needs except the session's own plan. A failed read throws: never show defaults for clubs we could not read. */
+export async function loadSquadsInput(db: Firestore): Promise<SquadsInput> {
+  const [sessions, athletes, clubs, gymOrder] = await Promise.all([loadSessions(db), loadAthletes(db), loadClubs(db), loadGymOrder(db)]);
+  const ordersByClub: Record<string, Record<string, LevelOrder>> = {};
+  await Promise.all(clubs.filter((c) => c.token).map(async (c) => {
+    ordersByClub[c.id] = await loadLevelOrders(db, c.token);
+  }));
+  return { sessions, athletes, gymOrder, ordersByClub };
+}
+
+export async function loadSquadDoc(db: Firestore, sessionId: string) {
+  const snap = await getDoc(doc(db, 'squads', sessionId));
+  return snap.exists() ? parseSquadDoc(snap.data()) : null;
+}
+
+export async function saveSquadDoc(db: Firestore, sessionId: string, value: StoredSquadDoc): Promise<void> {
+  await setDoc(doc(db, 'squads', sessionId), { ...value, updatedAt: serverTimestamp() });
+}
+

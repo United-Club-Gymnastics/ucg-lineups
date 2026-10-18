@@ -17,9 +17,9 @@ Source: `~/Developer/ucg-platform` (read-only), commit `32fb372`. Every copied f
 
 Config copied and simplified (not provenance-tracked code): `tsconfig*.json`, `eslint.config.js`.
 
-## To copy (later steps)
+## Not copied (decided in step 4)
 
-- `src/components/ClubGroupSquadBuilder.tsx`
+- `src/components/ClubGroupSquadBuilder.tsx` @32fb372: built fresh instead as `src/components/SquadBoard.tsx` (it is wired to the platform store, Supabase pushes and toasts; the layout, labels and swap/specialist behaviour follow the approved prototype). `SquadBoard.tsx` carries a header saying so. Its `squad-builder.ts` helpers are reused unchanged through `src/lib/squad-balance.ts`.
 
 ## Not copied
 

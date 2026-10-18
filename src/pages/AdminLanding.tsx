@@ -4,6 +4,7 @@ import { isDomainAdmin, onUser, signInAdmin, signOutAdmin } from '../lib/firebas
 import { Tabs } from '../components/ui';
 // Lazy: pulls in ExcelJS, which is large and only admins need.
 const AdminImport = lazy(() => import('./AdminImport'));
+const AdminSquads = lazy(() => import('./AdminSquads'));
 import './admin.css';
 
 type Tab = 'import' | 'clubs' | 'squads' | 'tnt' | 'exports';
@@ -79,7 +80,9 @@ export default function AdminLanding() {
       <nav aria-label="Admin sections" className="adm-tabs">
         <Tabs tabs={TABS} active={tab} onChange={setTab} />
       </nav>
-      {tab === 'import' ? <Suspense fallback={<p>Loading…</p>}><AdminImport /></Suspense> : <ComingNext label={TABS.find((t) => t.id === tab)!.label} />}
+      {tab === 'import' && <Suspense fallback={<p>Loading…</p>}><AdminImport /></Suspense>}
+      {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads /></Suspense>}
+      {tab !== 'import' && tab !== 'squads' && <ComingNext label={TABS.find((t) => t.id === tab)!.label} />}
     </main>
   );
 }

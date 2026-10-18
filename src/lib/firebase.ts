@@ -30,7 +30,8 @@ export const auth = getAuth(app);
 
 if (import.meta.env.VITE_USE_EMULATOR === '1') {
   connectFirestoreEmulator(db, '127.0.0.1', 8181);
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  // VITE_AUTH_EMULATOR_PORT lets a second emulator suite run beside another project's (default 9099).
+  connectAuthEmulator(auth, `http://127.0.0.1:${import.meta.env.VITE_AUTH_EMULATOR_PORT ?? '9099'}`, { disableWarnings: true });
 }
 
 export function signInAdmin() {
