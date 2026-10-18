@@ -5,6 +5,7 @@ import { Tabs } from '../components/ui';
 // Lazy: pulls in ExcelJS, which is large and only admins need.
 const AdminImport = lazy(() => import('./AdminImport'));
 const AdminSquads = lazy(() => import('./AdminSquads'));
+const AdminTnt = lazy(() => import('./AdminTnt'));
 import './admin.css';
 
 type Tab = 'import' | 'clubs' | 'squads' | 'tnt' | 'exports';
@@ -82,7 +83,8 @@ export default function AdminLanding() {
       </nav>
       {tab === 'import' && <Suspense fallback={<p>Loading…</p>}><AdminImport /></Suspense>}
       {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads /></Suspense>}
-      {tab !== 'import' && tab !== 'squads' && <ComingNext label={TABS.find((t) => t.id === tab)!.label} />}
+      {tab === 'tnt' && <Suspense fallback={<p>Loading…</p>}><AdminTnt /></Suspense>}
+      {tab !== 'import' && tab !== 'squads' && tab !== 'tnt' && <ComingNext label={TABS.find((t) => t.id === tab)!.label} />}
     </main>
   );
 }

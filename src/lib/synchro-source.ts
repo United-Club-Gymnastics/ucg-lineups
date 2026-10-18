@@ -34,7 +34,13 @@ function synchroDb() {
 
 const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
 
+/** Dev builds only: `window.__ucgSynchroPairs = [...]` stands in for the live read (tree-shaken from production builds). */
+declare global {
+  interface Window { __ucgSynchroPairs?: SynchroPair[] }
+}
+
 export async function fetchSynchroPairs(): Promise<SynchroPair[]> {
+  if (import.meta.env.DEV && typeof window !== 'undefined' && window.__ucgSynchroPairs) return window.__ucgSynchroPairs;
   const snap = await getDocs(collection(synchroDb(), 'synchroPairs'));
   return snap.docs.map((d) => {
     const x = d.data();
