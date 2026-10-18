@@ -11,13 +11,14 @@ Source: `~/Developer/ucg-platform` (read-only), commit `32fb372`. Every copied f
 | `tests/competition-order.test.ts` @32fb372 | `tests/competition-order.test.ts` | Header only |
 | `tests/lib/squad-builder.test.ts` @32fb372 | `tests/lib/squad-builder.test.ts` | Header only |
 | `src/components/ui.tsx` @32fb372 | `src/components/ui.tsx` | Only `Field`, `Modal`, `Badge`, `Tabs`; `Field` no longer auto-wires `Combo` (not copied) |
-| `src/index.css` @32fb372 | `src/index.css` | Font-faces, `:root` tokens, base styles, and the `.btn`/`.badge`/`.field`/`.input`/`.tabs`/`.modal` rules only |
+| `src/index.css` @32fb372 | `src/index.css` | Font-faces, `:root` tokens, base styles, and the `.btn`/`.badge`/`.field`/`.input`/`.tabs`/`.modal` rules only. Step 3: closed a dangling `H7` comment that hid the `.badge` rules, and appended the `.co-apparatus-grid` / `.co-drop-*` rules from @e57754a |
+| `src/components/CompetitionOrderCard.tsx` @e57754a | `src/components/CompetitionOrderCard.tsx` | Controlled component: props `athletes`, `discipline`, `groups`, `sections`, `editable`, `apparatus`, `onChange`. Removed the platform store, Supabase pushes, toasts, event lock, people slices, the level `<select>` and card shell, and the reconcile-and-persist effect. Deviation: one `DndContext` for all groups of the shown apparatus (one `SortableContext` + droppable per group) so athletes can be dragged between groups (`dropAthlete` in `club-order-model.ts`); one apparatus shown at a time. Drop line, sensors, announcements and the "→ B" buttons kept |
+| `tests/components/competition-order-groups.test.tsx` @e57754a | `tests/components/competition-order-groups.test.tsx` | Rewritten around a state harness for the controlled card; lock/toast/store tests dropped; read-only, apparatus filter and `membershipChanged` tests added; cross-group drag in `tests/components/cross-group-drag.test.tsx` (new) |
 
 Config copied and simplified (not provenance-tracked code): `tsconfig*.json`, `eslint.config.js`.
 
 ## To copy (later steps)
 
-- `src/components/CompetitionOrderCard.tsx`
 - `src/components/ClubGroupSquadBuilder.tsx`
 
 ## Not copied

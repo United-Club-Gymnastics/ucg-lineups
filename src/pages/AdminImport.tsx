@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type DragEvent } from 'react';
 import { db } from '../lib/firebase';
 import { Badge, Modal } from '../components/ui';
-import { applyImport, loadStored, type StoredState } from '../lib/data/store';
+import { applyImport, loadStored, publishClubLinks, type StoredState } from '../lib/data/store';
 import { planImport } from '../lib/data/plan';
 import { assembleInput } from '../lib/import/assemble';
 import { detectWorkbook, KIND_LABEL, type Detected } from '../lib/import/detect';
@@ -92,10 +92,13 @@ export default function AdminImport() {
     setApplying(true);
     try {
       const done = await applyImport(db, model, stored);
-      setResult({
-        ok: true,
-        text: `Import applied: ${done.diff.added.length} added, ${done.diff.changed.length} changed, ${done.diff.removed.length} marked removed, ${done.newClubs} new club links.`,
-      });
+      const summary = `Import applied: ${done.diff.added.length} added, ${done.diff.changed.length} changed, ${done.diff.removed.length} marked removed, ${done.newClubs} new club links.`;
+      try {
+        const n = await publishClubLinks(db);
+        setResult({ ok: true, text: `${summary} Published ${n} club pages.` });
+      } catch (e) {
+        setResult({ ok: false, text: `${summary} But publishing the club pages failed: ${e instanceof Error ? e.message : 'unknown error'}. Apply the import again to retry.` });
+      }
       setConfirm(false);
       await refreshStored();
     } catch (e) {

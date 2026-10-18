@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, writeBatch, type Firestore } from 'firebase/firestore';
 import type { StoredAthlete } from '../import/diff';
 import type { ImportModel, Session } from '../import/types';
+import { buildClubLinks } from '../club-links';
 import { chunk, planImport, type ImportPlan, type StoredClub } from './plan';
 
 export async function loadAthletes(db: Firestore): Promise<StoredAthlete[]> {
@@ -45,4 +46,19 @@ export async function applyImport(db: Firestore, model: ImportModel, existing: S
     await batch.commit();
   }
   return plan;
+}
+
+/**
+ * Publish the public `clubLinks/{token}` documents (roster per club, no emails/DOB/bibs), in batches.
+ * Defaults to every club; pass a list to republish just some (for example after a token is regenerated).
+ */
+export async function publishClubLinks(db: Firestore, clubs?: StoredClub[]): Promise<number> {
+  const [athletes, sessions, allClubs] = await Promise.all([loadAthletes(db), loadSessions(db), loadClubs(db)]);
+  const links = buildClubLinks(athletes, sessions, clubs ?? allClubs);
+  for (const part of chunk(links)) {
+    const batch = writeBatch(db);
+    for (const l of part) batch.set(doc(db, 'clubLinks', l.token), l.doc);
+    await batch.commit();
+  }
+  return links.length;
 }

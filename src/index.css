@@ -169,9 +169,6 @@ option { color: var(--ink); background: #fff; }
    this uses --ink (navy-800) on --line = 9.81:1 instead — S1 2026-07-25. */
 .btn:disabled { background: var(--line); color: var(--ink); opacity: 1; cursor: not-allowed; transform: none; box-shadow: none; }
 
-/* H7 (2026-07-04 UI/UX review): a real, keyboard/SR-reachable <button> styled
-   to look exactly like the plain-text "Details"/"Hide" toggles it replaces —
-
 .badge {
   display: inline-flex;
   align-items: center;
@@ -269,3 +266,48 @@ option { color: var(--ink); background: #fff; }
 
 :root { color-scheme: light; }
 :where(input, select, textarea) { color-scheme: light; }
+
+/* ---- Competition order (club page). Copied from ucg-platform@e57754a src/index.css — keep in sync by hand ---- */
+/* ---------- competition order: apparatus columns (C-11, 2026-10-04) ----------
+   Columns WRAP instead of scrolling sideways: auto-fill tracks of ≥180px (or the
+   full width when narrower, so 375px never overflows). */
+.co-apparatus-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ---------- competition order: drop-line indicator (2026-10-04) ----------
+   Zero-height slot so showing the line never shifts the list (which would
+   move dnd-kit's collision rects mid-drag). Chips have a 6px bottom margin,
+   so top:-4.5px centres the 3px line in the gap above the slot's next chip.
+   Navy on the white card = 14.6:1. */
+.co-drop-slot { position: relative; height: 0; }
+.co-drop-line {
+  position: absolute;
+  left: 4px; right: 0; top: -4.5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--navy-800);
+  transform-origin: left center;
+  pointer-events: none;
+  animation:
+    co-drop-grow 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) both,
+    co-drop-pulse 1.4s ease-in-out 0.18s infinite;
+}
+.co-drop-line::before {
+  content: '';
+  position: absolute;
+  left: -4px; top: 50%;
+  width: 9px; height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--navy-800);
+}
+@keyframes co-drop-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes co-drop-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+  .co-drop-line { animation: none; }
+}
+
