@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 
 let env: RulesTestEnvironment;
 
@@ -161,6 +161,31 @@ describe('settings', () => {
     await assertFails(setDoc(doc(publicDb(), 'settings/meet'), { meetName: 'x' }, { merge: true }));
     await assertSucceeds(setDoc(doc(domainAdminDb(), 'sessions/s1-purple'), { competitionTime: 'Thursday 7:30 AM' }, { merge: true }));
     await assertFails(setDoc(doc(publicDb(), 'sessions/s1-purple'), { competitionTime: 'x' }, { merge: true }));
+  });
+});
+
+describe('schedule and synchro session choices (catch-all admin rule, no rule change)', () => {
+  beforeEach(() => seed());
+
+  test('schedule rows merge by session number; overrides live on the session; the public can read the rows but write nothing', async () => {
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { schedule: { '1': { date: '2026-10-22', competition: '7:30 AM' } } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { schedule: { '2': { competition: '1:00 PM' } } }, { merge: true }));
+    const snap = await getDoc(doc(publicDb(), 'settings/meet'));
+    expect(Object.keys(snap.data()!.schedule).sort()).toEqual(['1', '2']);
+    await assertFails(setDoc(doc(publicDb(), 'settings/meet'), { schedule: { '1': { competition: 'x' } } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'sessions/s1-purple'), { scheduleOverride: { date: '', competition: '9:00 AM' } }, { merge: true }));
+    await assertFails(setDoc(doc(publicDb(), 'sessions/s1-purple'), { scheduleOverride: { competition: 'x' } }, { merge: true }));
+    await assertFails(getDoc(doc(publicDb(), 'sessions/s1-purple')));
+  });
+
+  test('synchroSessions/main: admin only; one pair at a time with a merge write leaves the others alone and creates the doc', async () => {
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'synchroSessions/main'), { assignments: { 'pair.1': 's1-purple' } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'synchroSessions/main'), { assignments: { pair2: 's2-purple' } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'synchroSessions/main'), { assignments: { 'pair.1': deleteField() } }, { merge: true }));
+    const snap = await getDoc(doc(domainAdminDb(), 'synchroSessions/main'));
+    expect(snap.data()!.assignments).toEqual({ pair2: 's2-purple' });
+    await assertFails(getDoc(doc(publicDb(), 'synchroSessions/main')));
+    await assertFails(setDoc(doc(outsiderDb(), 'synchroSessions/main'), { assignments: {} }, { merge: true }));
   });
 });
 

@@ -22,3 +22,19 @@
 .ex-page { scroll-margin-top: 130px; min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 640pt; }
 .ex-page:focus { outline: none; }
 .ex-page:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }
+
+/* Session schedule table: a real table on wide screens, stacked labelled cells on narrow ones (no sideways scroll). */
+.ex-sched { width: 100%; }
+.ex-sched th, .ex-sched td { vertical-align: middle; }
+.ex-sched-in { font: inherit; padding: 7px 8px; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); min-height: 40px; width: 100%; min-width: 0; box-sizing: border-box; }
+.ex-sched-in::placeholder { color: var(--ink-soft); opacity: 1; }
+.ex-over { margin-top: 14px; }
+.ex-over summary { cursor: pointer; font-weight: 700; color: var(--ink); min-height: 32px; }
+@media (max-width: 760px) {
+  .ex-sched, .ex-sched tbody, .ex-sched tr, .ex-sched th, .ex-sched td { display: block; }
+  .ex-sched thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .ex-sched tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 0; border-top: 1px solid var(--ink-soft); }
+  .ex-sched tr > th { grid-column: 1 / -1; }
+  .ex-sched td { border: 0; padding: 0; }
+  .ex-sched td::before { content: attr(data-label); display: block; font-size: 12.5px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+}

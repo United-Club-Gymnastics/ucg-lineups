@@ -83,7 +83,7 @@ export default function AdminLanding() {
         <Tabs tabs={TABS} active={tab} onChange={setTab} />
       </nav>
       {tab === 'import' && <Suspense fallback={<p>Loading…</p>}><AdminImport /></Suspense>}
-      {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads /></Suspense>}
+      {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads onOpenSchedule={() => setTab('exports')} /></Suspense>}
       {tab === 'tnt' && <Suspense fallback={<p>Loading…</p>}><AdminTnt /></Suspense>}
       {tab === 'exports' && <Suspense fallback={<p>Loading…</p>}><AdminExports /></Suspense>}
       {tab !== 'import' && tab !== 'squads' && tab !== 'tnt' && tab !== 'exports' && <ComingNext label={TABS.find((t) => t.id === tab)!.label} />}

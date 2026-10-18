@@ -99,7 +99,7 @@ are placed into squads; independents are cards of one.
 - **Routines per rotation** table (rotation × apparatus, squad letter, totals, over-cap highlight).
 - Capacity guide: **MAG up to 80 in 6 squads, 160 in 12; WAG up to 85 in 8** (40 in 4 is the
   platform figure *(assumption)*). Warn above, never block.
-- Schedule per session (open stretch, timed warm-ups, competition) entered here.
+- Dates and times are not entered here any more: see the **Session schedule** (§6). The Squads screen links to it.
 
 ## 5. Host — T&T
 
@@ -128,6 +128,17 @@ are placed into squads; independents are cards of one.
   session's synchro and rotation sheets and warn about pairs still needing a session.
 
 ## 6. Exports (print-ready PDF, black & white)
+
+**Session schedule (Exports screen).** The meet date depends on the session and times repeat by session
+number, so there is ONE table with a row per **session number** (date, open stretch, timed warm-ups,
+competition) that applies to every gym's session with that number, artistic and T&T. A session can
+carry an optional **override** (empty by default) for any of the four fields; an override wins per
+field. The resolved date prints in every sheet's header (the single meet date is only a fallback for a
+session with no date); the artistic rotation sheet prints the three times; the T&T rotation sheet title
+is weekday + competition (`T&T Session 1 – Purple · Thursday 7:30 AM`). Stored in `settings/meet.schedule`
+(map by session number; public-read like the meet name) and `sessions/{id}.scheduleOverride`. Times
+saved the older way (Squads screen, T&T competition time) move into the schedule only through the
+explicit "Move existing times into the schedule" action.
 
 General: **black and white only** (no colour fills, no solid ink bands), UCG logo + wording (no
 NAIGC), full club names. Layout lives in pure `*-pdf-content.ts` modules; jsPDF only draws.
@@ -190,8 +201,8 @@ Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[
 
 | Path | Who | Contents |
 |---|---|---|
-| `settings/meet` | admin write, public read | meet name/date, order deadline, gym order, capacity settings |
-| `sessions/{id}` | admin | number, gym, discipline, levels, schedule, rotation pattern |
+| `settings/meet` | admin write, public read | meet name/date (fallback), order deadline, gym order, capacity settings, `schedule` (date and times by session number) |
+| `sessions/{id}` | admin | number, gym, discipline, levels, `scheduleOverride` (optional date/times) |
 | `athletes/{disc}_{bib}` | admin | names, club id + full name, level, session, apparatus / T&T levels, removed flag |
 | `clubs/{clubId}` | admin | full name, contact emails, token |
 | `clubLinks/{token}` | public **get** only (no list) | clubId, club name, the club's roster per session (names, levels, apparatus — no emails/DOB) |

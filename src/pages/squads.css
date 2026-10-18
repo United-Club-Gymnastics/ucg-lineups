@@ -15,7 +15,6 @@
 .sq-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .sq-row { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 10px 0; }
 .sq-label { font-size: 13px; font-weight: 700; color: var(--ink); }
-.sq-sched { align-items: flex-end; }
 .sq-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--sunk); border-radius: 18px; max-width: 100%; }
 .sq-seg button { border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 15px; cursor: pointer; text-align: left; }
 .sq-seg button:hover { background: var(--ice-200); }

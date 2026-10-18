@@ -7,6 +7,7 @@ import { mergeFlights, pairNames, pairsInSession, pairsNeedingSession, placePair
 import type { SynchroPair } from '../synchro-source';
 import { isArtisticSession, parseSquadDoc, sessionTitle, sortSessionsByGym } from '../squad-data';
 import { buildTntRoster, isTntSession, parseTntDoc } from '../tnt-data';
+import { formatDate, resolveSchedule, whenText, type ScheduleOverride, type ScheduleRows } from '../schedule';
 import type { SessionExportInput } from './collate';
 import type { Meet } from './model';
 import { buildArtisticSessionInput, buildTntSessionInput } from './session-input';
@@ -40,6 +41,8 @@ export function buildExportSessions(input: {
   /** Raw `squads/{sessionId}` documents by session id. */
   squadDocs: Record<string, unknown>;
   meet: Meet;
+  /** The session schedule: a row per session number (with `meet.date` as the date fallback); sessions may override fields. */
+  schedule?: ScheduleRows;
   /** Pairs read from the Synchro tool; null when it could not be read. */
   synchroPairs: SynchroPair[] | null;
   /** The host's synchro session choices (`synchroSessions/main`); none when omitted. */
@@ -85,15 +88,25 @@ export function buildExportSessions(input: {
     });
   }
   if (!input.meet.name.trim()) warnings.unshift({ sessionId: '', session: 'Meet', text: 'The meet name is empty: set it above so it prints in the headers.' });
-  return { sessions: out, warnings };
+  return { sessions: applySchedules(out, { meet: input.meet, rows: input.schedule ?? {} }), warnings };
 }
 
-/** The screen lets the admin type the meet name/date and a T&T competition time before saving them: show those in the sheets. */
-export function withOverrides(sessions: ExportSession[], o: { meet: Meet; competitionTimes: Record<string, string> }): ExportSession[] {
+/**
+ * Give every session its resolved schedule (its number's row, with the session's own override per field; the single meet date
+ * is only a fallback when a session has no date): the header date on every sheet, the artistic rotation sheet's times, and the
+ * T&T rotation sheet's "Thursday 7:30 AM". `overrides` (typed on the Exports screen, not saved yet) win over the saved ones.
+ */
+export function applySchedules(
+  sessions: ExportSession[],
+  o: { meet: Meet; rows: ScheduleRows; overrides?: Record<string, ScheduleOverride> },
+): ExportSession[] {
   return sessions.map((s) => {
+    const r = resolveSchedule(s.session.number, o.rows, o.overrides?.[s.id] ?? s.session.scheduleOverride, o.meet.date);
+    const meet: Meet = { name: o.meet.name, date: formatDate(r.date) };
     const inner = s.input;
-    if (inner.type === 'artistic') return { ...s, input: { ...inner, input: { ...inner.input, meet: o.meet } } };
-    const time = o.competitionTimes[s.id];
-    return { ...s, input: { ...inner, input: { ...inner.input, meet: o.meet, competitionTime: time ?? inner.input.competitionTime } } };
+    if (inner.type === 'artistic') {
+      return { ...s, input: { ...inner, input: { ...inner.input, meet, schedule: { stretch: r.stretch, warmups: r.warmups, competition: r.competition } } } };
+    }
+    return { ...s, input: { ...inner, input: { ...inner.input, meet, competitionTime: whenText(r) } } };
   });
 }

@@ -28,7 +28,7 @@ const patternLabel = (p: RotationPattern, d: ArtisticDiscipline): string => {
   return `Two flights, A/B equipment · ${two}`;
 };
 
-export default function AdminSquads() {
+export default function AdminSquads({ onOpenSchedule }: { onOpenSchedule?: () => void } = {}) {
   const [load, setLoad] = useState<Loaded>({ kind: 'loading' });
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
   const saver = useRef<Autosaver<StoredSquadDoc> | null>(null);
@@ -68,10 +68,11 @@ export default function AdminSquads() {
       </section>
     );
   }
-  return <SquadsScreen input={load.input} save={save} onRetry={() => void saver.current!.flush()} onReload={refresh} schedule={(id, doc) => saver.current!.schedule(id, doc)} />;
+  return <SquadsScreen onOpenSchedule={onOpenSchedule} input={load.input} save={save} onRetry={() => void saver.current!.flush()} onReload={refresh} schedule={(id, doc) => saver.current!.schedule(id, doc)} />;
 }
 
-function SquadsScreen({ input, save, onRetry, onReload, schedule }: {
+function SquadsScreen({ input, save, onRetry, onReload, schedule, onOpenSchedule }: {
+  onOpenSchedule?: () => void;
   input: SquadsInput;
   save: SaveState;
   onRetry: () => void;
@@ -125,7 +126,7 @@ function SquadsScreen({ input, save, onRetry, onReload, schedule }: {
       </section>
       {docError && <div className="adm-banner err" role="alert">{docError}</div>}
       {session && hasDoc && (
-        <SessionSquads key={session.id} session={session} input={input} stored={docs[session.id]} schedule={remember} />
+        <SessionSquads onOpenSchedule={onOpenSchedule} key={session.id} session={session} input={input} stored={docs[session.id]} schedule={remember} />
       )}
       {session && !hasDoc && !docError && <p role="status">Loading saved squads…</p>}
     </div>
@@ -134,7 +135,8 @@ function SquadsScreen({ input, save, onRetry, onReload, schedule }: {
 
 type Confirm = { title: string; body: string; action: string; run: () => void } | null;
 
-function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
+function SessionSquads({ session, input, stored, schedule: scheduleSave, onOpenSchedule }: {
+  onOpenSchedule?: () => void;
   session: ArtisticSession;
   input: SquadsInput;
   stored: StoredDoc;
@@ -158,7 +160,8 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
   const [cards, setCards] = useState<SquadCard[]>(start.cards);
   const [pattern, setPattern] = useState<RotationPattern>(stored?.pattern ?? defaultPattern(discipline));
   const [plan, setPlan] = useState<SquadPlan>(start.plan);
-  const [sched, setSched] = useState<Schedule>(stored?.schedule ?? EMPTY_SCHEDULE);
+  // Times now live in the Session schedule (Exports tab). A time saved here the old way is carried along untouched until it is moved there.
+  const sched: Schedule = stored?.schedule ?? EMPTY_SCHEDULE;
   const [notice, setNotice] = useState('');
   // One-time: shown until the host's next change saves the plan as `parallel` (the old `byes` pattern was removed).
   const [byesNotice, setByesNotice] = useState(Boolean(stored?.removedByes));
@@ -170,7 +173,6 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
     setPattern(p);
     setPlan(nextPlan);
     setCards(nextCards);
-    setSched(nextSched);
     scheduleSave(session.id, toStoredSquadDoc(p, nextPlan, nextCards, nextSched));
   };
 
@@ -205,7 +207,6 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
     commit(pattern, swapSquads(plan, a, b), cards, sched);
     setNotice(`Swapped Squad ${squadLetter(a)} and Squad ${squadLetter(b)}. Their groups now start on ${firstApparatus(a, pattern, discipline)} and ${firstApparatus(b, pattern, discipline)}.`);
   };
-  const setField = (k: keyof Schedule, v: string) => commit(pattern, plan, cards, { ...sched, [k]: v });
 
   const byKey = useMemo(() => new Map(cards.map((c) => [c.key, c])), [cards]);
   const stats = useMemo(() => planStats(plan, byKey, discipline, data.levelRank), [plan, byKey, discipline, data]);
@@ -248,11 +249,10 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
           </div>
         </div>
 
-        <div className="sq-row sq-sched">
-          <label className="sq-field"><span>Open stretch</span><input type="text" value={sched.stretch} onChange={(e) => setField('stretch', e.target.value)} /></label>
-          <label className="sq-field"><span>Timed warm-ups</span><input type="text" value={sched.warmups} onChange={(e) => setField('warmups', e.target.value)} /></label>
-          <label className="sq-field"><span>Competition</span><input type="text" value={sched.competition} onChange={(e) => setField('competition', e.target.value)} /></label>
-        </div>
+        <p className="adm-muted sq-sched-link">
+          Dates and times are set per session number in the <b>Session schedule</b> on the Exports tab.
+          {onOpenSchedule && <>{' '}<button type="button" className="btn ghost small" onClick={onOpenSchedule}>Open the session schedule</button></>}
+        </p>
 
         <div className={`adm-banner ${guide.tone === 'warn' ? 'warn' : 'ok'}`} role="status" data-testid="squads-capacity">{guide.text}</div>
         {start.movedCount > 0 && showChanges && <ChangesNotice restored={start} onDismiss={() => setShowChanges(false)} />}

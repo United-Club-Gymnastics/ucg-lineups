@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExportsInput } from '../../src/lib/data/export-store';
 
 vi.mock('../../src/lib/firebase', () => ({ db: {} }));
-const store = vi.hoisted(() => ({ loadExportsInput: vi.fn(), saveMeetNameDate: vi.fn(), saveCompetitionTime: vi.fn() }));
+const store = vi.hoisted(() => ({ loadExportsInput: vi.fn(), saveMeetNameDate: vi.fn(), saveScheduleRow: vi.fn(), saveScheduleOverride: vi.fn(), runScheduleMigration: vi.fn() }));
 vi.mock('../../src/lib/data/export-store', () => store);
 const files = vi.hoisted(() => ({ sessionPdf: vi.fn(), allSessionsPdf: vi.fn(), allSessionsZip: vi.fn() }));
 vi.mock('../../src/lib/pdf/files', () => files);
@@ -21,7 +21,7 @@ function input(over: Partial<ExportsInput> = {}): ExportsInput {
     athletes: [...mag.athletes, ...wag.athletes, ...tnt.athletes],
     gymOrder: ['Green', 'Red', 'Yellow', 'Orange', 'Purple'],
     ordersByClub: {},
-    meet: { meetName: MEET.name, meetDate: MEET.date, gymOrder: ['Green', 'Red', 'Yellow', 'Orange', 'Purple'] },
+    meet: { meetName: MEET.name, meetDate: MEET.date, gymOrder: ['Green', 'Red', 'Yellow', 'Orange', 'Purple'], schedule: {} },
     squadDocs: { [mag.session.id]: mag.stored, [wag.session.id]: wag.stored, [tnt.session.id]: tnt.stored },
     synchroPairs: tnt.pairs.map((p) => ({ id: p.id, level: p.level, a1: '', name1: p.name1, club1: p.club1, a2: '', name2: p.name2, club2: p.club2, createdAt: null, source: '' })),
     ...over,
@@ -39,7 +39,9 @@ async function open(inp = input()) {
 beforeEach(() => {
   vi.clearAllMocks();
   store.saveMeetNameDate.mockResolvedValue(undefined);
-  store.saveCompetitionTime.mockResolvedValue(undefined);
+  store.saveScheduleRow.mockResolvedValue(undefined);
+  store.saveScheduleOverride.mockResolvedValue(undefined);
+  store.runScheduleMigration.mockResolvedValue(undefined);
   files.sessionPdf.mockResolvedValue({ name: 'Session 1 - Orange - Scorecards.pdf', bytes: new ArrayBuffer(8) });
   files.allSessionsPdf.mockResolvedValue({ name: 'All Sessions - Scorecards.pdf', bytes: new ArrayBuffer(8) });
   files.allSessionsZip.mockResolvedValue({ name: 'All Sessions - Scorecards.zip', bytes: new Blob(['z']) });
@@ -147,17 +149,62 @@ describe('Exports screen', () => {
     expect(screen.getByRole('button', { name: 'Download this session' })).toBeEnabled();
   });
 
-  it('T&T: a competition time shows in the rotation sheet title and saves into the session', async () => {
+  it('the schedule table has a row per session number; typing shows in the sheets at once and Save writes just the changed rows', async () => {
     const user = await open();
+    const table = screen.getByRole('table', { name: 'Session schedule by session number' });
+    expect(within(table).getAllByRole('row').slice(1).map((r) => within(r).getByRole('rowheader').textContent)).toEqual(['Session 1', 'Session 2', 'Session 3']);
+    await user.type(screen.getByLabelText('Session 1 date'), '2026-10-22');
+    await user.type(screen.getByLabelText('Session 1 competition'), '7:30 AM');
+    await user.type(screen.getByLabelText('Session 1 open stretch'), '6:45 AM');
+    // T&T Session 1 – Purple: the rotation sheet title is weekday + competition; the header carries the session's date
     await user.selectOptions(screen.getByLabelText('Session'), 's1-purple');
     await user.click(screen.getByRole('button', { name: 'Rotation sheet' }));
-    const time = screen.getByLabelText(/Competition time/);
-    expect(time).toHaveValue('Thursday 7:30 AM');
-    await user.clear(time);
-    await user.type(time, 'Friday 9:00 AM');
-    expect(screen.getAllByText('T&T Session 1 – Purple · Friday 9:00 AM').length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('button', { name: 'Save time' }));
-    await waitFor(() => expect(store.saveCompetitionTime).toHaveBeenCalledWith({}, 's1-purple', 'Friday 9:00 AM'));
+    expect(screen.getAllByText('T&T Session 1 – Purple · Thursday 7:30 AM').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: 'Scorecards' }));
+    expect(within(screen.getAllByRole('region', { name: /^Page 1 of/ })[0]).getByText('October 22, 2026')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Rotation sheet' }));
+    // artistic rotation sheet: the times; Session 2 has no date so it still prints the single meet date
+    await user.selectOptions(screen.getByLabelText('Session'), 's1-orange');
+    expect(screen.getByText('6:45 AM')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Session'), 's2-green');
+    await user.click(screen.getByRole('button', { name: 'Scorecards' }));
+    expect(within(screen.getAllByRole('region', { name: /^Page 1 of/ })[0]).getByText(MEET.date)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save schedule' }));
+    await waitFor(() => expect(store.saveScheduleRow).toHaveBeenCalledTimes(1));
+    expect(store.saveScheduleRow).toHaveBeenCalledWith({}, 1, { date: '2026-10-22', stretch: '6:45 AM', warmups: '', competition: '7:30 AM' });
+  });
+
+  it('a session override wins per field over its number\'s row, and saves on the session', async () => {
+    const user = await open(input({ meet: { ...input().meet, schedule: { '1': { date: '2026-10-22', stretch: '6:45 AM', competition: '7:30 AM' } } } }));
+    await user.selectOptions(screen.getByLabelText('Session'), 's1-purple');
+    await user.click(screen.getByRole('button', { name: 'Rotation sheet' }));
+    expect(screen.getAllByText('T&T Session 1 – Purple · Thursday 7:30 AM').length).toBeGreaterThan(0);
+    await user.click(screen.getByText(/Session overrides/));
+    await user.type(screen.getByLabelText('Session 1 – Purple competition'), '9:00 AM');
+    expect(screen.getAllByText('T&T Session 1 – Purple · Thursday 9:00 AM').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: 'Save overrides' }));
+    await waitFor(() => expect(store.saveScheduleOverride).toHaveBeenCalledWith({}, 's1-purple', { date: '', stretch: '', warmups: '', competition: '9:00 AM' }));
+    // Orange is Session 1 too and keeps the row
+    await user.selectOptions(screen.getByLabelText('Session'), 's1-orange');
+    expect(screen.getByText('6:45 AM')).toBeInTheDocument();
+  });
+
+  it('offers the one-time move of old times, and only runs it when asked', async () => {
+    const inp = input({ meet: { ...input().meet, schedule: { '1': { competition: '7:30 AM' } } } });
+    inp.sessions = inp.sessions.map((s) => (s.id === 's1-purple' ? { ...s, competitionTime: 'Thursday 9:00 AM' } : s));
+    const mag = magFixture();
+    const wag = wagInfinityFixture();
+    inp.squadDocs = { ...inp.squadDocs, [wag.session.id]: { ...wag.stored, schedule: { stretch: '', warmups: '', competition: '' } }, [mag.session.id]: { ...mag.stored, schedule: { stretch: '6:45 AM', warmups: '', competition: '7:30 AM' } } };
+    const user = await open(inp);
+    const note = screen.getByTestId('schedule-migration');
+    expect(note).toHaveTextContent('2 sessions have times saved the old way');
+    expect(note).toHaveTextContent('2 times differ from the schedule above');
+    expect(note).toHaveTextContent('1 already match and would be dropped');
+    expect(store.runScheduleMigration).not.toHaveBeenCalled();
+    await user.click(within(note).getByRole('button', { name: 'Move existing times into the schedule' }));
+    await waitFor(() => expect(store.runScheduleMigration).toHaveBeenCalledTimes(1));
+    const plan = store.runScheduleMigration.mock.calls[0][1];
+    expect(plan.overrides).toEqual({ 's1-purple': { competition: 'Thursday 9:00 AM' }, 's1-orange': { stretch: '6:45 AM' } });
   });
 
   it('T&T scorecards jump bar: TR, DM, TU, SY', async () => {

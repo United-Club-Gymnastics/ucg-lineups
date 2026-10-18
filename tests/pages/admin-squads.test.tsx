@@ -228,7 +228,7 @@ describe('Squads screen', () => {
     expect(within(squad('B')).getByText(/Specialists: Pat Solo \(BB\): first up rotation 2/)).toBeInTheDocument();
   });
 
-  it('restores a saved plan from its athletes, saves schedule fields, and lists what moved since', async () => {
+  it('restores a saved plan from its athletes, carries an old schedule along untouched, and lists what moved since', async () => {
     const input = fixture();
     const alpha = input.athletes.filter((a) => a.clubId === 'alpha').map((a) => a.id);
     const added = ath('alpha', 'Alpha Gymnastics', 'XS', 'Silver XS', WAG, { first: 'Newcomer', last: 'Invented' }); // joined after placement
@@ -244,7 +244,8 @@ describe('Squads screen', () => {
     };
     const user = await open(input, doc);
     expect(within(squad('A')).getByText(/Alpha Gymnastics – Silver XS/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Open stretch')).toHaveValue('8:00');
+    expect(screen.queryByLabelText('Open stretch')).toBeNull(); // times are set in the Session schedule now
+    expect(screen.getByText(/Session schedule/)).toBeInTheDocument();
     const note = screen.getByTestId('squads-changes');
     expect(note).toHaveTextContent('2 athletes moved since you placed squads.');
     expect(note).toHaveTextContent('Newcomer Invented (new since you placed squads; in the unplaced list)');
@@ -252,11 +253,10 @@ describe('Squads screen', () => {
     expect(store.saveSquadDoc).not.toHaveBeenCalled(); // restoring alone writes nothing
     await user.click(within(note).getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByTestId('squads-changes')).toBeNull();
-    await user.clear(screen.getByLabelText('Competition'));
-    await user.type(screen.getByLabelText('Competition'), '10:30');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Bravo Gymnastics – Platinum XP' }), '1');
     await savedBy();
     const saved = lastSaved();
-    expect(saved.schedule.competition).toBe('10:30');
+    expect(saved.schedule).toEqual({ stretch: '8:00', warmups: '8:15', competition: '9:00' }); // not edited here
     expect(saved.squads[0].cards[0].athleteIds.sort()).toEqual([...alpha].sort()); // dropped athlete gone from the record
     expect(saved.trayAthleteIds).toContain(added.id); // the newcomer is now a known, unplaced athlete
   });

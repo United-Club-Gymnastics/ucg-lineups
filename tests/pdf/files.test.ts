@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { buildExportSessions, withOverrides } from '../../src/lib/pdf/export-all';
+import { applySchedules, buildExportSessions } from '../../src/lib/pdf/export-all';
 import { allSessionsPdf, allSessionsZip, sessionPdf } from '../../src/lib/pdf/files';
 import { sessionPages } from '../../src/lib/pdf/collate';
 import type { Session } from '../../src/lib/import/types';
@@ -42,12 +42,28 @@ describe('buildExportSessions', () => {
   it('no warnings when everything is saved', () => {
     expect(buildExportSessions({ ...base(), sessions: base().sessions.filter((s) => s.id !== 's3-red') }).warnings).toEqual([]);
   });
-  it('typed meet name/date and competition time override what was read', () => {
+  it('every sheet gets its session number\'s date and times; an override wins per field; the meet date is only a fallback', () => {
+    const rows = { '1': { date: '2026-10-22', stretch: '6:45 AM', warmups: '7:00 AM', competition: '7:30 AM' }, '2': { competition: '1:00 PM' } };
+    const sessions = base().sessions.map((x) => (x.id === 's1-purple' ? { ...x, scheduleOverride: { competition: '9:00 AM' } } : x));
+    const b = buildExportSessions({ ...base(), sessions, schedule: rows });
+    const get = (id: string) => b.sessions.find((x) => x.id === id)!.input;
+    const orange = get('s1-orange');
+    expect(orange.type === 'artistic' && orange.input.schedule).toEqual({ stretch: '6:45 AM', warmups: '7:00 AM', competition: '7:30 AM' });
+    expect(orange.input.meet).toEqual({ name: MEET.name, date: 'October 22, 2026' });
+    const purple = get('s1-purple');
+    expect(purple.type === 'tnt' && purple.input.competitionTime).toBe('Thursday 9:00 AM'); // override wins for competition only
+    expect(purple.input.meet.date).toBe('October 22, 2026'); // ...and the date still comes from the row
+    const green = get('s2-green');
+    expect(green.input.meet.date).toBe(MEET.date); // no date for Session 2: the single meet date
+    expect(green.type === 'artistic' && green.input.schedule.competition).toBe('1:00 PM');
+  });
+  it('typed schedule values (not saved yet) override what was read', () => {
     const b = buildExportSessions(base());
-    const o = withOverrides(b.sessions, { meet: { name: 'New', date: 'Soon' }, competitionTimes: { 's1-purple': 'Friday 1 PM' } });
+    const o = applySchedules(b.sessions, { meet: { name: 'New', date: 'Soon' }, rows: { '1': { date: '2026-10-23', competition: '1 PM' } }, overrides: { 's1-purple': { competition: '2 PM' } } });
     expect(o.every((s) => s.input.input.meet.name === 'New')).toBe(true);
     const t = o.find((s) => s.id === 's1-purple')!.input;
-    expect(t.type === 'tnt' && t.input.competitionTime).toBe('Friday 1 PM');
+    expect(t.type === 'tnt' && t.input.competitionTime).toBe('Friday 2 PM');
+    expect(o.find((s) => s.id === 's3-red')!.input.input.meet.date).toBe('Soon');
     expect(b.sessions.find((s) => s.id === 's1-purple')!.input.input.meet.name).toBe(MEET.name); // the original is untouched
   });
 });
