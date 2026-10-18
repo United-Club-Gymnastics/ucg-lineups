@@ -8,7 +8,7 @@ import {
   useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core';
 import type { Announcements, CollisionDetection, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import { apparatusCodes, firstApparatus, flightRows, rotationFor, squadLetter, startsOnBye, type ArtisticDiscipline, type RotationPattern } from '../lib/rotation';
+import { apparatusCodes, firstApparatus, flightRows, rotationFor, squadLetter, type ArtisticDiscipline, type RotationPattern } from '../lib/rotation';
 import { cardLabel, planStats, squadSpecialists, unplacedCards, type SquadCard, type SquadPlan, type SquadStats } from '../lib/squad-balance';
 import { fullName, type SquadSessionData } from '../lib/squad-data';
 import { squadRoutineCap } from '../lib/squad-builder';
@@ -20,7 +20,7 @@ const collide: CollisionDetection = (args) => {
 };
 
 const startsLabel = (i: number, pattern: RotationPattern, d: ArtisticDiscipline) =>
-  `starts ${firstApparatus(i, pattern, d)}${startsOnBye(i, pattern, d) ? ', after a bye' : ''}`;
+  `starts ${firstApparatus(i, pattern, d)}`;
 
 function Counts({ routines, codes, cap }: { routines: Record<string, number>; codes: string[]; cap?: number }) {
   return (
@@ -205,7 +205,7 @@ export function SquadBoard({ discipline, pattern, plan, cards, data, onPlace, on
         <div key={f} className="sq-flight">
           {rows.length > 1 && (
             <h3 className="sq-flight-label">
-              Flight {f + 1}{pattern === 'byes' && f === 1 ? ' · starts on a bye' : ''} · {f === 1 ? 'B' : 'A'} equipment
+              Flight {f + 1} · {f === 1 ? 'B' : 'A'} equipment
             </h3>
           )}
           <div className="sq-squads">{idx.map(squadPanel)}</div>

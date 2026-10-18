@@ -103,12 +103,17 @@ describe('stored squad doc', () => {
     const [c] = d.cards;
     const unplaced = d.cards.length;
     const plan = [{ name: 'A', cardKeys: [c.key] }, { name: 'B', cardKeys: [] }];
-    const doc = toStoredSquadDoc('byes', plan, d.cards, sch);
+    const doc = toStoredSquadDoc('parallel', plan, d.cards, sch);
     expect(doc.squads[0].cards).toEqual([{ key: c.key, athleteIds: c.regIds }]);
     expect(doc.trayAthleteIds).toEqual(d.cards.slice(1).flatMap((x) => x.regIds));
     expect(unplaced).toBeGreaterThan(0);
     expect(doc.squads.every((s) => s.cards.every((k) => Array.isArray(k.athleteIds) && !Array.isArray(k)))).toBe(true);
     expect(parseSquadDoc(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
+  });
+  it('reads a doc saved with the removed byes pattern as parallel and remembers it for the notice', () => {
+    const raw = { pattern: 'byes', trayAthleteIds: [], schedule: sch, squads: [{ name: 'A', cards: [] }] };
+    expect(parseSquadDoc(raw)).toMatchObject({ pattern: 'parallel', removedByes: true });
+    expect(parseSquadDoc({ ...raw, pattern: 'parallel' })).not.toHaveProperty('removedByes');
   });
   it('treats junk and the old cardKeys shape as nothing saved', () => {
     expect(parseSquadDoc(null)).toBeNull();

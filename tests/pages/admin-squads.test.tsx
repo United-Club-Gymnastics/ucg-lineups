@@ -16,6 +16,7 @@ const store = vi.hoisted(() => ({ loadSquadsInput: vi.fn(), loadSquadDoc: vi.fn(
 vi.mock('../../src/lib/data/squad-store', () => store);
 
 import AdminSquads from '../../src/pages/AdminSquads';
+import { parseSquadDoc } from '../../src/lib/squad-data';
 
 const WAG = ['VT', 'UB', 'BB', 'FX'];
 let seq = 0;
@@ -60,6 +61,13 @@ async function open(input = fixture(), doc: unknown = null) {
   return user;
 }
 
+/** Most of these tests were written for one flight (4 WAG squads); WAG now starts on two flights, so switch (nothing is placed yet). */
+async function openOne(input = fixture(), doc: unknown = null) {
+  const user = await open(input, doc);
+  await user.click(screen.getByRole('button', { name: /One flight · 4 squads/ }));
+  return user;
+}
+
 const lastSaved = () => store.saveSquadDoc.mock.calls.at(-1)?.[2];
 const squad = (letter: string) => screen.getByRole('region', { name: `Squad ${letter}` });
 const savedBy = async (n = 1) => waitFor(() => expect(store.saveSquadDoc.mock.calls.length).toBeGreaterThanOrEqual(n), { timeout: 3000 });
@@ -79,12 +87,12 @@ describe('Squads screen', () => {
   it('starts with everything unplaced and nothing written until the host acts', async () => {
     await open();
     expect(screen.getByText(/Unplaced club groups \(5\)/)).toBeInTheDocument();
-    expect(screen.getAllByRole('region', { name: /^Squad [A-D]$/ })).toHaveLength(4);
+    expect(screen.getAllByRole('region', { name: /^Squad [A-H]$/ })).toHaveLength(8); // WAG default: two flights, A/B equipment
     expect(store.saveSquadDoc).not.toHaveBeenCalled();
   });
 
   it('auto-balance places everything, keeps Infinity apart, and autosaves a plan with no nested arrays', async () => {
-    const user = await open();
+    const user = await openOne();
     await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
     expect(screen.getByText('All club groups are placed.')).toBeInTheDocument();
     await savedBy();
@@ -135,7 +143,7 @@ describe('Squads screen', () => {
   });
 
   it('swap all groups with another squad trades them, keeps the letters and says where they now start', async () => {
-    const user = await open();
+    const user = await openOne();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Alpha Gymnastics – Silver XS' }), '0');
     await user.selectOptions(screen.getByRole('combobox', { name: "Swap all of Squad A's groups with another squad" }), '2');
     expect(within(squad('C')).getByText('Alpha Gymnastics – Silver XS')).toBeInTheDocument();
@@ -143,21 +151,57 @@ describe('Squads screen', () => {
     expect(screen.getByText('Swapped Squad A and Squad C. Their groups now start on VT and BB.')).toBeInTheDocument();
   });
 
+  it('a new WAG session defaults to two flights on A/B equipment (8 squads); a new MAG session to one flight (6 squads)', async () => {
+    const user = await open();
+    expect(screen.getByRole('button', { name: /Two flights, A\/B equipment · 8/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Flight 1 · A equipment')).toBeInTheDocument();
+    expect(squad('B')).toHaveTextContent('VT-B → UB-B → BB-B → FX-B');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Session' }), 's2-red');
+    await screen.findByRole('heading', { name: /Session 2 – Red/ });
+    expect(screen.getByRole('button', { name: /One flight · 6 squads/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText(/Flight 1/)).toBeNull();
+  });
+
+  it('has no bye pattern', async () => {
+    await open();
+    expect(screen.queryByRole('button', { name: /bye/i })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /flights?, / }).length + screen.getAllByRole('button', { name: /One flight/ }).length).toBe(2);
+    expect(document.body.textContent).not.toMatch(/\bBYE\b|bye/i);
+  });
+
+  it('a saved plan with the removed byes pattern opens as two flights on A/B equipment with a one-time notice', async () => {
+    const doc = {
+      pattern: 'byes', trayAthleteIds: [], schedule: { stretch: '', warmups: '', competition: '' },
+      squads: Array.from({ length: 8 }, (_, i) => ({ name: String.fromCharCode(65 + i), cards: [] })),
+    };
+    const user = await open(fixture(), parseSquadDoc(doc)); // the store parses what it reads
+    const msg = 'This session used the 2024 bye pattern, which has been removed; it now uses two flights on A/B equipment.';
+    expect(screen.getByText(msg)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Two flights, A\/B equipment · 8/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(squad('B')).toHaveTextContent('VT-B → UB-B → BB-B → FX-B');
+    expect(store.saveSquadDoc).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
+    expect(screen.queryByText(msg)).toBeNull(); // gone once the plan is saved as two flights
+    await savedBy();
+    expect(lastSaved().pattern).toBe('parallel');
+  });
+
   it('changing the pattern with nothing placed just resizes; with groups placed it asks first and re-balances', async () => {
     const user = await open();
-    await user.click(screen.getByRole('button', { name: /Two flights, A\/B equipment · 8/ }));
+    await user.click(screen.getByRole('button', { name: /One flight · 4 squads/ }));
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getAllByRole('region', { name: /^Squad [A-D]$/ })).toHaveLength(4);
+    expect(screen.queryByText('Flight 1 · A equipment')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
+    await user.click(screen.getByRole('button', { name: /Two flights, A\/B equipment · 8/ }));
+    const dlg = screen.getByRole('dialog');
+    await user.click(within(dlg).getByRole('button', { name: 'Change and re-balance' }));
     expect(screen.getAllByRole('region', { name: /^Squad [A-H]$/ })).toHaveLength(8);
     expect(screen.getByText('Flight 1 · A equipment')).toBeInTheDocument();
     expect(screen.getByText('Flight 2 · B equipment')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
-    await user.click(screen.getByRole('button', { name: /Two flights with byes \(2024\) · 8/ }));
-    const dlg = screen.getByRole('dialog');
-    await user.click(within(dlg).getByRole('button', { name: 'Change and re-balance' }));
-    expect(screen.getByText('Flight 2 · starts on a bye · B equipment')).toBeInTheDocument();
-    expect(squad('B')).toHaveTextContent('BYE → VT-B → UB-B → BB-B → FX');
+    expect(squad('B')).toHaveTextContent('VT-B → UB-B → BB-B → FX-B');
     await savedBy();
-    expect(lastSaved().pattern).toBe('byes');
+    expect(lastSaved().pattern).toBe('parallel');
     expect(lastSaved().squads).toHaveLength(8);
   });
 
@@ -170,7 +214,7 @@ describe('Squads screen', () => {
   });
 
   it('shows the Routines per rotation table with squad letters and totals', async () => {
-    const user = await open();
+    const user = await openOne();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Bravo Gymnastics – Platinum XP' }), '0');
     const table = screen.getByRole('table');
     const row1 = within(table).getByRole('row', { name: /Rotation 1/ });
@@ -179,7 +223,7 @@ describe('Squads screen', () => {
   });
 
   it('lists specialists in a squad with their first rotation', async () => {
-    const user = await open();
+    const user = await openOne();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Pat Solo (Independent) – Platinum XP' }), '1');
     expect(within(squad('B')).getByText(/Specialists: Pat Solo \(BB\): first up rotation 2/)).toBeInTheDocument();
   });

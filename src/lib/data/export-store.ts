@@ -3,6 +3,8 @@
 import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from 'firebase/firestore';
 import { DEFAULT_GYM_ORDER } from '../import/types';
 import { fetchSynchroPairs, type SynchroPair } from '../synchro-source';
+import { loadSynchroAssignments } from './synchro-store';
+import type { SynchroAssignments } from '../synchro-flights';
 import { loadSquadsInput, type SquadsInput } from './squad-store';
 
 export interface MeetSettings {
@@ -38,17 +40,20 @@ export interface ExportsInput extends SquadsInput {
   squadDocs: Record<string, unknown>;
   /** null when the Synchro tool could not be read (T&T flights are then left out, with a warning). */
   synchroPairs: SynchroPair[] | null;
+  /** The host's synchro session choices. */
+  synchroAssignments: SynchroAssignments;
 }
 
 /** A failed read of our own data throws (never print from defaults); a failed read of the Synchro tool is reported, not fatal. */
 export async function loadExportsInput(db: Firestore): Promise<ExportsInput> {
-  const [base, meet, squads, synchroPairs] = await Promise.all([
+  const [base, meet, squads, synchroPairs, synchroAssignments] = await Promise.all([
     loadSquadsInput(db),
     loadMeetSettings(db),
     getDocs(collection(db, 'squads')),
     fetchSynchroPairs().catch(() => null),
+    loadSynchroAssignments(db),
   ]);
   const squadDocs: Record<string, unknown> = {};
   for (const d of squads.docs) squadDocs[d.id] = d.data();
-  return { ...base, gymOrder: meet.gymOrder, meet, squadDocs, synchroPairs };
+  return { ...base, gymOrder: meet.gymOrder, meet, squadDocs, synchroPairs, synchroAssignments };
 }

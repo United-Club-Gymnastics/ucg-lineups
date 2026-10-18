@@ -122,11 +122,19 @@ describe('buildArtisticSessionInput', () => {
     expect(part.squads[0].groups).toEqual([]);
   });
 
-  it('a stored plan whose pattern is byes gives 8 WAG squads', () => {
+  it('a stored plan on two flights gives 8 WAG squads', () => {
     const w = wagInfinityFixture();
     const input = buildArtisticSessionInput({ ...w, meet: MEET });
-    expect(input.pattern).toBe('byes');
+    expect(input.pattern).toBe('parallel');
     expect(input.squads).toHaveLength(8);
+  });
+  it('a session with nothing saved defaults to WAG two flights (8 squads) and MAG one flight (6 squads)', () => {
+    const w = wagInfinityFixture();
+    const wag = buildArtisticSessionInput({ ...w, stored: null, meet: MEET });
+    expect([wag.pattern, wag.squads.length]).toEqual(['parallel', 8]);
+    const m = magFixture();
+    const mag = buildArtisticSessionInput({ ...m, stored: null, meet: MEET });
+    expect([mag.pattern, mag.squads.length]).toEqual(['one', 6]);
   });
 });
 

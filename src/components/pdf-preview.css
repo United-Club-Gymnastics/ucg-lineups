@@ -67,7 +67,6 @@
 .pv-light > b.pv-l, .pv-rrow > .pv-l { text-align: left; padding-left: 4pt; }
 .pv-light > b.pv-c, .pv-rrow > .pv-c, .pv-rrow > .pv-n { text-align: center; }
 .pv-light > b + b { border-left: 0.75pt solid #000; }
-.pv-bye { font-style: italic; }
 .pv-rrow > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; height: 100%; display: flex; align-items: center; }
 .pv-rrow > .pv-n, .pv-rrow > .pv-c { justify-content: center; border-left: 0.75pt solid #000; }
 .pv-rrow > .pv-n { font-weight: 700; }

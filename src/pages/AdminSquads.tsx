@@ -6,7 +6,7 @@ import { SaveIndicator } from '../components/SaveIndicator';
 import { Autosaver, type SaveState } from '../lib/autosave';
 import { loadSquadDoc, loadSquadsInput, saveSquadDoc, type SquadsInput } from '../lib/data/squad-store';
 import {
-  ROTATION_PATTERNS, firstApparatus, routinesPerRotation, squadCountFor, squadLetter,
+  ROTATION_PATTERNS, defaultPattern, firstApparatus, routinesPerRotation, squadCountFor, squadLetter,
   type ArtisticDiscipline, type RotationPattern,
 } from '../lib/rotation';
 import { autoBalance, capacityGuide, clearPlan, emptyPlan, moveCard, placedKeys, planStats, swapSquads, type SquadCard, type SquadPlan } from '../lib/squad-balance';
@@ -25,8 +25,7 @@ const patternLabel = (p: RotationPattern, d: ArtisticDiscipline): string => {
   const one = squadCountFor('one', d);
   const two = squadCountFor('parallel', d);
   if (p === 'one') return `One flight · ${one} squads`;
-  if (p === 'parallel') return `Two flights, A/B equipment · ${two}`;
-  return `Two flights with byes (2024) · ${two}`;
+  return `Two flights, A/B equipment · ${two}`;
 };
 
 export default function AdminSquads() {
@@ -153,18 +152,21 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
   // Start from what is saved. Saved cards hold athletes, so they are matched to the clubs' CURRENT groups; anything
   // that moved since is listed in `changes` (never silently).
   const [start] = useState(() => {
-    if (!stored) return { cards: data.cards, plan: emptyPlan('one', discipline), changes: [] as RestoreChange[], movedCount: 0 };
+    if (!stored) return { cards: data.cards, plan: emptyPlan(defaultPattern(discipline), discipline), changes: [] as RestoreChange[], movedCount: 0 };
     return restoreSquads({ stored, discipline, sessionRegs: data.regs, savedGroups: data.savedGroups, ctx, describe: data.describe, levelName });
   });
   const [cards, setCards] = useState<SquadCard[]>(start.cards);
-  const [pattern, setPattern] = useState<RotationPattern>(stored?.pattern ?? 'one');
+  const [pattern, setPattern] = useState<RotationPattern>(stored?.pattern ?? defaultPattern(discipline));
   const [plan, setPlan] = useState<SquadPlan>(start.plan);
   const [sched, setSched] = useState<Schedule>(stored?.schedule ?? EMPTY_SCHEDULE);
   const [notice, setNotice] = useState('');
+  // One-time: shown until the host's next change saves the plan as `parallel` (the old `byes` pattern was removed).
+  const [byesNotice, setByesNotice] = useState(Boolean(stored?.removedByes));
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [showChanges, setShowChanges] = useState(true);
 
   const commit = (p: RotationPattern, nextPlan: SquadPlan, nextCards: SquadCard[], nextSched: Schedule) => {
+    setByesNotice(false);
     setPattern(p);
     setPlan(nextPlan);
     setCards(nextCards);
@@ -254,6 +256,7 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
 
         <div className={`adm-banner ${guide.tone === 'warn' ? 'warn' : 'ok'}`} role="status" data-testid="squads-capacity">{guide.text}</div>
         {start.movedCount > 0 && showChanges && <ChangesNotice restored={start} onDismiss={() => setShowChanges(false)} />}
+        {byesNotice && <p className="sq-notice" role="status">This session used the 2024 bye pattern, which has been removed; it now uses two flights on A/B equipment.</p>}
         {notice && <p className="sq-notice" role="status" aria-live="polite">{notice}</p>}
 
         <details className="sq-how">
@@ -326,7 +329,6 @@ function RotationTable({ summary, cap }: { summary: ReturnType<typeof routinesPe
               <th scope="col"><span className="sr-only">Rotation</span></th>
               {summary.equipment.map((e) => <th key={e} scope="col" className="num">{e}</th>)}
               <th scope="col" className="num">Total</th>
-              <th scope="col"><span className="sr-only">Byes</span></th>
             </tr>
           </thead>
           <tbody>
@@ -344,7 +346,6 @@ function RotationTable({ summary, cap }: { summary: ReturnType<typeof routinesPe
                   </td>
                 ))}
                 <td className="num tot">{r.total}</td>
-                <td className="sq-bye">{r.byes.length > 0 ? `Bye: ${r.byes.join(', ')}` : ''}</td>
               </tr>
             ))}
           </tbody>

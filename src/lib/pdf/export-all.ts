@@ -3,10 +3,10 @@
 import type { LevelOrder } from '../club-order-model';
 import type { StoredAthlete } from '../import/diff';
 import type { Session } from '../import/types';
-import { matchPairs } from '../synchro-flights';
+import { mergeFlights, pairNames, pairsInSession, pairsNeedingSession, placePairs, type PlacedPair, type SynchroAssignments } from '../synchro-flights';
 import type { SynchroPair } from '../synchro-source';
 import { isArtisticSession, parseSquadDoc, sessionTitle, sortSessionsByGym } from '../squad-data';
-import { buildTntSessionData, isTntSession, parseTntDoc } from '../tnt-data';
+import { buildTntRoster, isTntSession, parseTntDoc } from '../tnt-data';
 import type { SessionExportInput } from './collate';
 import type { Meet } from './model';
 import { buildArtisticSessionInput, buildTntSessionInput } from './session-input';
@@ -42,12 +42,19 @@ export function buildExportSessions(input: {
   meet: Meet;
   /** Pairs read from the Synchro tool; null when it could not be read. */
   synchroPairs: SynchroPair[] | null;
+  /** The host's synchro session choices (`synchroSessions/main`); none when omitted. */
+  synchroAssignments?: SynchroAssignments;
 }): ExportBuild {
   const out: ExportSession[] = [];
   const warnings: ExportWarning[] = [];
   const warn = (s: Session, text: string) => warnings.push({ sessionId: s.id, session: sessionTitle(s), text });
 
-  for (const session of sortSessionsByGym(input.sessions, input.gymOrder)) {
+  const sessionsSorted = sortSessionsByGym(input.sessions, input.gymOrder);
+  const placed: PlacedPair[] | null = input.synchroPairs
+    ? placePairs(input.synchroPairs, buildTntRoster(input.athletes), input.synchroAssignments ?? {}, input.sessions.filter(isTntSession).map((s) => s.id))
+    : null;
+
+  for (const session of sessionsSorted) {
     const raw = input.squadDocs[session.id];
     const base = { id: session.id, number: session.number, gym: session.gym };
     if (isArtisticSession(session)) {
@@ -58,14 +65,24 @@ export function buildExportSessions(input: {
       out.push({ id: session.id, session, title: sessionTitle(session), input: { type: 'artistic', ...base, input: built } });
     } else if (isTntSession(session)) {
       const stored = parseTntDoc(raw);
-      const data = buildTntSessionData(session, input.athletes);
-      const pairs = input.synchroPairs ? matchPairs(input.synchroPairs, data.all, data.elsewhere) : null;
+      const pairs = placed ? pairsInSession(placed, session.id) : null;
       const built = buildTntSessionInput({ session, athletes: input.athletes, stored, pairs, meet: input.meet });
       if (built.noSquads) warn(session, 'No squads saved yet: the scorecards have no pages and the rotation sheet is empty.');
       else if (built.unplaced > 0) warn(session, `${plural(built.unplaced, 'athlete')} not placed in a squad: not on the sheets.`);
       if (built.pairsMissing) warn(session, 'The Synchro tool could not be read: no synchro flights are included.');
+      else if (stored && stored.flights.length > 0 && pairs) {
+        const added = mergeFlights(stored.flights, pairs).added.length;
+        if (added > 0) warn(session, `${plural(added, 'synchro pair')} not in the saved flights ${added === 1 ? 'was' : 'were'} added at the end of ${added === 1 ? 'its' : 'their'} level. Press Refresh pairs on the T&T screen to review.`);
+      }
       out.push({ id: session.id, session, title: sessionTitle(session), input: { type: 'tnt', ...base, input: built } });
     }
+  }
+  const waiting = placed ? pairsNeedingSession(placed) : [];
+  if (waiting.length > 0) {
+    warnings.unshift({
+      sessionId: '', session: 'Synchro',
+      text: `${plural(waiting.length, 'synchro pair')} still ${waiting.length === 1 ? 'needs' : 'need'} a session and ${waiting.length === 1 ? 'is' : 'are'} not on any sheet: ${waiting.map(pairNames).join('; ')}. Choose a session on the T&T screen.`,
+    });
   }
   if (!input.meet.name.trim()) warnings.unshift({ sessionId: '', session: 'Meet', text: 'The meet name is empty: set it above so it prints in the headers.' });
   return { sessions: out, warnings };

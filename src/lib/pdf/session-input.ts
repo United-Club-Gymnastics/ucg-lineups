@@ -4,11 +4,11 @@ import type { LinkAthlete } from '../club-links';
 import { resolveLevel, type LevelOrder } from '../club-order-model';
 import type { StoredAthlete } from '../import/diff';
 import type { Session } from '../import/types';
-import { type FlightPair, type Flight, defaultFlights, pairClubs, pairNames } from '../synchro-flights';
+import { type FlightPair, type Flight, defaultFlights, mergeFlights, pairClubs, pairNames } from '../synchro-flights';
 import { planFromCards } from '../squad-balance';
 import { restoreSquads } from '../squad-restore';
 import { buildSessionData, fullName, type ArtisticSession, type Schedule, type StoredSquadDoc, EMPTY_SCHEDULE } from '../squad-data';
-import { squadLetter as artisticLetter, squadCountFor, apparatusCodes, type RotationPattern } from '../rotation';
+import { squadLetter as artisticLetter, squadCountFor, apparatusCodes, defaultPattern, type RotationPattern } from '../rotation';
 import { TNT_EVENTS, orderFor, squadLetter as tntLetter, type TntEvent, type TntCode } from '../tnt-squads';
 import { buildTntSessionData, type StoredTntDoc } from '../tnt-data';
 import { restoreTntSquads } from '../tnt-squads';
@@ -71,7 +71,7 @@ export function buildArtisticSessionInput(input: {
 }): ArtisticSessionInput {
   const { session, meet, stored } = input;
   const d = buildSessionData(session, input.athletes, input.ordersByClub);
-  const pattern: RotationPattern = stored?.pattern ?? 'one';
+  const pattern: RotationPattern = stored?.pattern ?? defaultPattern(session.discipline);
   const count = squadCountFor(pattern, session.discipline);
   const meta = { number: session.number, gym: session.gym, levelCodes: session.levelCodes, discipline: session.discipline };
   const empty: ArtisticSquadInput[] = Array.from({ length: count }, (_, i) => ({ index: i, letter: artisticLetter(i), groups: [] }));
@@ -180,7 +180,7 @@ export function buildTntSessionInput(input: {
   session: Session & { competitionTime?: string };
   athletes: StoredAthlete[];
   stored: StoredTntDoc | null;
-  /** Pairs read from the Synchro tool and matched to this session; null when it could not be read. */
+  /** Pairs competing in this session (read from the Synchro tool, placed by session); null when the tool could not be read. */
   pairs: FlightPair[] | null;
   meet: Meet;
 }): TntSessionInput {
@@ -201,7 +201,9 @@ export function buildTntSessionInput(input: {
   let flights: TntSessionInput['flights'] = [];
   if (input.pairs) {
     const byId = new Map(input.pairs.map((p) => [p.id, p]));
-    const saved: Flight[] = stored && stored.flights.length > 0 ? stored.flights : defaultFlights(input.pairs);
+    // Saved flights keep their order; pairs that are in this session but not in them yet (moved here by the host, or new
+    // since the last refresh) join the end of their level, and pairs that left drop out.
+    const saved: Flight[] = stored && stored.flights.length > 0 ? mergeFlights(stored.flights, input.pairs).flights : defaultFlights(input.pairs);
     flights = saved
       .map((f) => ({
         name: f.name,

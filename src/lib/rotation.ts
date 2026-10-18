@@ -9,15 +9,26 @@ export type { ArtisticDiscipline };
 /**
  * one: a single flight (WAG 4 / MAG 6 squads).
  * parallel: two flights on A/B equipment (8 / 12 squads).
- * byes: two flights, 2024 style: flight B starts on a BYE, floor is shared (no A/B), the other apparatus are A/B.
+ * (The 2024 "two flights with byes" pattern was removed on 2026-10-18; see `readPattern`.)
  */
-export type RotationPattern = 'one' | 'parallel' | 'byes';
+export type RotationPattern = 'one' | 'parallel';
 
-export const ROTATION_PATTERNS: RotationPattern[] = ['one', 'parallel', 'byes'];
+export const ROTATION_PATTERNS: RotationPattern[] = ['one', 'parallel'];
 
-export const BYE = 'BYE';
+/** New / unsaved sessions: WAG two flights on A/B equipment (8 squads), MAG one flight (6 squads). */
+export const defaultPattern = (discipline: ArtisticDiscipline): RotationPattern => (discipline === 'WAG' ? 'parallel' : 'one');
 
-/** The apparatus code of a rotation column (`VT-A` -> `VT`, `BYE` -> `BYE`). */
+/**
+ * Reads a stored pattern. The removed `byes` pattern reads as `parallel` (same squad count); `removedByes`
+ * tells the Squads screen to show its one-time notice. Anything else unknown returns null.
+ */
+export function readPattern(value: unknown): { pattern: RotationPattern; removedByes: boolean } | null {
+  if (value === 'byes') return { pattern: 'parallel', removedByes: true };
+  const pattern = ROTATION_PATTERNS.find((p) => p === value);
+  return pattern ? { pattern, removedByes: false } : null;
+}
+
+/** The apparatus code of a rotation column (`VT-A` -> `VT`). */
 export const columnCode = (column: string): string => column.split('-')[0];
 
 export const isTwoFlights = (pattern: RotationPattern): boolean => pattern !== 'one';
@@ -48,10 +59,7 @@ export function startIndexFor(index: number, pattern: RotationPattern, disciplin
   return isTwoFlights(pattern) ? Math.floor(index / 2) % n : index % n;
 }
 
-/**
- * The squad's columns in rotation order, e.g. WAG squad B in 'byes': BYE VT-B UB-B BB-B FX.
- * Squads that never have a bye have one column per apparatus; a bye adds a leading BYE column.
- */
+/** The squad's columns in rotation order, e.g. WAG squad B in 'parallel': VT-B UB-B BB-B FX-B. */
 export function rotationFor(index: number, pattern: RotationPattern, discipline: ArtisticDiscipline): string[] {
   const codes = apparatusCodes(discipline);
   const n = codes.length;
@@ -59,9 +67,7 @@ export function rotationFor(index: number, pattern: RotationPattern, discipline:
   const order = codes.map((_, k) => codes[(start + k) % n]);
   if (pattern === 'one') return order;
   const suffix = flightOf(index, pattern) === 1 ? 'B' : 'A';
-  if (pattern === 'parallel') return order.map((c) => `${c}-${suffix}`);
-  const seq = order.map((c) => (c === 'FX' ? c : `${c}-${suffix}`));
-  return suffix === 'B' ? [BYE, ...seq] : seq;
+  return order.map((c) => `${c}-${suffix}`);
 }
 
 /** Position (0-based rotation) at which the squad reaches `code`, or -1 when it never does. */
@@ -79,14 +85,10 @@ export function arrivalOrder(code: string, pattern: RotationPattern, discipline:
   return visits.sort((a, b) => a.r - b.r || a.i - b.i).map((v) => v.i);
 }
 
-/** First apparatus the squad actually competes on (skips a bye). */
+/** First apparatus the squad competes on. */
 export function firstApparatus(index: number, pattern: RotationPattern, discipline: ArtisticDiscipline): string {
-  return columnCode(rotationFor(index, pattern, discipline).find((c) => c !== BYE) ?? '');
+  return columnCode(rotationFor(index, pattern, discipline)[0] ?? '');
 }
-
-/** True when the squad sits out the first rotation. */
-export const startsOnBye = (index: number, pattern: RotationPattern, discipline: ArtisticDiscipline): boolean =>
-  rotationFor(index, pattern, discipline)[0] === BYE;
 
 /** Flight rows of squad indexes to draw: two flights when the pattern has them. */
 export function flightRows(pattern: RotationPattern, discipline: ArtisticDiscipline): number[][] {
@@ -98,7 +100,7 @@ export function flightRows(pattern: RotationPattern, discipline: ArtisticDiscipl
 export interface RotationCell {
   /** Equipment column, e.g. `VT-A`. */
   equipment: string;
-  /** Every squad on this equipment this rotation (normally one; shared floor can put two there). */
+  /** Every squad on this equipment this rotation (one, with A/B equipment). */
   squads: { index: number; letter: string; count: number; over: boolean }[];
   total: number;
 }
@@ -109,8 +111,6 @@ export interface RotationRow {
   /** One entry per equipment column; null when nobody is on it this rotation. */
   cells: (RotationCell | null)[];
   total: number;
-  /** Letters of the squads sitting out (a bye) this rotation. */
-  byes: string[];
 }
 
 export interface RotationSummary {
@@ -152,8 +152,7 @@ export function routinesPerRotation(
       total += sum;
       return { equipment: e, squads, total: sum };
     });
-    const byes = rots.map((rot, i) => (rot[r] === BYE ? squadLetter(i) : '')).filter(Boolean);
-    return { rotation: r + 1, cells, total, byes };
+    return { rotation: r + 1, cells, total };
   });
   return { equipment, rows };
 }

@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { buildExportSessions, withOverrides } from '../../src/lib/pdf/export-all';
 import { allSessionsPdf, allSessionsZip, sessionPdf } from '../../src/lib/pdf/files';
+import { sessionPages } from '../../src/lib/pdf/collate';
 import type { Session } from '../../src/lib/import/types';
 import { MEET, magFixture, tntFixture, wagInfinityFixture } from './fixtures';
 
@@ -48,6 +49,57 @@ describe('buildExportSessions', () => {
     const t = o.find((s) => s.id === 's1-purple')!.input;
     expect(t.type === 'tnt' && t.input.competitionTime).toBe('Friday 1 PM');
     expect(b.sessions.find((s) => s.id === 's1-purple')!.input.input.meet.name).toBe(MEET.name); // the original is untouched
+  });
+});
+
+describe('buildExportSessions: synchro pairs and their sessions', () => {
+  const tnt2: Session = { id: 's2-purple', number: 2, gym: 'Purple', discipline: 'TNT', levelCodes: ['NF', 'IF', 'HF'] };
+  const sy2 = ['One', 'Two'].map((n) => ({
+    ...tnt.athletes.find((a) => a.apparatus.includes('SY'))!, id: `TNT_elsewhere_${n}`, first: n, last: 'Elsewhere', clubId: 'elsewhere', clubName: 'Elsewhere Club',
+    sessionId: tnt2.id, apparatus: ['SY'], tnt: { SY: 'IF' },
+  }));
+  const raw = (p: { id: string; level: string; name1: string; name2: string; club1: string; club2: string }) =>
+    ({ id: p.id, level: p.level, a1: '', name1: p.name1, club1: p.club1, a2: '', name2: p.name2, club2: p.club2, createdAt: null, source: '' });
+  const two = () => ({
+    ...base(), sessions: [...base().sessions, tnt2], athletes: [...base().athletes, ...sy2],
+    synchroPairs: [...base().synchroPairs, raw({ id: 'e1', level: 'IF', name1: 'One Elsewhere', club1: 'Elsewhere Club', name2: 'Two Elsewhere', club2: 'Elsewhere Club' })],
+  });
+  const flightIds = (b: ReturnType<typeof buildExportSessions>, id: string) => {
+    const s = b.sessions.find((x) => x.id === id)!.input;
+    return s.type === 'tnt' ? s.input.flights.flatMap((f) => f.pairs.map((p) => p.id)) : [];
+  };
+
+  it('puts each pair on the session both athletes are in', () => {
+    const b = buildExportSessions(two());
+    expect(flightIds(b, tnt2.id)).toEqual(['e1']);
+    expect(flightIds(b, tnt.session.id)).not.toContain('e1');
+    expect(flightIds(b, tnt.session.id).length).toBeGreaterThan(0);
+    expect(b.warnings.some((w) => w.session === 'Synchro')).toBe(false);
+  });
+
+  it('a pair the host moved appears on the assigned session\'s synchro sheet and rotation sheet, not the old one', () => {
+    const moved = tnt.pairs[0].id;
+    const b = buildExportSessions({ ...two(), synchroAssignments: { [moved]: tnt2.id } });
+    expect(flightIds(b, tnt2.id)).toContain(moved);
+    expect(flightIds(b, tnt.session.id)).not.toContain(moved);
+    const input = b.sessions.find((x) => x.id === tnt2.id)!.input;
+    const pages = input.type === 'tnt' ? [...sessionPages('scorecards', input), ...sessionPages('rotation', input)] : [];
+    expect(pages.filter((p) => p.kind === 'synchro').length).toBeGreaterThan(0);
+    expect(JSON.stringify(pages.filter((p) => p.kind === 'tnt-rotation'))).toContain(tnt.pairs[0].name1);
+  });
+
+  it('a pair across two sessions is on no sheet and a warning names it until the host chooses', () => {
+    const cross = raw({ id: 'x1', level: 'IF', name1: tnt.pairs[0].name1, club1: tnt.pairs[0].club1, name2: 'Two Elsewhere', club2: 'Elsewhere Club' });
+    const input = { ...two(), synchroPairs: [...two().synchroPairs, cross] };
+    const b = buildExportSessions(input);
+    const w = b.warnings.find((x) => x.session === 'Synchro')!;
+    expect(w.text).toContain(`${tnt.pairs[0].name1} & Two Elsewhere`);
+    expect(w.text).toMatch(/still needs? a session/);
+    expect(flightIds(b, tnt.session.id)).not.toContain('x1');
+    expect(flightIds(b, tnt2.id)).not.toContain('x1');
+    const chosen = buildExportSessions({ ...input, synchroAssignments: { x1: tnt2.id } });
+    expect(chosen.warnings.some((x) => x.session === 'Synchro')).toBe(false);
+    expect(flightIds(chosen, tnt2.id)).toContain('x1');
   });
 });
 

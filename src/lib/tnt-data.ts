@@ -2,7 +2,7 @@
 // from its Firestore shape (no nested arrays).
 import type { StoredAthlete } from './import/diff';
 import type { Session } from './import/types';
-import type { Flight, Person } from './synchro-flights';
+import type { Flight, RosterPerson } from './synchro-flights';
 import { TNT_EVENTS, TNT_SQUAD_COUNT, fullName, inSquads, isSynchroOnly, squadLetter, type TntAthlete, type TntCode } from './tnt-squads';
 
 export const isTntSession = (s: Session): boolean => s.discipline === 'TNT';
@@ -27,16 +27,25 @@ export interface TntSessionData {
   /** Entered only in synchro: not in a squad. */
   synchroOnly: TntAthlete[];
   byId: Map<string, TntAthlete>;
-  /** T&T athletes of the other T&T sessions (to tell their synchro pairs from unknown ones). */
-  elsewhere: Person[];
   /** "Name · Club" for any athlete, including ones who have left. */
   describe: (id: string) => string;
 }
 
 const cmpText = (a: string, b: string) => a.localeCompare(b, 'en', { sensitivity: 'base' });
 
+const competing = (a: StoredAthlete) => a.discipline === 'TNT' && a.competes && !a.removed && a.apparatus.length > 0;
+
+/** Every competing T&T athlete in every session, for matching synchro pairs (session + whether they are entered in synchro). */
+export function buildTntRoster(allAthletes: StoredAthlete[]): RosterPerson[] {
+  return allAthletes
+    .filter((a) => competing(a) && a.sessionId)
+    .map((a) => ({
+      id: a.id, first: a.first, last: a.last, clubName: a.independent ? (a.clubName || 'Independent') : a.clubName,
+      sessionId: a.sessionId as string, inSynchro: a.apparatus.includes('SY'),
+    }));
+}
+
 export function buildTntSessionData(session: Session, allAthletes: StoredAthlete[]): TntSessionData {
-  const competing = (a: StoredAthlete) => a.discipline === 'TNT' && a.competes && !a.removed && a.apparatus.length > 0;
   const all = allAthletes
     .filter((a) => a.sessionId === session.id && competing(a))
     .map(toTntAthlete)
@@ -51,9 +60,6 @@ export function buildTntSessionData(session: Session, allAthletes: StoredAthlete
     squadAthletes: all.filter(inSquads),
     synchroOnly: all.filter(isSynchroOnly),
     byId: new Map(all.map((a) => [a.id, a])),
-    elsewhere: allAthletes
-      .filter((a) => a.sessionId !== session.id && competing(a))
-      .map((a) => ({ id: a.id, first: a.first, last: a.last, clubName: a.clubName })),
     describe,
   };
 }

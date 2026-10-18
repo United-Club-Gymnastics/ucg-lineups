@@ -130,7 +130,7 @@ export interface ScheduleItem {
 
 export interface RotationRow {
   label: string;
-  /** Routines per column; null for a BYE or an unused column. */
+  /** Routines per column; null for an unused column. */
   counts: (number | null)[];
   levelBreak: boolean;
   alt: boolean;
@@ -140,7 +140,7 @@ export interface RotationSquad {
   letter: string;
   /** `Squad A`. */
   heading: string;
-  /** Column headers in rotation order (`VT-A`, `BYE`); padded with '' to the page's column count. */
+  /** Column headers in rotation order (`VT-A`); padded with '' to the page's column count. */
   columns: string[];
   rows: RotationRow[];
   /** Nothing placed in this squad. */

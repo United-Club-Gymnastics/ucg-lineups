@@ -87,7 +87,7 @@ export function wagInfinityFixture(): ArtisticFixture {
     { club: 'Delta Tumblers', level: 'Inf', n: 3 },
     { club: 'Epsilon Gymnastics', level: 'XD', n: 4 },
   ]);
-  return placeArtistic(session, athletes, 'byes');
+  return placeArtistic(session, athletes, 'parallel');
 }
 
 // --- T&T ----------------------------------------------------------------------------------------------------------

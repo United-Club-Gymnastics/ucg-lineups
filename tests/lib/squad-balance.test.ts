@@ -133,7 +133,7 @@ describe('single level and Infinity', () => {
       ...group('a', 'Inf', 4, WAG_ALL), ...group('a', 'L9', 5, WAG_ALL), // one club with Infinity and Level 9
       ...group('b', 'Inf', 3, WAG_ALL), ...group('c', 'L9', 8, WAG_ALL), ...group('d', 'XS', 9, WAG_ALL), ...group('e', 'XP', 7, WAG_ALL),
     ];
-    for (const pattern of ['one', 'parallel', 'byes'] as const) {
+    for (const pattern of ['one', 'parallel'] as const) {
       const r = setup('WAG', regs, pattern);
       for (const s of r.stats) if (s.levels.includes('Inf')) expect(s.levels).toEqual(['Inf']);
       expect(r.stats.every((s) => !s.infinityMixed)).toBe(true);
@@ -151,7 +151,7 @@ describe('single level and Infinity', () => {
         for (const lv of levels) if (rnd() < 0.45) regs.push(...group(`c${c}`, lv, 1 + Math.floor(rnd() * 7), rnd() < 0.2 ? ['VT'] : WAG_ALL));
       }
       if (regs.length === 0) continue;
-      const r = setup('WAG', regs, t % 2 ? 'byes' : 'parallel');
+      const r = setup('WAG', regs, t % 2 ? 'one' : 'parallel');
       for (const s of r.stats) if (s.levels.includes('Inf')) expect(s.levels).toEqual(['Inf']);
       expect(r.plan.flatMap((s) => s.cardKeys)).toHaveLength(r.cards.length);
     }
@@ -184,21 +184,21 @@ describe('specialists and evening out', () => {
     expect(where).toBe(5); // squad F starts on High Bar
   });
 
-  it('counts a bye as time lost (2024 pattern): picks the A squad that starts on the apparatus', () => {
+  it('two flights (WAG default): picks the A squad that starts on the apparatus', () => {
     const regs = [...'abcdefgh'].flatMap((c) => group(c, 'XS', 6, WAG_ALL));
     regs.push(...group('', 'XS', 1, ['BB']));
-    const r = setup('WAG', regs, 'byes');
+    const r = setup('WAG', regs, 'parallel');
     const indep = r.cards.find((c) => c.independentRegId)!;
     expect(r.plan.findIndex((s) => s.cardKeys.includes(indep.key))).toBe(4); // squad E: BB-A first
   });
 
   it('squadSpecialists reports the rotation they first compete', () => {
     const lookup = apparatusLookup([{ id: 'x', apparatus: ['BB'] }, { id: 'y', apparatus: WAG_ALL }, { id: 'z', apparatus: ['UB', 'FX'] }]);
-    expect(squadSpecialists(['x', 'y', 'z'], lookup, 1, 'byes', 'WAG')).toEqual([
-      { regId: 'x', apparatus: ['BB'], firstRotation: 4 },
-      { regId: 'z', apparatus: ['UB', 'FX'], firstRotation: 3 },
+    expect(squadSpecialists(['x', 'y', 'z'], lookup, 1, 'parallel', 'WAG')).toEqual([
+      { regId: 'x', apparatus: ['BB'], firstRotation: 3 },
+      { regId: 'z', apparatus: ['UB', 'FX'], firstRotation: 2 },
     ]);
-    expect(rotationFor(1, 'byes', 'WAG')[3]).toBe('BB-B');
+    expect(rotationFor(1, 'parallel', 'WAG')[2]).toBe('BB-B');
   });
 
   it('evens out the busiest apparatus: 12 equal clubs in 6 squads is 2 each', () => {
@@ -302,8 +302,8 @@ describe('stats, labels and capacity', () => {
     expect(capacityGuide(81, 'one', 'MAG')).toMatchObject({ tone: 'warn', fit: 80 });
     expect(capacityGuide(81, 'one', 'MAG').text).toContain('two flights');
     expect(capacityGuide(160, 'parallel', 'MAG')).toMatchObject({ tone: 'info', fit: 160, squads: 12 });
-    expect(capacityGuide(161, 'byes', 'MAG').tone).toBe('warn');
-    expect(capacityGuide(85, 'byes', 'WAG')).toMatchObject({ tone: 'info', fit: 85, squads: 8 });
+    expect(capacityGuide(161, 'parallel', 'MAG').tone).toBe('warn');
+    expect(capacityGuide(85, 'parallel', 'WAG')).toMatchObject({ tone: 'info', fit: 85, squads: 8 });
     expect(capacityGuide(86, 'parallel', 'WAG').tone).toBe('warn');
     expect(capacityGuide(41, 'one', 'WAG').tone).toBe('warn');
     expect(capacityGuide(40, 'one', 'WAG').tone).toBe('info');

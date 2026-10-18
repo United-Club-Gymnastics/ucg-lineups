@@ -5,7 +5,7 @@ import type { LevelOrder } from './club-order-model';
 import { levelStatus, sessionStatus } from './club-status';
 import type { StoredAthlete } from './import/diff';
 import { DEFAULT_GYM_ORDER, type Session } from './import/types';
-import { ROTATION_PATTERNS, type ArtisticDiscipline, type RotationPattern } from './rotation';
+import { readPattern, type ArtisticDiscipline, type RotationPattern } from './rotation';
 import { buildCards, type SquadCard, type SquadPlan } from './squad-balance';
 import type { GroupReg, SavedGroupsRow } from './squad-builder';
 
@@ -129,6 +129,8 @@ export interface StoredSquadCard {
 }
 export interface StoredSquadDoc {
   pattern: RotationPattern;
+  /** Set only when read from a doc saved with the removed 2024 `byes` pattern (never written). */
+  removedByes?: boolean;
   squads: { name: string; cards: StoredSquadCard[] }[];
   trayAthleteIds: string[];
   schedule: Schedule;
@@ -153,8 +155,8 @@ export function toStoredSquadDoc(pattern: RotationPattern, plan: SquadPlan, card
 export function parseSquadDoc(raw: unknown): StoredSquadDoc | null {
   if (!raw || typeof raw !== 'object') return null;
   const d = raw as Record<string, unknown>;
-  const pattern = ROTATION_PATTERNS.find((p) => p === d.pattern);
-  if (!pattern || !Array.isArray(d.squads) || !Array.isArray(d.trayAthleteIds)) return null;
+  const read = readPattern(d.pattern);
+  if (!read || !Array.isArray(d.squads) || !Array.isArray(d.trayAthleteIds)) return null;
   const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
   const squads = d.squads.map((s, i) => {
     const o = (s ?? {}) as { name?: unknown; cards?: unknown };
@@ -165,5 +167,5 @@ export function parseSquadDoc(raw: unknown): StoredSquadDoc | null {
   });
   const sch = (d.schedule && typeof d.schedule === 'object' ? d.schedule : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === 'string' ? v : '');
-  return { pattern, squads, trayAthleteIds: strs(d.trayAthleteIds), schedule: { stretch: str(sch.stretch), warmups: str(sch.warmups), competition: str(sch.competition) } };
+  return { pattern: read.pattern, ...(read.removedByes ? { removedByes: true } : {}), squads, trayAthleteIds: strs(d.trayAthleteIds), schedule: { stretch: str(sch.stretch), warmups: str(sch.warmups), competition: str(sch.competition) } };
 }

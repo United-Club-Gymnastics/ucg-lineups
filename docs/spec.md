@@ -81,9 +81,11 @@ comes from SF Events and goes stale).
 Copied from the platform's `squad-builder.ts` / `ClubGroupSquadBuilder.tsx`: whole club groups
 are placed into squads; independents are cards of one.
 
-- **Rotation pattern per session:** one flight (WAG 4, MAG 6 squads); two flights on A/B
-  equipment (WAG 8, MAG 12); two flights with byes, 2024 style (flight B starts on a BYE; floor
-  is shared, other apparatus are A/B). Squads named A, B, C…
+- **Rotation pattern per session:** one flight (WAG 4, MAG 6 squads) or two flights on A/B
+  equipment (WAG 8, MAG 12). **New/unsaved sessions default to WAG two flights on A/B equipment
+  (8 squads) and MAG one flight (6 squads).** The 2024 "two flights with byes" pattern was removed
+  (2026-10-18); a saved plan that used it opens as two flights on A/B equipment with a one-time
+  notice on the Squads screen. Squads named A, B, C…
 - **Auto-balance, in priority order:**
   1. never over the per-apparatus cap (12 WAG / 15 MAG) when avoidable;
   2. a club's groups stay together — whole club in one squad if it fits; else each level as a
@@ -110,10 +112,20 @@ are placed into squads; independents are cards of one.
 - **Order per squad per event**, set by the admin by drag; default **HF > IF > NF, then club A–Z,
   then first name**. Only athletes entered on that event.
 - Athletes entered only in synchro are not in a squad (listed as "Synchro only").
-- **Synchro:** separate **flights** of pairs read from the Synchro tool (Refresh pairs: new pairs
-  join the end of their level's flight, deleted pairs drop out, order otherwise kept; unmatched
-  athletes flagged). Admin drags order / moves between flights. Default: HF > IF > NF, then club,
-  split evenly into two flights.
+- **Synchro:** separate **flights** of pairs per T&T session, read from the Synchro tool (Refresh
+  pairs: new pairs join the end of their level's flight, deleted pairs drop out, order otherwise
+  kept). Admin drags order / moves between flights. Default: HF > IF > NF, then club, split evenly
+  into two flights.
+- **Synchro pair sessions:** people sometimes compete synchro in a different session than their
+  other T&T events. A pair's default session is the T&T session both athletes are assigned to. If
+  they are in different sessions, or the pair can't be matched, it goes to **"Needs a session"**
+  (top of the Synchro flights section) until the host chooses one: no guessing. Every pair has a
+  **Move to session** select (any T&T session); the choice is stored and Refresh pairs keeps it.
+  Pair athletes are matched by club + name, then by name alone when exactly one T&T athlete has it
+  (clubs get renamed after the Synchro tool read the roster; same-name ties are broken by the
+  partner's club, then session, else unmatched). A pair is flagged **Check pair** when an athlete
+  can't be matched or is on the roster but not entered in synchro. Exports put each pair on its
+  session's synchro and rotation sheets and warn about pairs still needing a session.
 
 ## 6. Exports (print-ready PDF, black & white)
 
@@ -143,7 +155,7 @@ Collation for all sessions: **scorecards by gym** (Green, Red, Yellow, Orange, P
 ### Artistic rotation sheet (portrait, one page per session)
 - Title `<meet> – Session 1 – Orange`; subtitle `MAG – Orange Gym – Dev, Int, Adv`; schedule;
   session athlete count. (No "Session Rotation Report" line.)
-- Per squad: header row `Squad A` (no "(MAG)") + apparatus in rotation order (BYE / A-B equipment
+- Per squad: header row `Squad A` (no "(MAG)") + apparatus in rotation order (A-B equipment
   as the pattern says), grey band + heavy frame; rows `Club – Level` (+ `· Group B`) with routine
   counts; **light dashed rule** between levels; clear space between squads.
 
@@ -185,6 +197,7 @@ Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[
 | `clubLinks/{token}` | public **get** only (no list) | clubId, club name, the club's roster per session (names, levels, apparatus — no emails/DOB) |
 | `clubOrders/{token}/levels/{sessionId_level}` | club with token (until deadline), admin | groups, per-apparatus sections, splitDecided, updatedAt |
 | `squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |
+| `synchroSessions/main` | admin | `{ assignments: { <pairId>: <sessionId> } }`: the host's session choice per synchro pair |
 | `emailLog/{id}`, `emailSettings/main` | admin | reminders sent; templates |
 | `admins/{email}` | console only | extra admins |
 

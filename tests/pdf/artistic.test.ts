@@ -40,7 +40,7 @@ describe('artistic scorecards', () => {
   });
 
   it('every page follows arrivalOrder for its apparatus, in any pattern', () => {
-    for (const pattern of ['one', 'parallel', 'byes'] as RotationPattern[]) {
+    for (const pattern of ['one', 'parallel'] as RotationPattern[]) {
       for (const d of ['MAG', 'WAG'] as const) {
         const pages = artisticScorecardPages(input(d, pattern, everySquad(d, pattern)));
         for (const code of d === 'MAG' ? MAG : WAG) {
@@ -150,13 +150,13 @@ describe('artistic rotation sheet', () => {
     expect(pages[0].squads[1].columns).toEqual(['PH', 'SR', 'VT', 'PB', 'HB', 'FX']);
   });
 
-  it('shows BYE and A/B equipment as the pattern says, padding shorter squads', () => {
-    const [p] = artisticRotationPages(input('WAG', 'byes', everySquad('WAG', 'byes')));
-    expect(p.columnCount).toBe(5);
-    expect(p.squads[0].columns).toEqual(['VT-A', 'UB-A', 'BB-A', 'FX', '']);
-    expect(p.squads[1].columns).toEqual(['BYE', 'VT-B', 'UB-B', 'BB-B', 'FX']);
-    expect(p.squads[1].rows[0].counts[0]).toBeNull();
-    expect(p.squads[1].rows[0].counts.slice(1)).toEqual([1, 1, 1, 1]);
+  it('shows A/B equipment as the pattern says, with no BYE column', () => {
+    const [p] = artisticRotationPages(input('WAG', 'parallel', everySquad('WAG', 'parallel')));
+    expect(p.columnCount).toBe(4);
+    expect(p.squads[0].columns).toEqual(['VT-A', 'UB-A', 'BB-A', 'FX-A']);
+    expect(p.squads[1].columns).toEqual(['VT-B', 'UB-B', 'BB-B', 'FX-B']);
+    expect(p.squads[1].rows[0].counts).toEqual([1, 1, 1, 1]);
+    expect(JSON.stringify(p)).not.toContain('BYE');
   });
 
   it('rows are Club – Level (+ · Group B), with routine counts per apparatus', () => {

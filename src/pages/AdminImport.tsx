@@ -160,7 +160,7 @@ export default function AdminImport() {
           <div className="adm-tablewrap">
             <table className="adm-table">
               <caption className="adm-muted" style={{ textAlign: 'left' }}>Athletes by discipline</caption>
-              <thead><tr><th scope="col">Discipline</th><th scope="col" className="num">Athletes</th><th scope="col" className="num">Competing</th><th scope="col" className="num">Sessions</th></tr></thead>
+              <thead><tr><th scope="col">Discipline</th><th scope="col" className="num">Entries</th><th scope="col" className="num">Competing on at least one event</th><th scope="col" className="num">Sessions</th></tr></thead>
               <tbody>
                 {perDiscipline.map((r) => (
                   <tr key={r.d}><th scope="row">{DISC_LABEL[r.d]}</th><td className="num">{r.total}</td><td className="num">{r.competing}</td><td className="num">{r.sessions}</td></tr>
@@ -168,6 +168,7 @@ export default function AdminImport() {
               </tbody>
             </table>
           </div>
+          <p className="adm-muted">Entries scratched from every event aren&rsquo;t placed in groups, squads or sheets.</p>
 
           {model.warnings.length > 0 && (
             <details style={{ marginTop: 12 }}>

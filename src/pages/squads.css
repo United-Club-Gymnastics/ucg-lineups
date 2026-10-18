@@ -38,7 +38,6 @@
 .sq-cellpart { display: inline-flex; align-items: baseline; gap: 4px; margin-right: 6px; }
 .sq-cellpart:last-child { margin-right: 0; }
 .sq-letter { font-size: 11px; font-weight: 700; color: var(--navy-700); }
-.sq-bye { color: var(--ink); font-size: 13px; }
 
 .sq-tray { background: var(--ice-100); border: 1.5px dashed var(--navy-600); border-radius: var(--radius); padding: 12px; margin-bottom: 16px; min-width: 0; }
 .sq-tray-h { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 8px; }

@@ -2,7 +2,7 @@
 // squad boundary). Per squad: header row with the apparatus in rotation order, then one row per club group with its routine
 // counts. Spec §6.
 import { APPARATUS } from '../apparatus';
-import { BYE, columnCode, rotationFor } from '../rotation';
+import { columnCode, rotationFor } from '../rotation';
 import type { ArtisticRotationPage, RotationRow, RotationSquad, Unnumbered } from './model';
 import type { ArtisticGroupInput, ArtisticSessionInput } from './session-input';
 
@@ -48,7 +48,7 @@ export function artisticRotationPages(input: ArtisticSessionInput): Unnumbered<A
     const merged = mergedRows(s.groups);
     const rows: RotationRow[] = merged.map((m, ix) => ({
       label: m.label,
-      counts: rots[i].map((c) => (c === BYE ? null : m.routines[columnCode(c)] ?? 0)),
+      counts: rots[i].map((c) => (m.routines[columnCode(c)] ?? 0)),
       levelBreak: ix > 0 && merged[ix - 1].levelCode !== m.levelCode,
       alt: ix % 2 === 1,
     }));

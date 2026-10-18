@@ -180,7 +180,7 @@ function ArtisticRotation({ pg }: { pg: ArtisticRotationPage }) {
         <div key={s.letter} className="pv-squadblock" style={{ marginBottom: pt(u * 0.8), fontSize: pt(Math.min(9, u * 0.62)) }}>
           <div className="pv-rgrid pv-rhead" style={{ gridTemplateColumns: grid, height: pt(u * 1.5) }}>
             <b className="pv-rsquad">{s.heading}</b>
-            {s.columns.map((c, k) => <b key={k} className={c === 'BYE' ? 'pv-bye' : ''}>{c}</b>)}
+            {s.columns.map((c, k) => <b key={k}>{c}</b>)}
           </div>
           {s.empty && <div className="pv-rgrid pv-rrow" style={{ gridTemplateColumns: '1fr', height: pt(u) }}><i className="pv-grey" style={{ paddingLeft: pt(5) }}>No club groups placed</i></div>}
           {s.rows.map((r, i) => (

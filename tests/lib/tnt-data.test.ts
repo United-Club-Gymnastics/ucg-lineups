@@ -16,7 +16,6 @@ describe('buildTntSessionData', () => {
     ]);
     expect(d.squadAthletes.map((a) => a.id)).toEqual(['a']);
     expect(d.synchroOnly.map((a) => a.id)).toEqual(['s']);
-    expect(d.elsewhere.map((a) => a.id)).toEqual(['o']);
     expect(d.describe('a')).toBe('B Test · Club');
   });
   it('reads per-event levels, and falls back to the athlete level for old records', () => {

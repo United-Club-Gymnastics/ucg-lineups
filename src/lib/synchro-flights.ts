@@ -1,6 +1,6 @@
-// Pure: synchro flights. Pairs come from the Synchro tool (src/lib/synchro-source.ts, read-only); they are matched to this
-// import's T&T athletes by club + name (spaces and punctuation ignored, as the import does), split into flights, and
-// merged when the pairs are read again. Ported from the prototype (pairSort, ttDefaultFlights).
+// Pure: synchro flights. Pairs come from the Synchro tool (src/lib/synchro-source.ts, read-only); they are matched to the
+// import's T&T athletes by club + name (spaces and punctuation ignored, as the import does), given a session (the one both
+// athletes are in, or the host's choice), split into flights per session, and merged when the pairs are read again. Ported from the prototype (pairSort, ttDefaultFlights).
 import { slug, tntLevelCode } from './import/normalize';
 import type { SynchroPair } from './synchro-source';
 import { levelRank } from './tnt-squads';
@@ -25,7 +25,7 @@ export interface FlightPair {
   /** Matched T&T athlete ids (null = not matched, or ambiguous). */
   athlete1: string | null;
   athlete2: string | null;
-  /** Both athletes could not be matched to this session's athletes: shown as "Check pair". */
+  /** An athlete could not be matched, or is not entered in synchro: shown as "Check pair". */
   check: boolean;
   /** Why it needs a check, e.g. "Ada Test is not in this import". */
   problems: string[];
@@ -40,55 +40,137 @@ export interface Flight {
 const compact = (s: string): string => slug(s).replace(/-/g, '');
 const personKey = (club: string, name: string): string => `${compact(club)}|${compact(name)}`;
 
-function index(people: Person[]): Map<string, string[]> {
-  const m = new Map<string, string[]>();
-  for (const p of people) {
-    const k = personKey(p.clubName, `${p.first}${p.last}`);
-    m.set(k, [...(m.get(k) ?? []), p.id]);
-  }
-  return m;
+interface RosterIndex {
+  byClubName: Map<string, string[]>;
+  byName: Map<string, string[]>;
 }
 
-/** `match` is 'one' for exactly one athlete, 'many' when several athletes share club + name, 'none'. */
-function find(idx: Map<string, string[]>, club: string, name: string): { id: string | null; match: 'one' | 'many' | 'none' } {
-  const ids = idx.get(personKey(club, name)) ?? [];
-  return ids.length === 1 ? { id: ids[0], match: 'one' } : { id: null, match: ids.length > 1 ? 'many' : 'none' };
+function index(people: Person[]): RosterIndex {
+  const byClubName = new Map<string, string[]>();
+  const byName = new Map<string, string[]>();
+  for (const p of people) {
+    const name = compact(`${p.first}${p.last}`);
+    const k = `${compact(p.clubName)}|${name}`;
+    byClubName.set(k, [...(byClubName.get(k) ?? []), p.id]);
+    byName.set(name, [...(byName.get(name) ?? []), p.id]);
+  }
+  return { byClubName, byName };
+}
+
+type Found = { id: string | null; match: 'one' | 'many' | 'none' };
+const one = (id: string): Found => ({ id, match: 'one' });
+const none: Found = { id: null, match: 'none' };
+
+/**
+ * Club + name first. If that fails (the club was renamed since the Synchro tool read the roster), the name alone, when exactly
+ * one T&T athlete has it. If several share the name, the partner's club, then the partner's session, picks one; else it stays
+ * unmatched ('many'). `partner` = the pair partner's club-and-name match, when there is one.
+ */
+function find(
+  idx: RosterIndex, byId: Map<string, RosterPerson>, club: string, name: string, partnerClub: string, partner: Found,
+): Found {
+  const exact = idx.byClubName.get(personKey(club, name)) ?? [];
+  if (exact.length === 1) return one(exact[0]);
+  if (exact.length > 1) return { id: null, match: 'many' };
+  const named = idx.byName.get(compact(name)) ?? [];
+  if (named.length === 0) return none;
+  if (named.length === 1) return one(named[0]);
+  const sameClub = partner.id ? named.filter((id) => compact(byId.get(partner.id!)!.clubName) === compact(byId.get(id)!.clubName)) : [];
+  if (sameClub.length === 1) return one(sameClub[0]);
+  const byClub = partnerClub ? named.filter((id) => compact(byId.get(id)!.clubName) === compact(partnerClub)) : [];
+  if (byClub.length === 1) return one(byClub[0]);
+  const partnerSession = partner.id ? byId.get(partner.id)!.sessionId : null;
+  const bySession = partnerSession ? named.filter((id) => byId.get(id)!.sessionId === partnerSession) : [];
+  if (bySession.length === 1) return one(bySession[0]);
+  return { id: null, match: 'many' };
+}
+
+/** Why a pair has no session yet. */
+export type UnassignedReason = 'different-sessions' | 'unmatched';
+
+/** A pair with the T&T session it competes in (null = "Needs a session"). */
+export interface PlacedPair extends FlightPair {
+  /** Where the pair competes: the host's choice, else the session both athletes are in; null = needs a session. */
+  sessionId: string | null;
+  /** The session both athletes are assigned to (null when they differ or cannot both be matched). */
+  defaultSessionId: string | null;
+  /** The host chose the session (it is stored). */
+  manual: boolean;
+  /** The T&T session of each matched athlete (null = not matched). */
+  athleteSessions: [string | null, string | null];
+  /** Set only while `sessionId` is null. */
+  unassignedReason: UnassignedReason | null;
+}
+
+/** A T&T athlete on the roster, with their session and whether they are entered in synchro. */
+export interface RosterPerson extends Person {
+  sessionId: string;
+  inSynchro: boolean;
+}
+
+/** `synchroSessions/main`: the host's session choice per pair id. */
+export type SynchroAssignments = Record<string, string>;
+
+/** Read `synchroSessions/main` defensively (anything unusable = no choices). */
+export function parseAssignments(raw: unknown): SynchroAssignments {
+  const a = raw && typeof raw === 'object' ? (raw as { assignments?: unknown }).assignments : null;
+  const out: SynchroAssignments = {};
+  if (a && typeof a === 'object') for (const [k, v] of Object.entries(a as Record<string, unknown>)) if (typeof v === 'string' && v) out[k] = v;
+  return out;
 }
 
 /**
- * The pairs that belong to this session, matched to its athletes. A pair belongs here when at least one of its athletes
- * is in `here`, or when neither of them matches any T&T athlete at all (then it is flagged, so nothing is hidden).
- * A pair with an athlete who cannot be matched here is flagged ("Check pair") and keeps the Synchro tool's names.
- * @param here this session's T&T athletes
- * @param elsewhere T&T athletes of the other T&T sessions (their pairs belong to those sessions)
+ * Match every pair to the T&T roster (club + name) and decide its session. No guessing: the default session is the one both
+ * athletes share; if they differ, or either cannot be matched, the pair needs a session until the host picks one.
+ * A pair is flagged ("Check pair") when an athlete cannot be matched, or is on the roster but not entered in synchro.
+ * @param roster every competing T&T athlete (all T&T sessions)
+ * @param assignments the host's stored choices; one naming a session not in `sessionIds` is ignored
  */
-export function matchPairs(pairs: SynchroPair[], here: Person[], elsewhere: Person[] = []): FlightPair[] {
-  const hereIdx = index(here);
-  const elseIdx = index(elsewhere);
-  const out: FlightPair[] = [];
-  for (const p of pairs) {
-    const a = find(hereIdx, p.club1, p.name1);
-    const b = find(hereIdx, p.club2, p.name2);
-    const ea = find(elseIdx, p.club1, p.name1);
-    const eb = find(elseIdx, p.club2, p.name2);
-    const mine = a.match !== 'none' || b.match !== 'none';
-    const nowhere = !mine && ea.match === 'none' && eb.match === 'none';
-    if (!mine && !nowhere) continue;
+export function placePairs(pairs: SynchroPair[], roster: RosterPerson[], assignments: SynchroAssignments, sessionIds: string[]): PlacedPair[] {
+  const idx = index(roster);
+  const byId = new Map(roster.map((r) => [r.id, r]));
+  const valid = new Set(sessionIds);
+  return pairs.map((p) => {
+    // Each athlete is matched on their own first (the partner only breaks a tie between same-named athletes).
+    const a0 = find(idx, byId, p.club1, p.name1, '', none);
+    const b0 = find(idx, byId, p.club2, p.name2, '', none);
+    const a = a0.match === 'many' ? find(idx, byId, p.club1, p.name1, p.club2, b0) : a0;
+    const b = b0.match === 'many' ? find(idx, byId, p.club2, p.name2, p.club1, a) : b0;
+    const ra = a.id ? byId.get(a.id)! : null;
+    const rb = b.id ? byId.get(b.id)! : null;
     const problems: string[] = [];
-    const why = (who: typeof a, other: typeof ea, name: string) => {
-      if (who.match === 'one') return;
+    const why = (who: typeof a, name: string) => {
       if (who.match === 'many') problems.push(`${name} matches more than one athlete`);
-      else problems.push(other.match === 'none' ? `${name} is not in this import` : `${name} is in another T&T session`);
+      else if (who.match === 'none') problems.push(`${name} is not in this import`);
+      else if (!byId.get(who.id!)!.inSynchro) problems.push(`${name} is on the roster but not entered in synchro`);
     };
-    why(a, ea, p.name1 || 'First athlete');
-    why(b, eb, p.name2 || 'Second athlete');
-    out.push({
-      id: p.id, level: tntLevelCode(p.level), name1: p.name1, name2: p.name2, club1: p.club1, club2: p.club2,
+    why(a, p.name1 || 'First athlete');
+    why(b, p.name2 || 'Second athlete');
+    const sa = a.id ? byId.get(a.id)!.sessionId : null;
+    const sb = b.id ? byId.get(b.id)!.sessionId : null;
+    const defaultSessionId = sa && sa === sb ? sa : null;
+    const chosen = assignments[p.id];
+    const manual = !!chosen && valid.has(chosen);
+    const sessionId = manual ? chosen : defaultSessionId;
+    return {
+      id: p.id, level: tntLevelCode(p.level),
+      // Matched athletes show the import's current name and club; the Synchro tool's are kept only for unmatched ones.
+      name1: ra ? `${ra.first} ${ra.last}`.trim() : p.name1, name2: rb ? `${rb.first} ${rb.last}`.trim() : p.name2,
+      club1: ra ? ra.clubName : p.club1, club2: rb ? rb.clubName : p.club2,
       athlete1: a.id, athlete2: b.id, check: problems.length > 0, problems,
-    });
-  }
-  return out;
+      sessionId, defaultSessionId, manual, athleteSessions: [sa, sb],
+      unassignedReason: sessionId ? null : sa && sb ? 'different-sessions' : 'unmatched',
+    };
+  });
 }
+
+/** Pairs competing in this session. */
+export const pairsInSession = (placed: PlacedPair[], sessionId: string): PlacedPair[] => placed.filter((p) => p.sessionId === sessionId);
+/** Pairs waiting for the host to pick a session. */
+export const pairsNeedingSession = (placed: PlacedPair[]): PlacedPair[] => placed.filter((p) => p.sessionId === null);
+
+/** Record the host's choice for a pair (kept by Refresh pairs, which never touches the assignments). */
+export const assignPair = (assignments: SynchroAssignments, pairId: string, sessionId: string): SynchroAssignments => ({ ...assignments, [pairId]: sessionId });
 
 export const pairNames = (p: Pick<FlightPair, 'name1' | 'name2'>): string => `${p.name1} & ${p.name2}`;
 export const pairClubs = (p: Pick<FlightPair, 'club1' | 'club2'>): string =>

@@ -179,7 +179,7 @@ export const isSpecialist = (apparatus: readonly string[]): boolean => apparatus
 export interface SpecialistInfo {
   regId: string;
   apparatus: string[];
-  /** 1-based rotation in which the squad first reaches one of their apparatus (a bye counts as a rotation). */
+  /** 1-based rotation in which the squad first reaches one of their apparatus. */
   firstRotation: number;
 }
 

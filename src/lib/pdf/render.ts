@@ -329,7 +329,7 @@ function drawArtisticRotation(p: Pen, pg: ArtisticRotationPage, W: number, H: nu
     s.columns.forEach((c, k) => {
       const x = L + labelW + k * colW;
       p.line(x, y, x, y + hh, 1.2);
-      p.text(c, x + colW / 2, y + hh / 2, { size: fs, style: c === 'BYE' ? 'bolditalic' : 'bold', align: 'center' });
+      p.text(c, x + colW / 2, y + hh / 2, { size: fs, style: 'bold', align: 'center' });
     });
     y += hh;
     if (s.empty) {

@@ -6,13 +6,15 @@ import { SaveIndicator } from '../components/SaveIndicator';
 import { TntSquadBoard } from '../components/TntSquadBoard';
 import { Autosaver, type SaveState } from '../lib/autosave';
 import { loadTntDoc, loadTntInput, saveTntDoc, type TntInput } from '../lib/data/tnt-store';
-import { fetchSynchroPairs } from '../lib/synchro-source';
+import { fetchSynchroPairs, type SynchroPair } from '../lib/synchro-source';
+import { saveSynchroAssignments } from '../lib/data/synchro-store';
 import {
-  defaultFlights, flightName, matchPairs, mergeFlights, movePair, pairClubs, pairNames, type Flight, type FlightPair,
+  assignPair, defaultFlights, flightName, mergeFlights, movePair, pairClubs, pairNames, pairsInSession, pairsNeedingSession, placePairs,
+  type Flight, type PlacedPair, type RosterPerson, type SynchroAssignments,
 } from '../lib/synchro-flights';
 import type { Session } from '../lib/import/types';
 import { sessionTitle, sortSessionsByGym } from '../lib/squad-data';
-import { buildTntSessionData, isTntSession, toStoredTntDoc, type StoredTntDoc } from '../lib/tnt-data';
+import { buildTntRoster, buildTntSessionData, isTntSession, toStoredTntDoc, type StoredTntDoc } from '../lib/tnt-data';
 import {
   TNT_CAP, TNT_EVENT_NAME, TNT_EVENTS, TNT_SQUAD_COUNT, TNT_USUAL, autoBalance, fullName, moveAthlete, normalizeOrders, orderFor, orderKey,
   restoreTntSquads, rotationFor, squadLetter, type TntEvent, type TntRestored,
@@ -78,6 +80,18 @@ function TntScreen({ input, save, onRetry, onReload, schedule }: {
   const sessions = useMemo(() => sortSessionsByGym(input.sessions.filter(isTntSession), input.gymOrder), [input]);
   const [sessionId, setSessionId] = useState(sessions[0]?.id ?? '');
   const session = sessions.find((s) => s.id === sessionId);
+  const roster = useMemo(() => buildTntRoster(input.athletes), [input]);
+  const [assignments, setAssignments] = useState<SynchroAssignments>(input.assignments);
+  const assignRef = useRef(assignments);
+  const [assignError, setAssignError] = useState('');
+  /** Store the host's session choice for a pair (`synchroSessions/main`). */
+  const assign = (pairId: string, toSessionId: string) => {
+    const next = assignPair(assignRef.current, pairId, toSessionId);
+    assignRef.current = next;
+    setAssignments(next);
+    setAssignError('');
+    saveSynchroAssignments(db, next).catch((e) => setAssignError(e instanceof Error ? e.message : 'Could not save the session choice.'));
+  };
   const [docs, setDocs] = useState<Record<string, StoredDoc>>({});
   const [docError, setDocError] = useState('');
   const hasDoc = sessionId in docs;
@@ -121,14 +135,20 @@ function TntScreen({ input, save, onRetry, onReload, schedule }: {
         <SaveIndicator state={save} onRetry={onRetry} />
       </section>
       {docError && <div className="adm-banner err" role="alert">{docError}</div>}
-      {session && hasDoc && <TntSession key={session.id} session={session} input={input} stored={docs[session.id]} schedule={remember} />}
+      {assignError && <div className="adm-banner err" role="alert">Could not save the synchro session choice: {assignError} Try again.</div>}
+      {session && hasDoc && (
+        <TntSession
+          key={session.id} session={session} sessions={sessions} input={input} stored={docs[session.id]} schedule={remember}
+          roster={roster} assignments={assignments} onAssign={assign}
+        />
+      )}
       {session && !hasDoc && !docError && <p role="status">Loading saved squads…</p>}
     </div>
   );
 }
 
 type Confirm = { title: string; body: string; action: string; run: () => void } | null;
-type PairsState = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; pairs: FlightPair[]; at: Date };
+type PairsState = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; raw: SynchroPair[]; at: Date };
 
 interface Snapshot {
   squads: string[][];
@@ -137,8 +157,13 @@ interface Snapshot {
   readAt: Date | null;
 }
 
-function TntSession({ session, input, stored, schedule: scheduleSave }: {
+function TntSession({ session, sessions, input, stored, schedule: scheduleSave, roster, assignments, onAssign }: {
   session: Session;
+  /** Every T&T session (the choices for "Move to session"). */
+  sessions: Session[];
+  roster: RosterPerson[];
+  assignments: SynchroAssignments;
+  onAssign: (pairId: string, sessionId: string) => void;
   input: TntInput;
   stored: StoredDoc;
   schedule: (sessionId: string, doc: StoredTntDoc) => void;
@@ -196,16 +221,22 @@ function TntSession({ session, input, stored, schedule: scheduleSave }: {
   const [pairsState, setPairsState] = useState<PairsState>({ kind: 'loading' });
   const [pairsError, setPairsError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const readPairs = useCallback(async () => matchPairs(await fetchSynchroPairs(), data.all, data.elsewhere), [data]);
+  const sessionIds = useMemo(() => sessions.map((s) => s.id), [sessions]);
   useEffect(() => {
     let cancelled = false;
-    readPairs()
-      .then((pairs) => { if (!cancelled) setPairsState({ kind: 'ready', pairs, at: new Date() }); })
+    fetchSynchroPairs()
+      .then((raw) => { if (!cancelled) setPairsState({ kind: 'ready', raw, at: new Date() }); })
       .catch((e) => { if (!cancelled) setPairsState({ kind: 'error', message: e instanceof Error ? e.message : 'Could not read the Synchro tool.' }); });
     return () => { cancelled = true; };
-  }, [readPairs]);
+  }, []);
 
-  const pairs = useMemo(() => (pairsState.kind === 'ready' ? pairsState.pairs : []), [pairsState]);
+  /** Every pair, with its session (the host's choice, else the session both athletes are in). */
+  const placed = useMemo(
+    () => (pairsState.kind === 'ready' ? placePairs(pairsState.raw, roster, assignments, sessionIds) : []),
+    [pairsState, roster, assignments, sessionIds],
+  );
+  const pairs = useMemo(() => pairsInSession(placed, session.id), [placed, session.id]);
+  const needing = useMemo(() => pairsNeedingSession(placed), [placed]);
   const pairById = useMemo(() => new Map(pairs.map((p) => [p.id, p])), [pairs]);
   const savedFlights = flights.length > 0;
   const shown: Flight[] = useMemo(
@@ -215,22 +246,40 @@ function TntSession({ session, input, stored, schedule: scheduleSave }: {
   const stale = useMemo(() => (savedFlights && pairsState.kind === 'ready' ? mergeFlights(flights, pairs) : null), [savedFlights, flights, pairsState.kind, pairs]);
   const readAt = state.readAt ?? (pairsState.kind === 'ready' ? pairsState.at : null);
 
-  /** Pairs saved in a flight but no longer in the Synchro tool stay in the saved data until the next refresh. */
+  /** Pairs saved in a flight but no longer in this session stay in the saved data until the next refresh. */
   const withHidden = (next: Flight[]): Flight[] => next.map((f, i) => ({
     name: f.name,
     pairIds: [...f.pairIds, ...(flights[i]?.pairIds ?? []).filter((id) => !pairById.has(id))],
   }));
   const setFlights = (next: Flight[]) => commit({ flights: withHidden(next), readAt: cur.current.readAt ?? readAt });
 
+  const sessionName = (id: string | null) => { const s = sessions.find((x) => x.id === id); return s ? sessionTitle(s) : 'no session'; };
+  /** The host chooses a session for a pair. The choice is stored; this session's flights follow it straight away. */
+  const moveToSession = (id: string, to: string) => {
+    onAssign(id, to);
+    if (to === session.id) {
+      if (savedFlights) {
+        const mine = pairsInSession(placed.map((p) => (p.id === id ? { ...p, sessionId: to } : p)), session.id);
+        commit({ flights: mergeFlights(cur.current.flights, mine).flights, readAt: cur.current.readAt ?? readAt });
+      }
+      setNotice(`${pairNames(placed.find((p) => p.id === id)!)} added to ${sessionName(to)}.`);
+    } else {
+      if (savedFlights) commit({ flights: cur.current.flights.map((f) => ({ name: f.name, pairIds: f.pairIds.filter((x) => x !== id) })) });
+      setNotice(`${pairNames(placed.find((p) => p.id === id)!)} moved to ${sessionName(to)}.`);
+    }
+  };
+
   const doRefresh = async () => {
     setRefreshing(true);
     setPairsError('');
     try {
-      const fresh = await readPairs();
+      const raw = await fetchSynchroPairs();
+      // The session choices are not touched: Refresh pairs keeps them.
+      const fresh = pairsInSession(placePairs(raw, roster, assignments, sessionIds), session.id);
       const first = cur.current.flights.length === 0;
       const merged = mergeFlights(cur.current.flights, fresh);
       const at = new Date();
-      setPairsState({ kind: 'ready', pairs: fresh, at });
+      setPairsState({ kind: 'ready', raw, at });
       commit({ flights: merged.flights, readAt: at });
       setNotice(
         first
@@ -248,6 +297,15 @@ function TntSession({ session, input, stored, schedule: scheduleSave }: {
   const nPairs = shown.reduce((t, f) => t + f.pairIds.length, 0);
   const pairCount = pairsState.kind === 'ready' ? `${nPairs} synchro pair${nPairs === 1 ? '' : 's'}` : pairsState.kind === 'error' ? 'synchro pairs not read' : 'reading synchro pairs…';
   const checkCount = pairs.filter((p) => p.check).length;
+  const sessionSelect = (p: PlacedPair, blank: boolean) => (
+    <label className="sq-place">
+      <span className="sr-only">Move to session for {pairNames(p)}</span>
+      <select value={p.sessionId ?? ''} aria-label={`Move to session for ${pairNames(p)}`} onChange={(e) => e.target.value && moveToSession(p.id, e.target.value)}>
+        {blank && <option value="">Choose a session…</option>}
+        {sessions.map((s) => <option key={s.id} value={s.id}>{sessionTitle(s)}</option>)}
+      </select>
+    </label>
+  );
 
   return (
     <div className="sq-stack">
@@ -361,9 +419,35 @@ function TntSession({ session, input, stored, schedule: scheduleSave }: {
           </div>
         </div>
         <p className="adm-muted">
-          Pairs are read from the Synchro tool and matched to this session&rsquo;s athletes by club and name.
+          Pairs are read from the Synchro tool and matched to the T&amp;T athletes by club and name. A pair competes in the session both athletes are in; use Move to session to put it somewhere else.
           {readAt ? ` Last read ${whenFmt.format(readAt)}${savedFlights ? '' : ' (flights are not saved until you change something or refresh)'}.` : ''}
         </p>
+        {pairsState.kind === 'ready' && needing.length > 0 && (
+          <div className="tnt-needs" data-testid="needs-session">
+            <h3 className="tnt-h3">Needs a session</h3>
+            <p className="adm-muted">
+              {needing.length} pair{needing.length === 1 ? '' : 's'} can&rsquo;t be placed on their own. They are not on any sheet until you choose a session.
+            </p>
+            <ul className="tnt-needs-list">
+              {needing.map((p) => (
+                <li key={p.id}>
+                  <span className="tnt-who">
+                    <b>{pairNames(p)}</b>
+                    <span className="tnt-club">{pairClubs(p)}</span>
+                    {p.unassignedReason === 'different-sessions' && (
+                      <span className="tnt-why">{p.name1} is in {sessionName(p.athleteSessions[0])}; {p.name2} is in {sessionName(p.athleteSessions[1])}.</span>
+                    )}
+                    {p.check && <span className="tnt-check"><Badge tone="warn">Check pair</Badge> <span className="tnt-why">{p.problems.join('; ')}</span></span>}
+                  </span>
+                  <span className="tnt-ctl">
+                    <span className="tnt-chip lvl">{p.level}</span>
+                    {sessionSelect(p, true)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {pairsState.kind === 'loading' && <p role="status">Reading pairs from the Synchro tool…</p>}
         {pairsState.kind === 'error' && (
           <div className="adm-banner err" role="alert">
@@ -374,13 +458,13 @@ function TntSession({ session, input, stored, schedule: scheduleSave }: {
         {pairsError && <div className="adm-banner err" role="alert">Could not refresh: {pairsError} Your saved flights are untouched.</div>}
         {stale && (stale.added.length > 0 || stale.removed.length > 0) && (
           <div className="adm-banner warn" role="status" data-testid="synchro-stale">
-            The Synchro tool has changed since flights were last refreshed: {stale.added.length} new pair{stale.added.length === 1 ? '' : 's'}, {stale.removed.length} deleted.
+            The Synchro tool has changed since flights were last refreshed: {stale.added.length} new pair{stale.added.length === 1 ? '' : 's'}, {stale.removed.length} deleted or moved to another session.
             New pairs are not shown until you press Refresh pairs.
           </div>
         )}
         {checkCount > 0 && (
           <div className="adm-banner warn" role="status">
-            {checkCount} pair{checkCount === 1 ? '' : 's'} flagged &ldquo;Check pair&rdquo;: an athlete could not be matched to this import. They are still shown with the names from the Synchro tool.
+            {checkCount} pair{checkCount === 1 ? '' : 's'} flagged &ldquo;Check pair&rdquo;: an athlete could not be matched to this import, or is on the roster but not entered in synchro. They are still shown with the names from the Synchro tool.
           </div>
         )}
         {pairsState.kind === 'ready' && pairs.length === 0 && <p className="adm-muted">No synchro pairs for this session yet.</p>}
@@ -414,6 +498,7 @@ function TntSession({ session, input, stored, schedule: scheduleSave }: {
                   </span>
                   <span className="tnt-ctl">
                     <span className="tnt-chip lvl">{p.level}</span>
+                    {sessionSelect(p, false)}
                     <label className="sq-place">
                       <span className="sr-only">Flight for {pairNames(p)}</span>
                       <select
