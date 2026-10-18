@@ -16,7 +16,7 @@ const store = vi.hoisted(() => ({ loadTntInput: vi.fn(), loadTntDoc: vi.fn(), sa
 vi.mock('../../src/lib/data/tnt-store', () => store);
 const synchro = vi.hoisted(() => ({ fetchSynchroPairs: vi.fn() }));
 vi.mock('../../src/lib/synchro-source', () => synchro);
-const assignStore = vi.hoisted(() => ({ saveSynchroAssignments: vi.fn() }));
+const assignStore = vi.hoisted(() => ({ saveSynchroAssignment: vi.fn() }));
 vi.mock('../../src/lib/data/synchro-store', () => assignStore);
 
 import AdminTnt from '../../src/pages/AdminTnt';
@@ -66,7 +66,7 @@ async function open(input = fixture(), doc: unknown = null, pairs: SynchroPair[]
   store.loadTntInput.mockResolvedValue(input);
   store.loadTntDoc.mockResolvedValue(doc);
   store.saveTntDoc.mockResolvedValue(undefined);
-  assignStore.saveSynchroAssignments.mockResolvedValue(undefined);
+  assignStore.saveSynchroAssignment.mockResolvedValue(undefined);
   if (pairs instanceof Error) synchro.fetchSynchroPairs.mockRejectedValue(pairs); else synchro.fetchSynchroPairs.mockResolvedValue(pairs);
   const user = userEvent.setup();
   render(<AdminTnt />);
@@ -212,9 +212,9 @@ describe('T&T screen', () => {
       expect(within(needs).getAllByRole('listitem')).toHaveLength(1);
       expect(within(needs).getByText('Dot Invented & Nobody Known')).toBeInTheDocument();
       expect(within(needs).getByText('Check pair')).toBeInTheDocument();
-      expect(within(needs).getByText('Nobody Known is not in this import')).toBeInTheDocument();
+      expect(within(needs).getByText("Nobody Known isn't in this import")).toBeInTheDocument();
       expect(store.saveTntDoc).not.toHaveBeenCalled(); // viewing writes nothing
-      expect(assignStore.saveSynchroAssignments).not.toHaveBeenCalled();
+      expect(assignStore.saveSynchroAssignment).not.toHaveBeenCalled();
     });
 
     it('the Needs a session list sits above the flights and is absent when empty', async () => {
@@ -231,7 +231,7 @@ describe('T&T screen', () => {
       expect(within(needs).getByText('Dot Invented is in Session 3 – Purple; Fay Invented is in Session 4 – Purple.')).toBeInTheDocument();
       expect(screen.queryByRole('list', { name: 'Flight A' })!.textContent).not.toContain('Fay Invented');
       await user.selectOptions(within(needs).getByRole('combobox', { name: 'Move to session for Dot Invented & Fay Invented' }), 's3-purple');
-      expect(assignStore.saveSynchroAssignments).toHaveBeenLastCalledWith({}, { pcross: 's3-purple' });
+      expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'pcross', 's3-purple');
       const all = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
       expect(all).toContain('Dot Invented & Fay Invented');
       expect(within(screen.getByTestId('needs-session')).queryByText('Dot Invented & Fay Invented')).toBeNull();
@@ -242,14 +242,14 @@ describe('T&T screen', () => {
       expect(after).toContain('Dot Invented & Fay Invented');
       await savedBy();
       expect(lastSaved().flights.flatMap((f: { pairIds: string[] }) => f.pairIds)).toContain('pcross');
-      expect(assignStore.saveSynchroAssignments).toHaveBeenCalledTimes(1); // Refresh pairs wrote no choices
+      expect(assignStore.saveSynchroAssignment).toHaveBeenCalledTimes(1); // Refresh pairs wrote no choices
     });
 
     it('Move to session sends a pair to another T&T session and takes it out of this session\'s flights', async () => {
       const user = await open();
       await screen.findByRole('list', { name: 'Flight A' });
       await user.selectOptions(screen.getByRole('combobox', { name: 'Move to session for Bob Invented & Bea Invented' }), 's4-purple');
-      expect(assignStore.saveSynchroAssignments).toHaveBeenLastCalledWith({}, { pb: 's4-purple' });
+      expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'pb', 's4-purple');
       const left = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
       expect(left).not.toContain('Bob Invented & Bea Invented');
       expect(screen.getByText('Bob Invented & Bea Invented moved to Session 4 – Purple.')).toBeInTheDocument();

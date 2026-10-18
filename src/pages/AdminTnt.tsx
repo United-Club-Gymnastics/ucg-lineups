@@ -7,7 +7,7 @@ import { TntSquadBoard } from '../components/TntSquadBoard';
 import { Autosaver, type SaveState } from '../lib/autosave';
 import { loadTntDoc, loadTntInput, saveTntDoc, type TntInput } from '../lib/data/tnt-store';
 import { fetchSynchroPairs, type SynchroPair } from '../lib/synchro-source';
-import { saveSynchroAssignments } from '../lib/data/synchro-store';
+import { saveSynchroAssignment } from '../lib/data/synchro-store';
 import {
   assignPair, defaultFlights, flightName, mergeFlights, movePair, pairClubs, pairNames, pairsInSession, pairsNeedingSession, placePairs,
   type Flight, type PlacedPair, type RosterPerson, type SynchroAssignments,
@@ -90,7 +90,7 @@ function TntScreen({ input, save, onRetry, onReload, schedule }: {
     assignRef.current = next;
     setAssignments(next);
     setAssignError('');
-    saveSynchroAssignments(db, next).catch((e) => setAssignError(e instanceof Error ? e.message : 'Could not save the session choice.'));
+    saveSynchroAssignment(db, pairId, toSessionId).catch((e) => setAssignError(e instanceof Error ? e.message : 'Could not save the session choice.'));
   };
   const [docs, setDocs] = useState<Record<string, StoredDoc>>({});
   const [docError, setDocError] = useState('');

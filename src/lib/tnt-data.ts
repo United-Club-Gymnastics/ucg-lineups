@@ -35,13 +35,16 @@ const cmpText = (a: string, b: string) => a.localeCompare(b, 'en', { sensitivity
 
 const competing = (a: StoredAthlete) => a.discipline === 'TNT' && a.competes && !a.removed && a.apparatus.length > 0;
 
-/** Every competing T&T athlete in every session, for matching synchro pairs (session + whether they are entered in synchro). */
+/**
+ * Every T&T athlete in the import, in every session, for matching synchro pairs. `competes` is false for athletes scratched
+ * from every event (they are never matched for placement; it only changes the wording). Athletes removed from the import are left out.
+ */
 export function buildTntRoster(allAthletes: StoredAthlete[]): RosterPerson[] {
   return allAthletes
-    .filter((a) => competing(a) && a.sessionId)
+    .filter((a) => a.discipline === 'TNT' && !a.removed)
     .map((a) => ({
       id: a.id, first: a.first, last: a.last, clubName: a.independent ? (a.clubName || 'Independent') : a.clubName,
-      sessionId: a.sessionId as string, inSynchro: a.apparatus.includes('SY'),
+      sessionId: a.sessionId ?? '', inSynchro: a.apparatus.includes('SY'), competes: competing(a),
     }));
 }
 

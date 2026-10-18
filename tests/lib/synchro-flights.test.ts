@@ -7,7 +7,7 @@ import {
 
 const S1 = 's1-green';
 const S2 = 's2-green';
-const person = (id: string, first: string, last: string, clubName: string, sessionId = S1, inSynchro = true): RosterPerson => ({ id, first, last, clubName, sessionId, inSynchro });
+const person = (id: string, first: string, last: string, clubName: string, sessionId = S1, inSynchro = true, competes = true): RosterPerson => ({ id, first, last, clubName, sessionId, inSynchro, competes });
 const roster: RosterPerson[] = [
   person('a1', 'Ada', 'Test', 'Alpha Gymnastics'), person('a2', 'Bo', 'StPierre', 'Alpha Gymnastics'),
   person('b1', 'Cy', 'Test', 'Beta Club'), person('b2', 'Di', "O'Neil", 'Beta Club'),
@@ -35,7 +35,7 @@ describe('placePairs: matching', () => {
     expect(p.athlete1).toBe('a1');
     expect(p.athlete2).toBeNull();
     expect(pairNames(p)).toBe('Ada Test & Nobody Known');
-    expect(p.problems).toEqual(['Nobody Known is not in this import']);
+    expect(p.problems).toEqual(["Nobody Known isn't in this import"]);
     expect(p.level).toBe('HF');
     expect(p.sessionId).toBeNull();
     expect(p.unassignedReason).toBe('unmatched');
@@ -73,6 +73,24 @@ describe('placePairs: matching', () => {
     expect(lost.check).toBe(true);
     expect(lost.problems[0]).toMatch(/more than one/);
     expect(lost.sessionId).toBeNull();
+  });
+
+  it('says "scratched from every event" for a scratched athlete, "isn\'t in this import" for one who is absent, and never places on a scratched athlete', () => {
+    const r = [...roster, person('s1', 'Sam', 'Scratch', 'Alpha Gymnastics', S1, true, false)];
+    const [p, q] = place([sp('Ada Test', 'Alpha Gymnastics', 'Sam Scratch', 'Alpha Gymnastics'), sp('Sam Scratch', 'Old Club Name', 'Nobody Known', 'Alpha Gymnastics')], {}, r);
+    expect(p.problems).toEqual(['Sam Scratch is scratched from every event']);
+    expect(p.athlete2).toBeNull();
+    expect(p.check).toBe(true);
+    expect(p.sessionId).toBeNull(); // not placed through a scratched athlete
+    expect(q.problems).toEqual(['Sam Scratch is scratched from every event', "Nobody Known isn't in this import"]);
+    expect(q.athlete1).toBeNull();
+  });
+
+  it('a scratched athlete does not break a same-name tie or count as a second match', () => {
+    const r = [...roster, person('s2', 'Ada', 'Test', 'Alpha Gymnastics', S2, true, false)];
+    const [p] = place([sp('Ada Test', 'Alpha Gymnastics', 'Bo StPierre', 'Alpha Gymnastics')], {}, r);
+    expect(p.athlete1).toBe('a1');
+    expect(p.check).toBe(false);
   });
 
   it('flags a name that matches two athletes of one club', () => {

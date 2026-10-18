@@ -102,10 +102,12 @@ export interface PlacedPair extends FlightPair {
   unassignedReason: UnassignedReason | null;
 }
 
-/** A T&T athlete on the roster, with their session and whether they are entered in synchro. */
+/** A T&T athlete in the import (competing or scratched), with their session and whether they are entered in synchro. */
 export interface RosterPerson extends Person {
   sessionId: string;
   inSynchro: boolean;
+  /** false = scratched from every event: known to the import, but never matched for placement. */
+  competes: boolean;
 }
 
 /** `synchroSessions/main`: the host's session choice per pair id. */
@@ -123,12 +125,16 @@ export function parseAssignments(raw: unknown): SynchroAssignments {
  * Match every pair to the T&T roster (club + name) and decide its session. No guessing: the default session is the one both
  * athletes share; if they differ, or either cannot be matched, the pair needs a session until the host picks one.
  * A pair is flagged ("Check pair") when an athlete cannot be matched, or is on the roster but not entered in synchro.
- * @param roster every competing T&T athlete (all T&T sessions)
+ * @param roster every T&T athlete in the import (all sessions); only those with `competes` can be matched, the rest only
+ *   change the wording ("scratched from every event" vs "isn't in this import")
  * @param assignments the host's stored choices; one naming a session not in `sessionIds` is ignored
  */
 export function placePairs(pairs: SynchroPair[], roster: RosterPerson[], assignments: SynchroAssignments, sessionIds: string[]): PlacedPair[] {
-  const idx = index(roster);
-  const byId = new Map(roster.map((r) => [r.id, r]));
+  const competing = roster.filter((r) => r.competes);
+  const idx = index(competing);
+  const scratched = index(roster.filter((r) => !r.competes));
+  const isScratched = (club: string, name: string) => scratched.byClubName.has(personKey(club, name)) || scratched.byName.has(compact(name));
+  const byId = new Map(competing.map((r) => [r.id, r]));
   const valid = new Set(sessionIds);
   return pairs.map((p) => {
     // Each athlete is matched on their own first (the partner only breaks a tie between same-named athletes).
@@ -139,13 +145,13 @@ export function placePairs(pairs: SynchroPair[], roster: RosterPerson[], assignm
     const ra = a.id ? byId.get(a.id)! : null;
     const rb = b.id ? byId.get(b.id)! : null;
     const problems: string[] = [];
-    const why = (who: typeof a, name: string) => {
+    const why = (who: typeof a, name: string, club: string) => {
       if (who.match === 'many') problems.push(`${name} matches more than one athlete`);
-      else if (who.match === 'none') problems.push(`${name} is not in this import`);
+      else if (who.match === 'none') problems.push(isScratched(club, name) ? `${name} is scratched from every event` : `${name} isn't in this import`);
       else if (!byId.get(who.id!)!.inSynchro) problems.push(`${name} is on the roster but not entered in synchro`);
     };
-    why(a, p.name1 || 'First athlete');
-    why(b, p.name2 || 'Second athlete');
+    why(a, p.name1 || 'First athlete', p.club1);
+    why(b, p.name2 || 'Second athlete', p.club2);
     const sa = a.id ? byId.get(a.id)!.sessionId : null;
     const sb = b.id ? byId.get(b.id)!.sessionId : null;
     const defaultSessionId = sa && sa === sb ? sa : null;
