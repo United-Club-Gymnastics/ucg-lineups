@@ -1,0 +1,84 @@
+import JSZip from 'jszip';
+import { describe, expect, it } from 'vitest';
+import { buildExportSessions, withOverrides } from '../../src/lib/pdf/export-all';
+import { allSessionsPdf, allSessionsZip, sessionPdf } from '../../src/lib/pdf/files';
+import type { Session } from '../../src/lib/import/types';
+import { MEET, magFixture, tntFixture, wagInfinityFixture } from './fixtures';
+
+const mag = magFixture();
+const wag = wagInfinityFixture();
+const tnt = tntFixture();
+const extra: Session = { id: 's3-red', number: 3, gym: 'Red', discipline: 'WAG', levelCodes: ['XS'] };
+const base = () => ({
+  sessions: [mag.session, wag.session, tnt.session, extra],
+  athletes: [...mag.athletes, ...wag.athletes, ...tnt.athletes],
+  gymOrder: ['Green', 'Red', 'Yellow', 'Orange', 'Purple'],
+  ordersByClub: {},
+  squadDocs: { [mag.session.id]: mag.stored, [wag.session.id]: wag.stored, [tnt.session.id]: tnt.stored } as Record<string, unknown>,
+  meet: MEET,
+  synchroPairs: tnt.pairs.map((p) => ({ id: p.id, level: p.level, a1: '', name1: p.name1, club1: p.club1, a2: '', name2: p.name2, club2: p.club2, createdAt: null, source: '' })),
+});
+
+const toBuffer = (b: Blob) => new Promise<ArrayBuffer>((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as ArrayBuffer); r.onerror = () => rej(r.error); r.readAsArrayBuffer(b); });
+const head = (b: ArrayBuffer) => new TextDecoder().decode(new Uint8Array(b).slice(0, 5));
+
+describe('buildExportSessions', () => {
+  it('one input per session in gym order, artistic and T&T', () => {
+    const b = buildExportSessions(base());
+    expect(b.sessions.map((s) => s.title)).toEqual(['Session 2 – Green', 'Session 3 – Red', 'Session 1 – Orange', 'Session 1 – Purple']);
+    expect(b.sessions.map((s) => s.input.type)).toEqual(['artistic', 'artistic', 'artistic', 'tnt']);
+  });
+  it('warns (never blocks) about missing squads, unplaced athletes, an unreadable Synchro tool and an empty meet name', () => {
+    const trimmed = { ...mag.stored, squads: mag.stored.squads.map((s, i) => (i === 0 ? { ...s, cards: [] } : s)) };
+    const b = buildExportSessions({ ...base(), squadDocs: { ...base().squadDocs, [mag.session.id]: trimmed }, synchroPairs: null, meet: { name: ' ', date: '' } });
+    const texts = b.warnings.map((w) => `${w.session}: ${w.text}`);
+    expect(texts[0]).toMatch(/^Meet: The meet name is empty/);
+    expect(texts.some((t) => /^Session 3 – Red: No squads saved yet/.test(t))).toBe(true);
+    expect(texts.some((t) => /^Session 1 – Orange: \d+ athletes? not placed/.test(t))).toBe(true);
+    expect(texts.some((t) => /^Session 1 – Purple: The Synchro tool could not be read/.test(t))).toBe(true);
+    expect(b.warnings.some((w) => w.session === 'Session 2 – Green')).toBe(false);
+  });
+  it('no warnings when everything is saved', () => {
+    expect(buildExportSessions({ ...base(), sessions: base().sessions.filter((s) => s.id !== 's3-red') }).warnings).toEqual([]);
+  });
+  it('typed meet name/date and competition time override what was read', () => {
+    const b = buildExportSessions(base());
+    const o = withOverrides(b.sessions, { meet: { name: 'New', date: 'Soon' }, competitionTimes: { 's1-purple': 'Friday 1 PM' } });
+    expect(o.every((s) => s.input.input.meet.name === 'New')).toBe(true);
+    const t = o.find((s) => s.id === 's1-purple')!.input;
+    expect(t.type === 'tnt' && t.input.competitionTime).toBe('Friday 1 PM');
+    expect(b.sessions.find((s) => s.id === 's1-purple')!.input.input.meet.name).toBe(MEET.name); // the original is untouched
+  });
+});
+
+describe('files', () => {
+  const inputs = () => buildExportSessions(base()).sessions.map((s) => s.input);
+
+  it('one session is one PDF with the spec file name', async () => {
+    const f = await sessionPdf('scorecards', inputs()[0], 'Oct 18, 2026');
+    expect(f.name).toBe('Session 2 - Green - Scorecards.pdf');
+    expect(head(f.bytes)).toBe('%PDF-');
+    const r = await sessionPdf('rotation', inputs()[2], 'Oct 18, 2026');
+    expect(r.name).toBe('Session 1 - Orange - Rotation Sheet.pdf');
+  });
+
+  it('all sessions in one PDF, collated', async () => {
+    const f = await allSessionsPdf('rotation', inputs(), undefined, 'x');
+    expect(f.name).toBe('All Sessions - Rotation Sheets.pdf');
+    expect(head(f.bytes)).toBe('%PDF-');
+    const s = await allSessionsPdf('scorecards', inputs(), undefined, 'x');
+    expect(s.name).toBe('All Sessions - Scorecards.pdf');
+    expect(s.bytes.byteLength).toBeGreaterThan(f.bytes.byteLength);
+  });
+
+  it('separate PDFs: a zip with one file per printable session in collation order', async () => {
+    const z = await allSessionsZip('scorecards', inputs(), undefined, 'x');
+    expect(z.name).toBe('All Sessions - Scorecards.zip');
+    const zip = await JSZip.loadAsync(await toBuffer(z.bytes));
+    expect(Object.keys(zip.files)).toEqual(['Session 2 - Green - Scorecards.pdf', 'Session 1 - Orange - Scorecards.pdf', 'Session 1 - Purple - Scorecards.pdf']); // Red has no squads: nothing to print, so no empty file
+    for (const f of Object.values(zip.files)) expect(head(await f.async('arraybuffer'))).toBe('%PDF-');
+    const r = await allSessionsZip('rotation', inputs(), undefined, 'x');
+    const rz = await JSZip.loadAsync(await toBuffer(r.bytes));
+    expect(Object.keys(rz.files)).toEqual(['Session 1 - Orange - Rotation Sheet.pdf', 'Session 1 - Purple - Rotation Sheet.pdf', 'Session 2 - Green - Rotation Sheet.pdf', 'Session 3 - Red - Rotation Sheet.pdf']);
+  });
+});

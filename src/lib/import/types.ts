@@ -34,6 +34,8 @@ export interface Session {
   gym: string;
   discipline: Discipline;
   levelCodes: string[];
+  /** T&T: competition time for the rotation sheet title (typed on the Exports screen; an import keeps it). */
+  competitionTime?: string;
 }
 
 export interface Club {

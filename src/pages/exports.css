@@ -1,0 +1,24 @@
+/* Exports screen. Navy ink on light surfaces; the paper previews are black on white by design. */
+.ex { display: grid; gap: 0; min-width: 0; }
+.ex-fields { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; margin: 8px 0; }
+.ex-field { display: grid; gap: 4px; font-size: 13.5px; color: var(--ink); min-width: min(100%, 220px); flex: 1 1 220px; }
+.ex-field > span { font-weight: 700; }
+.ex-field input, .ex-field select { font: inherit; padding: 8px 10px; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); min-height: 40px; min-width: 0; max-width: 100%; }
+.ex-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin-bottom: 8px; }
+.ex-seg { display: inline-flex; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); overflow: hidden; }
+.ex-seg button { font: inherit; font-weight: 700; padding: 9px 14px; border: 0; background: var(--white); color: var(--ink); cursor: pointer; min-height: 40px; }
+.ex-seg button + button { border-left: 1px solid var(--navy-600); }
+.ex-seg button[aria-pressed='true'] { background: var(--navy-800); color: var(--white); }
+.ex-state { font-size: 13px; color: var(--ink); min-height: 18px; }
+.ex-warnings { max-height: none; }
+.ex-jump { position: sticky; top: 0; z-index: 5; background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-bottom: 12px; max-height: 40vh; overflow-y: auto; }
+.ex-jump-title { font-size: 12px; font-weight: 700; color: var(--ink); }
+.ex-jump-row { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
+.ex-jump-l { font-size: 11px; font-weight: 700; color: var(--ink); margin-right: 3px; min-width: 20px; }
+.ex-jump-b { font: inherit; font-size: 12px; font-weight: 700; min-width: 30px; height: 30px; padding: 0 6px; border: 1px solid var(--navy-600); border-radius: 4px; background: var(--white); color: var(--ink); cursor: pointer; }
+.ex-jump-b:hover { background: var(--ice-100); }
+.ex-jump-b:focus-visible, .ex-seg button:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }
+.ex-pages { display: grid; gap: 16px; min-width: 0; }
+.ex-page { scroll-margin-top: 130px; min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 640pt; }
+.ex-page:focus { outline: none; }
+.ex-page:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }

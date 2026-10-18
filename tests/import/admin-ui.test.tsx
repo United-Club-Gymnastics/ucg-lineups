@@ -42,7 +42,7 @@ describe('admin shell', () => {
     expect(await screen.findByText(/Athletes export · 1 rows/)).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: /Load stored data/ }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Apply import' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Exports' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Clubs & email' }));
     expect(screen.getByText('Coming next.')).toBeInTheDocument();
   });
 });

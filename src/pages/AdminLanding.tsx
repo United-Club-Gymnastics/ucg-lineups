@@ -6,6 +6,7 @@ import { Tabs } from '../components/ui';
 const AdminImport = lazy(() => import('./AdminImport'));
 const AdminSquads = lazy(() => import('./AdminSquads'));
 const AdminTnt = lazy(() => import('./AdminTnt'));
+const AdminExports = lazy(() => import('./AdminExports'));
 import './admin.css';
 
 type Tab = 'import' | 'clubs' | 'squads' | 'tnt' | 'exports';
@@ -84,7 +85,8 @@ export default function AdminLanding() {
       {tab === 'import' && <Suspense fallback={<p>Loading…</p>}><AdminImport /></Suspense>}
       {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads /></Suspense>}
       {tab === 'tnt' && <Suspense fallback={<p>Loading…</p>}><AdminTnt /></Suspense>}
-      {tab !== 'import' && tab !== 'squads' && tab !== 'tnt' && <ComingNext label={TABS.find((t) => t.id === tab)!.label} />}
+      {tab === 'exports' && <Suspense fallback={<p>Loading…</p>}><AdminExports /></Suspense>}
+      {tab !== 'import' && tab !== 'squads' && tab !== 'tnt' && tab !== 'exports' && <ComingNext label={TABS.find((t) => t.id === tab)!.label} />}
     </main>
   );
 }

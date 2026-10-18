@@ -1,0 +1,80 @@
+/* Paper preview of the exported pages. Black and white, drawn at paper size in points; each paper scrolls inside its own box. */
+.pv-scroll { overflow-x: auto; max-width: 100%; padding: 4px 2px 8px; }
+.pv-scroll:focus-visible { outline: 2px solid #1e2b38; outline-offset: 2px; }
+.pv-paper { position: relative; box-sizing: border-box; background: #fff; color: #000; font-family: Helvetica, Arial, sans-serif; font-size: 9pt; line-height: 1.15; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35); margin: 0 auto; }
+.pv-paper b, .pv-paper i { font-weight: inherit; font-style: inherit; }
+.pv-paper b { font-weight: 700; }
+.pv-paper i { font-style: italic; }
+.pv-grey { color: #4d4d4d; }
+.pv-small { font-size: 8pt; }
+.pv-right { text-align: right; }
+.pv-mark { display: block; flex: none; }
+.pv-lockup { display: inline-flex; align-items: center; gap: 5pt; font-weight: 700; line-height: 1.25; }
+.pv-lockup-r { flex-direction: row; }
+.pv-head3 { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; height: 52pt; }
+.pv-head3 > .pv-right { display: flex; flex-direction: column; align-items: flex-end; }
+.pv-meet { font-weight: 700; font-size: 12pt; text-align: center; padding-top: 2pt; }
+.pv-sheethead { grid-template-columns: auto 1fr auto; gap: 10pt; height: 50pt; }
+.pv-sheethead > div:nth-child(2) { text-align: center; }
+.pv-title { font-size: 18pt; font-weight: 700; line-height: 1.1; }
+.pv-sub { font-size: 10pt; font-weight: 700; margin-top: 4pt; }
+.pv-band { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 36pt; border: 2.4pt solid #000; padding: 0 12pt; box-sizing: border-box; margin-bottom: 6pt; }
+.pv-squad { font-size: 12pt; }
+.pv-squad-letter { display: inline-block; border: 1.6pt solid #000; padding: 1pt 7pt; font-size: 16pt; margin-left: 3pt; }
+.pv-apparatus { font-size: 24pt; font-weight: 700; text-transform: uppercase; }
+.pv-rot { text-align: right; font-size: 11pt; }
+.pv-grid { display: grid; box-sizing: border-box; position: relative; }
+.pv-cell { box-sizing: border-box; border: 0.75pt solid #000; display: flex; align-items: center; justify-content: center; flex-direction: column; min-width: 0; overflow: hidden; }
+.pv-cell.pv-left { align-items: flex-start; justify-content: center; padding: 0 4pt; }
+.pv-heavy { border: 2.4pt solid #000; }
+.pv-th { font-size: 7.5pt; text-transform: uppercase; }
+.pv-th small { font-size: 6pt; text-transform: none; font-weight: 400; }
+.pv-tnt-head .pv-th, .pv-sy .pv-th { text-transform: none; font-size: 8pt; }
+.pv-lv { font-size: 8pt; }
+.pv-ath { font-size: 10.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pv-club { font-size: 8pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pv-check { display: inline-block; box-sizing: border-box; border: 1.1pt solid #000; }
+.pv-break::before { content: ''; position: absolute; left: 0; right: 0; top: -2pt; height: 3pt; border-top: 1.3pt solid #000; border-bottom: 1.3pt solid #000; z-index: 2; }
+.pv-key { display: flex; align-items: center; gap: 8pt; margin-top: 8pt; font-size: 8.5pt; }
+.pv-swatch { display: inline-block; width: 22pt; height: 9pt; border: 2.4pt solid #000; box-sizing: border-box; }
+.pv-foot { position: absolute; left: 36pt; right: 36pt; bottom: 24pt; display: flex; justify-content: space-between; align-items: center; font-size: 8pt; color: #4d4d4d; }
+.pv-tnt-row .pv-ath { font-size: 11pt; }
+.pv-tnt-row .pv-club { font-size: 8.5pt; }
+.pv-passes { display: grid; grid-auto-rows: 1fr; min-width: 0; }
+.pv-passes > .pv-cell { height: 100%; }
+/* synchro */
+.pv-sy-scratch { margin: 6pt 0 4pt; }
+.pv-sy { position: relative; display: grid; grid-template-columns: 34pt 170pt 42pt 1fr; margin-bottom: 8pt; height: 70pt; }
+.pv-sy-chk { display: flex; align-items: center; justify-content: center; }
+.pv-sy-name, .pv-sy-lv { display: grid; grid-template-rows: 13pt 1fr; min-width: 0; }
+.pv-sy-names { gap: 1pt; padding-top: 2pt; }
+.pv-sy-names b { font-size: 10pt; }
+.pv-sy-grid { display: grid; grid-template-rows: 13pt 22pt 13pt 22pt; }
+.pv-sy-boxes { display: grid; }
+.pv-sy-level .pv-lv { font-size: 11pt; }
+/* rotation sheets */
+.pv-rtitle { text-align: center; font-size: 16pt; font-weight: 700; padding-top: 2pt; }
+.pv-rsub { text-align: center; font-size: 10.5pt; font-weight: 700; font-style: italic; margin: 8pt 0 6pt; }
+.pv-sched { display: flex; justify-content: space-between; align-items: flex-end; font-size: 9pt; height: 34pt; }
+.pv-underline { text-decoration: underline; display: block; margin-bottom: 7pt; }
+.pv-sched-items { display: flex; gap: 22pt; }
+.pv-rgrid { display: grid; box-sizing: border-box; align-items: center; border: 0.75pt solid #000; border-top: 0; }
+.pv-rhead { background: #dbdbdb; border: 2.4pt solid #000; }
+.pv-rhead.pv-light { background: #dbdbdb; border: 0.75pt solid #000; }
+.pv-rhead > b { text-align: center; }
+.pv-rhead > .pv-rsquad { text-transform: uppercase; font-size: 11pt; }
+.pv-rhead:not(.pv-light) > b + b { border-left: 1.2pt solid #000; height: 100%; display: flex; align-items: center; justify-content: center; }
+.pv-light > b.pv-l, .pv-rrow > .pv-l { text-align: left; padding-left: 4pt; }
+.pv-light > b.pv-c, .pv-rrow > .pv-c, .pv-rrow > .pv-n { text-align: center; }
+.pv-light > b + b { border-left: 0.75pt solid #000; }
+.pv-bye { font-style: italic; }
+.pv-rrow > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; height: 100%; display: flex; align-items: center; }
+.pv-rrow > .pv-n, .pv-rrow > .pv-c { justify-content: center; border-left: 0.75pt solid #000; }
+.pv-rrow > .pv-n { font-weight: 700; }
+.pv-rrow > .pv-n.pv-zero { font-weight: 400; color: #4d4d4d; }
+.pv-rrow > .pv-l { border-left: 0.75pt solid #000; }
+.pv-rrow > .pv-l:first-child { border-left: 0; }
+.pv-rlabel { padding-left: 5pt; }
+.pv-alt { background: #f2f2f2; }
+.pv-dash { border-top: 1pt dashed #000; }
+.pv-thead { font-size: 11pt; margin: 6pt 0 3pt; }

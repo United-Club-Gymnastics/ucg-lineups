@@ -1,6 +1,6 @@
 // Firestore security rules. Run with `npm run test:rules` (starts the emulator). Invented data only.
 import { readFileSync } from 'node:fs';
-import { afterAll, beforeAll, beforeEach, describe, test } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 
@@ -150,6 +150,17 @@ describe('settings', () => {
     await assertFails(setDoc(doc(outsiderDb(), 'settings/meet'), { orderDeadline: null }));
     await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { orderDeadline: future() }));
     await assertFails(getDoc(doc(publicDb(), 'settings/other')));
+  });
+
+  test('step 6: the Exports screen merges meet name/date (admin only) and a T&T competition time into the session', async () => {
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { meetName: 'Test Nationals', meetDate: 'Oct 22', orderDeadline: future() }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { meetName: 'Test Nationals 2', meetDate: 'Oct 23' }, { merge: true }));
+    const snap = await getDoc(doc(publicDb(), 'settings/meet'));
+    expect(snap.data()).toMatchObject({ meetName: 'Test Nationals 2', meetDate: 'Oct 23' });
+    expect(snap.data()!.orderDeadline).toBeTruthy(); // the merge left the deadline alone
+    await assertFails(setDoc(doc(publicDb(), 'settings/meet'), { meetName: 'x' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'sessions/s1-purple'), { competitionTime: 'Thursday 7:30 AM' }, { merge: true }));
+    await assertFails(setDoc(doc(publicDb(), 'sessions/s1-purple'), { competitionTime: 'x' }, { merge: true }));
   });
 });
 
