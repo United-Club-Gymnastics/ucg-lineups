@@ -128,6 +128,13 @@ describe('buildArtisticSessionInput', () => {
     expect(input.pattern).toBe('parallel');
     expect(input.squads).toHaveLength(8);
   });
+  it('a stored 7-squad plan gives 7 WAG squads; an id that is not a WAG pattern prints as the default', () => {
+    const w = wagInfinityFixture();
+    const seven = buildArtisticSessionInput({ ...w, stored: { ...w.stored, pattern: 'wag-7' }, meet: MEET });
+    expect([seven.pattern, seven.squads.length]).toEqual(['wag-7', 7]);
+    const other = buildArtisticSessionInput({ ...w, stored: { ...w.stored, pattern: 'mag-3' }, meet: MEET });
+    expect([other.pattern, other.squads.length]).toEqual(['parallel', 8]);
+  });
   it('a session with nothing saved defaults to WAG two flights (8 squads) and MAG one flight (6 squads)', () => {
     const w = wagInfinityFixture();
     const wag = buildArtisticSessionInput({ ...w, stored: null, meet: MEET });

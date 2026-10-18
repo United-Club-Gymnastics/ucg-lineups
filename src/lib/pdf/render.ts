@@ -3,8 +3,8 @@
 import { jsPDF } from 'jspdf';
 import { MARK_PATHS, MARK_SIZE } from './logo-mark';
 import {
-  BRAND_NAME, LETTER, MARGIN, SITE, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
-  type ArtisticRotationPage, type ArtisticScorecardPage, type Column, type Page, type SynchroPage, type TntRotationPage, type TntScorecardPage,
+  BRAND_NAME, LETTER, MARGIN, SITE, TIMELINE_ROW_UNITS, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
+  type ArtisticRotationPage, type ArtisticScorecardPage, type Column, type Page, type RotationTimeline, type SynchroPage, type TntRotationPage, type TntScorecardPage,
 } from './model';
 import { splitPair } from './pair';
 import { parsePath } from './svg-path';
@@ -319,27 +319,33 @@ function drawArtisticRotation(p: Pen, pg: ArtisticRotationPage, W: number, H: nu
   }
   y += 34;
   const unit = artisticRotationUnit(pg.units);
-  const colW = 46;
-  const labelW = CW - pg.columnCount * colW;
+  const colW = pg.columnWidth;
+  // Notes (when the pattern has them) sit to the right of each squad, so the table gets narrower.
+  const noteW = pg.hasNotes ? 128 : 0;
+  const TW = CW - (pg.hasNotes ? noteW + 6 : 0);
+  const labelW = TW - pg.columnCount * colW;
   const fs = Math.min(9, unit * 0.62);
   for (const s of pg.squads) {
     const hh = unit * 1.5;
-    p.rect(L, y, CW, hh, HEAVY, TINT);
+    const top = y;
+    p.rect(L, y, TW, hh, HEAVY, TINT);
     p.text(s.heading.toUpperCase(), L + labelW / 2, y + hh / 2, { size: Math.min(11, hh * 0.6), style: 'bold', align: 'center' });
     s.columns.forEach((c, k) => {
       const x = L + labelW + k * colW;
       p.line(x, y, x, y + hh, 1.2);
-      p.text(c, x + colW / 2, y + hh / 2, { size: fs, style: 'bold', align: 'center' });
+      // Long names (VT-Platform) shrink to the column instead of running into the next one.
+      const size = Math.min(fs, (fs * (colW - 4)) / Math.max(p.width(c, fs, 'bold'), 1));
+      p.text(c, x + colW / 2, y + hh / 2, { size, style: 'bold', align: 'center' });
     });
     y += hh;
     if (s.empty) {
-      p.rect(L, y, CW, unit, THIN);
+      p.rect(L, y, TW, unit, THIN);
       p.text('No club groups placed', L + 6, y + unit / 2, { size: fs, style: 'italic', gray: GREY_TEXT });
       y += unit;
     }
     s.rows.forEach((r) => {
-      if (r.alt) p.fill(L, y, CW, unit, TINT_ALT);
-      p.rect(L, y, CW, unit, THIN);
+      if (r.alt) p.fill(L, y, TW, unit, TINT_ALT);
+      p.rect(L, y, TW, unit, THIN);
       p.line(L + labelW, y, L + labelW, y + unit, THIN);
       p.text(r.label, L + 5, y + unit / 2, { size: fs, style: 'bold', maxW: labelW - 8 });
       r.counts.forEach((v, k) => {
@@ -347,12 +353,57 @@ function drawArtisticRotation(p: Pen, pg: ArtisticRotationPage, W: number, H: nu
         if (k > 0) p.line(x, y, x, y + unit, THIN);
         if (v !== null) p.text(String(v), x + colW / 2, y + unit / 2, { size: fs, style: v ? 'bold' : 'normal', align: 'center', gray: v ? 0 : GREY_TEXT });
       });
-      if (r.levelBreak) p.line(L, y, R, y, 1, [3, 2]);
+      if (r.levelBreak) p.line(L, y, L + TW, y, 1, [3, 2]);
       y += unit;
     });
+    if (s.notes.length > 0) {
+      const nfs = Math.min(7.5, unit * 0.55);
+      let ny = top + unit * 0.45 + nfs * 0.5;
+      for (const note of s.notes) {
+        for (const line of wrapText(p, note, noteW, nfs, 'italic')) {
+          p.text(line, L + TW + 6, ny, { size: nfs, style: 'italic' });
+          ny += nfs * 1.25;
+        }
+      }
+    }
     y += unit * 0.8;
   }
+  if (pg.timeline) drawTimeline(p, pg.timeline, L, y + unit * 0.4, Math.min(CW, 500), unit * TIMELINE_ROW_UNITS);
   footer(p, pg, W, H, true);
+}
+
+/** Greedy word wrap to `maxW` pt. */
+function wrapText(p: Pen, text: string, maxW: number, size: number, style: Style): string[] {
+  const lines: string[] = [];
+  let cur = '';
+  for (const word of text.split(' ')) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (cur && p.width(next, size, style) > maxW) { lines.push(cur); cur = word; } else cur = next;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+/** The slot-by-slot warm-up / competition grid. Competing cells (C, W/C) are bold; black and white only. */
+function drawTimeline(p: Pen, t: RotationTimeline, x: number, y: number, w: number, rh: number) {
+  const letterW = 16;
+  const cw = (w - letterW) / t.header.length;
+  const fs = Math.min(7, rh * 0.62);
+  p.rect(x, y, w, rh, THIN, TINT);
+  t.header.forEach((h, k) => p.text(h, x + letterW + k * cw + cw / 2, y + rh / 2, { size: fs, style: 'bold', align: 'center' }));
+  y += rh;
+  for (const r of t.rows) {
+    p.rect(x, y, w, rh, THIN);
+    p.text(r.letter, x + letterW / 2, y + rh / 2, { size: fs, style: 'bold', align: 'center' });
+    r.cells.forEach((cell, k) => {
+      const cx = x + letterW + k * cw;
+      p.line(cx, y, cx, y + rh, THIN);
+      const compete = /^\((C|W\/C)\)/.test(cell);
+      p.text(cell, cx + cw / 2, y + rh / 2, { size: fs, style: compete ? 'bold' : 'normal', align: 'center', maxW: cw - 2 });
+    });
+    y += rh;
+  }
+  p.line(x + letterW, y - rh * (t.rows.length + 1), x + letterW, y, 1.2);
 }
 
 function drawTntRotation(p: Pen, pg: TntRotationPage, W: number, H: number) {

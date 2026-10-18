@@ -8,7 +8,7 @@ import {
   type ClubGroupCard, type GroupReg, type SavedGroupsRow,
 } from './squad-builder';
 import {
-  apparatusCodes, columnCode, rotationFor, squadCountFor, squadLetter,
+  apparatusCodes, firstSlotOf, patternDef, squadCountFor, squadLetter,
   type ArtisticDiscipline, type RotationPattern,
 } from './rotation';
 
@@ -179,7 +179,7 @@ export const isSpecialist = (apparatus: readonly string[]): boolean => apparatus
 export interface SpecialistInfo {
   regId: string;
   apparatus: string[];
-  /** 1-based rotation in which the squad first reaches one of their apparatus. */
+  /** 1-based rotation (timeline slot, with a timeline) in which the squad first competes on one of their apparatus. */
   firstRotation: number;
 }
 
@@ -190,13 +190,11 @@ export function squadSpecialists(
   pattern: RotationPattern,
   discipline: ArtisticDiscipline,
 ): SpecialistInfo[] {
-  const rot = rotationFor(squadIndex, pattern, discipline);
   const out: SpecialistInfo[] = [];
   for (const id of regIds) {
     const app = [...apparatusOf(id)];
     if (!isSpecialist(app)) continue;
-    const ix = rot.findIndex((c) => app.includes(columnCode(c)));
-    out.push({ regId: id, apparatus: app, firstRotation: ix + 1 });
+    out.push({ regId: id, apparatus: app, firstRotation: firstSlotOf(squadIndex, app, pattern, discipline) + 1 });
   }
   return out;
 }
@@ -209,6 +207,9 @@ export const CAPACITY: Record<ArtisticDiscipline, { one: number; two: number }> 
   WAG: { one: 40, two: 85 },
 };
 
+/** Athletes per squad behind the other patterns' figures *(assumption)*: MAG 80 / 6 squads, WAG 85 / 8 squads. */
+const PER_SQUAD: Record<ArtisticDiscipline, number> = { MAG: 80 / 6, WAG: 85 / 8 };
+
 export interface CapacityGuide {
   tone: 'info' | 'warn';
   squads: number;
@@ -218,13 +219,19 @@ export interface CapacityGuide {
 
 export function capacityGuide(athletes: number, pattern: RotationPattern, discipline: ArtisticDiscipline): CapacityGuide {
   const squads = squadCountFor(pattern, discipline);
-  const two = pattern !== 'one';
-  const fit = two ? CAPACITY[discipline].two : CAPACITY[discipline].one;
-  const n = squadCountFor('one', discipline);
+  const id = patternDef(pattern, discipline).id;
+  const standard = id === 'one' || id === 'parallel';
+  const fit = standard ? (id === 'parallel' ? CAPACITY[discipline].two : CAPACITY[discipline].one) : Math.floor(squads * PER_SQUAD[discipline]);
   if (athletes > fit) {
-    const tail = two ? 'Move a level to another session.' : 'Switch to two flights or move a level to another session.';
+    const tail = id === 'parallel' ? 'Move a level to another session.'
+      : id === 'one' ? 'Switch to two flights or move a level to another session.'
+        : 'Move a level to another session or choose a pattern with more squads.';
     return { tone: 'warn', squads, fit, text: `${athletes} athletes is more than ${squads} ${discipline} squads hold (up to ${fit}). ${tail}` };
   }
+  if (!standard) {
+    return { tone: 'info', squads, fit, text: `Up to about ${fit} ${discipline} athletes fit in ${squads} squads (an estimate from the usual squad size). This session has ${athletes}.` };
+  }
+  const n = squadCountFor('one', discipline);
   const { one, two: twoFit } = CAPACITY[discipline];
   return {
     tone: 'info', squads, fit,
@@ -301,11 +308,11 @@ export function autoBalance(input: BalanceInput): SquadPlan {
   const infTarget = infCards.length === 0 ? 0
     : Math.min(hasOther ? Math.max(1, n - 1) : n, Math.max(1, Math.ceil(infAthletes / perSquad), Math.ceil(infPeak / cap)));
 
-  const rots = plan.map((_, i) => rotationFor(i, pattern, discipline));
+  // Specialists (1-2 apparatus): the later the squad first competes on one of theirs, the higher the score.
   const delay = (ids: string[], s: number) => ids.reduce((t, id) => {
     const app = apparatusOf(id);
     if (!isSpecialist(app)) return t;
-    return t + Math.max(0, rots[s].findIndex((c) => app.includes(columnCode(c))));
+    return t + Math.max(0, firstSlotOf(s, app, pattern, discipline));
   }, 0);
 
   const tot = plan.map(() => Object.fromEntries(codes.map((c) => [c, 0])) as Record<string, number>);

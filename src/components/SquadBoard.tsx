@@ -8,7 +8,7 @@ import {
   useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core';
 import type { Announcements, CollisionDetection, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import { apparatusCodes, firstApparatus, flightRows, rotationFor, squadLetter, type ArtisticDiscipline, type RotationPattern } from '../lib/rotation';
+import { apparatusCodes, columnLabel, firstApparatus, flightRows, rotationFor, squadLetter, type ArtisticDiscipline, type RotationPattern } from '../lib/rotation';
 import { cardLabel, planStats, squadSpecialists, unplacedCards, type SquadCard, type SquadPlan, type SquadStats } from '../lib/squad-balance';
 import { fullName, type SquadSessionData } from '../lib/squad-data';
 import { squadRoutineCap } from '../lib/squad-builder';
@@ -149,7 +149,7 @@ export function SquadBoard({ discipline, pattern, plan, cards, data, onPlace, on
         <div className="sq-squad-h">
           <div className="sq-r1">
             <h3 className="display">Squad {slot.name}</h3>
-            <span className="sq-rot">{st.athletes} athlete{st.athletes === 1 ? '' : 's'} · {rot.join(' → ')}</span>
+            <span className="sq-rot">{st.athletes} athlete{st.athletes === 1 ? '' : 's'} · {rot.map((c) => columnLabel(c, pattern, discipline)).join(' → ')}</span>
           </div>
           <label className="sq-swap">
             <span>Swap all groups with</span>

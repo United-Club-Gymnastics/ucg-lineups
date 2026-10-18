@@ -6,8 +6,8 @@ import { SaveIndicator } from '../components/SaveIndicator';
 import { Autosaver, type SaveState } from '../lib/autosave';
 import { loadSquadDoc, loadSquadsInput, saveSquadDoc, type SquadsInput } from '../lib/data/squad-store';
 import {
-  ROTATION_PATTERNS, defaultPattern, firstApparatus, routinesPerRotation, squadCountFor, squadLetter,
-  type ArtisticDiscipline, type RotationPattern,
+  defaultPattern, firstApparatus, patternDef, patternsFor, readPattern, routinesPerRotation, squadLetter,
+  type RotationPattern,
 } from '../lib/rotation';
 import { autoBalance, capacityGuide, clearPlan, emptyPlan, moveCard, placedKeys, planStats, swapSquads, type SquadCard, type SquadPlan } from '../lib/squad-balance';
 import { restoreSquads, type RestoreChange, type Restored } from '../lib/squad-restore';
@@ -20,13 +20,6 @@ import './squads.css';
 
 type Loaded = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; input: SquadsInput };
 type StoredDoc = StoredSquadDoc | null;
-
-const patternLabel = (p: RotationPattern, d: ArtisticDiscipline): string => {
-  const one = squadCountFor('one', d);
-  const two = squadCountFor('parallel', d);
-  if (p === 'one') return `One flight · ${one} squads`;
-  return `Two flights, A/B equipment · ${two}`;
-};
 
 export default function AdminSquads({ onOpenSchedule }: { onOpenSchedule?: () => void } = {}) {
   const [load, setLoad] = useState<Loaded>({ kind: 'loading' });
@@ -158,7 +151,11 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave, onOpenS
     return restoreSquads({ stored, discipline, sessionRegs: data.regs, savedGroups: data.savedGroups, ctx, describe: data.describe, levelName });
   });
   const [cards, setCards] = useState<SquadCard[]>(start.cards);
-  const [pattern, setPattern] = useState<RotationPattern>(stored?.pattern ?? defaultPattern(discipline));
+  // A saved id that is not a pattern of this discipline opens as the default (with a notice until the next change saves).
+  const savedRead = stored ? readPattern(stored.pattern, discipline) : null;
+  const unknownSaved = stored && !savedRead ? stored.pattern : '';
+  const [pattern, setPattern] = useState<RotationPattern>(savedRead?.pattern ?? defaultPattern(discipline));
+  const [unknownNotice, setUnknownNotice] = useState(unknownSaved);
   const [plan, setPlan] = useState<SquadPlan>(start.plan);
   // Times now live in the Session schedule (Exports tab). A time saved here the old way is carried along untouched until it is moved there.
   const sched: Schedule = stored?.schedule ?? EMPTY_SCHEDULE;
@@ -170,6 +167,7 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave, onOpenS
 
   const commit = (p: RotationPattern, nextPlan: SquadPlan, nextCards: SquadCard[], nextSched: Schedule) => {
     setByesNotice(false);
+    setUnknownNotice('');
     setPattern(p);
     setPlan(nextPlan);
     setCards(nextCards);
@@ -243,11 +241,12 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave, onOpenS
         <div className="sq-row">
           <span className="sq-label" id="sq-pattern-label">Rotation</span>
           <div className="sq-seg" role="group" aria-labelledby="sq-pattern-label">
-            {ROTATION_PATTERNS.map((p) => (
-              <button key={p} type="button" aria-pressed={pattern === p} onClick={() => requestPattern(p)}>{patternLabel(p, discipline)}</button>
+            {patternsFor(discipline).map((p) => (
+              <button key={p.id} type="button" aria-pressed={pattern === p.id} onClick={() => requestPattern(p.id)}>{p.label}</button>
             ))}
           </div>
         </div>
+        {patternDef(pattern, discipline).blurb && <p className="adm-muted sq-blurb">{patternDef(pattern, discipline).blurb}</p>}
 
         <p className="adm-muted sq-sched-link">
           Dates and times are set per session number in the <b>Session schedule</b> on the Exports tab.
@@ -257,6 +256,11 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave, onOpenS
         <div className={`adm-banner ${guide.tone === 'warn' ? 'warn' : 'ok'}`} role="status" data-testid="squads-capacity">{guide.text}</div>
         {start.movedCount > 0 && showChanges && <ChangesNotice restored={start} onDismiss={() => setShowChanges(false)} />}
         {byesNotice && <p className="sq-notice" role="status">This session used the 2024 bye pattern, which has been removed; it now uses two flights on A/B equipment.</p>}
+        {unknownNotice && (
+          <p className="sq-notice" role="status">
+            This session was saved with a rotation pattern that is not available for {discipline} (&ldquo;{unknownNotice}&rdquo;); it now uses {patternDef(defaultPattern(discipline), discipline).label}.
+          </p>
+        )}
         {notice && <p className="sq-notice" role="status" aria-live="polite">{notice}</p>}
 
         <details className="sq-how">

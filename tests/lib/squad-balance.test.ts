@@ -309,3 +309,69 @@ describe('stats, labels and capacity', () => {
     expect(capacityGuide(40, 'one', 'WAG').tone).toBe('info');
   });
 });
+
+describe('auto-balance with the alternative rotation patterns', () => {
+  const cases = [
+    { d: 'WAG' as const, p: 'wag-7', n: 7, codes: WAG_ALL, per: 11 },
+    { d: 'MAG' as const, p: 'mag-2', n: 2, codes: MAG_ALL, per: 13 },
+    { d: 'MAG' as const, p: 'mag-3', n: 3, codes: MAG_ALL, per: 13 },
+    { d: 'MAG' as const, p: 'mag-3-wag', n: 3, codes: MAG_ALL, per: 13 },
+  ];
+
+  for (const { d, p, n, codes, per } of cases) {
+    it(`${p}: ${n} squads named from A, everything placed once, no squad over the cap`, () => {
+      const regs = Array.from({ length: n }, (_, i) => group(String.fromCharCode(97 + i), i % 2 ? 'Int' : 'Dev', per, codes)).flat();
+      const r = setup(d, regs, p);
+      expect(r.plan.map((s) => s.name)).toEqual('ABCDEFG'.slice(0, n).split(''));
+      const keys = r.plan.flatMap((s) => s.cardKeys);
+      expect(keys.sort()).toEqual(r.cards.map((c) => c.key).sort());
+      expect(r.stats.every((s) => s.overCap.length === 0)).toBe(true);
+      expect(emptyPlan(p, d)).toHaveLength(n);
+    });
+  }
+
+  it('the cap applies per squad per apparatus: a level over the cap is split across squads', () => {
+    const r = setup('MAG', [...group('a', 'Dev', 14, MAG_ALL), ...group('b', 'Dev', 14, MAG_ALL), ...group('c', 'Dev', 14, MAG_ALL)], 'mag-3');
+    expect(r.stats.map((s) => s.athletes)).toEqual([14, 14, 14]);
+    expect(r.stats.every((s) => s.overCap.length === 0)).toBe(true);
+  });
+
+  it('specialists go where their first apparatus competes earliest (WAG 7 squads: by timeline slot)', () => {
+    const first = (apparatus: string[]) => {
+      const r = setup('WAG', group('', 'XS', 1, apparatus), 'wag-7');
+      return r.plan.findIndex((s) => s.cardKeys.length > 0);
+    };
+    expect(first(['FX'])).toBe(5);  // F: FX in slot 2
+    expect(first(['UB'])).toBe(2);  // C: UB in slot 2
+    expect(first(['BB'])).toBe(3);  // D: BB-A in slot 2
+    expect(first(['VT'])).toBe(0);  // A: VT-P in slot 2
+  });
+
+  it('specialists in the MAG 2- and 3-squad patterns', () => {
+    const where = (p: string, a: string) => setup('MAG', group('', 'Adv', 1, [a]), p).plan.findIndex((s) => s.cardKeys.length > 0);
+    expect(where('mag-2', 'PH')).toBe(1);
+    expect(where('mag-2', 'VT')).toBe(1);
+    expect(where('mag-3', 'SR')).toBe(2);
+    expect(where('mag-3-wag', 'PB')).toBe(2);
+  });
+
+  it('squadSpecialists reports the slot of the first competing apparatus', () => {
+    const app = () => ['VT', 'UB', 'FX'];
+    expect(squadSpecialists(['x'], app, 5, 'wag-7', 'WAG')).toEqual([]);
+    expect(squadSpecialists(['x'], () => ['FX'], 5, 'wag-7', 'WAG')).toEqual([{ regId: 'x', apparatus: ['FX'], firstRotation: 2 }]);
+    expect(squadSpecialists(['x'], () => ['FX'], 0, 'wag-7', 'WAG')[0].firstRotation).toBe(7);
+  });
+
+  it('capacity guide: a proportional estimate for the new patterns, warns above', () => {
+    expect(capacityGuide(74, 'wag-7', 'WAG')).toMatchObject({ tone: 'info', squads: 7, fit: 74 });
+    expect(capacityGuide(75, 'wag-7', 'WAG')).toMatchObject({ tone: 'warn', fit: 74 });
+    expect(capacityGuide(26, 'mag-2', 'MAG')).toMatchObject({ tone: 'info', squads: 2, fit: 26 });
+    expect(capacityGuide(41, 'mag-3', 'MAG')).toMatchObject({ tone: 'warn', fit: 40 });
+    expect(capacityGuide(41, 'mag-3', 'MAG').text).toContain('more squads');
+  });
+
+  it('an unknown pattern id balances as the discipline default', () => {
+    const regs = [...group('a', 'Dev', 10, MAG_ALL), ...group('b', 'Int', 10, MAG_ALL)];
+    expect(setup('MAG', regs, 'nonsense').plan).toEqual(setup('MAG', regs, 'one').plan);
+  });
+});

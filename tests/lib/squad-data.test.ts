@@ -115,6 +115,12 @@ describe('stored squad doc', () => {
     expect(parseSquadDoc(raw)).toMatchObject({ pattern: 'parallel', removedByes: true });
     expect(parseSquadDoc({ ...raw, pattern: 'parallel' })).not.toHaveProperty('removedByes');
   });
+  it('keeps any pattern id as saved (the discipline decides later whether it is known)', () => {
+    const raw = { pattern: 'wag-7', trayAthleteIds: [], schedule: sch, squads: [{ name: 'A', cards: [] }] };
+    expect(parseSquadDoc(raw)).toMatchObject({ pattern: 'wag-7' });
+    expect(parseSquadDoc({ ...raw, pattern: 'something-new' })).toMatchObject({ pattern: 'something-new' });
+    expect(parseSquadDoc({ ...raw, pattern: 7 })).toBeNull();
+  });
   it('treats junk and the old cardKeys shape as nothing saved', () => {
     expect(parseSquadDoc(null)).toBeNull();
     expect(parseSquadDoc({ pattern: 'three' })).toBeNull();

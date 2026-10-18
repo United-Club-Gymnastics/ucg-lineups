@@ -81,24 +81,44 @@ comes from SF Events and goes stale).
 Copied from the platform's `squad-builder.ts` / `ClubGroupSquadBuilder.tsx`: whole club groups
 are placed into squads; independents are cards of one.
 
-- **Rotation pattern per session:** one flight (WAG 4, MAG 6 squads) or two flights on A/B
-  equipment (WAG 8, MAG 12). **New/unsaved sessions default to WAG two flights on A/B equipment
-  (8 squads) and MAG one flight (6 squads).** The 2024 "two flights with byes" pattern was removed
-  (2026-10-18); a saved plan that used it opens as two flights on A/B equipment with a one-time
-  notice on the Squads screen. Squads named A, B, C…
+- **Rotation pattern per session**, picked on the Squads screen from the list for the session's
+  discipline. Patterns are data (id, label, squad count, each squad's competing order, optional
+  timeline, optional per-squad notes, equipment names); everything downstream (auto-balance, routines
+  table, scorecard order and band, rotation sheet) reads the definition. The saved plan keeps the id;
+  an id that is unknown for the discipline opens as the discipline's default, with a notice.
+  - **Both disciplines:** one flight (WAG 4, MAG 6 squads) or two flights on A/B equipment (WAG 8,
+    MAG 12; the only pattern with flights). **New/unsaved sessions default to WAG two flights on A/B
+    equipment (8 squads) and MAG one flight (6 squads).** The 2024 "two flights with byes" pattern was
+    removed (2026-10-18); a saved plan that used it opens as two flights on A/B equipment with a
+    one-time notice.
+  - **WAG, "7 squads (2 vaults, 2 beams)"** (from the NE Regionals 2026 sheet): equipment VT-Platform,
+    VT-Ground, UB, BB-A, BB-B, FX. Squads A–G compete A VT-P UB BB-B FX; B BYE VT-G UB BB-A FX;
+    C UB BB-A FX VT-P; D BB-A FX VT-P UB; E BYE BB-B FX VT-G UB; F FX VT-P UB BB-B; G BYE FX VT-G UB
+    BB-A. It also has the 8-slot warm-up/compete timeline (W, C, W/C, BYE, -) and the per-squad notes
+    from that sheet (see §6).
+  - **MAG, three more:** "2 squads" (A FX PH SR VT PB HB; B PH FX VT SR HB PB), "3 squads" (A FX PH SR
+    VT PB HB; B PH SR FX PB HB VT; C SR FX PH HB VT PB) and "3 squads, WAG overlap" (A FX VT PB PH SR HB;
+    B VT PB FX SR HB PH; C PB FX VT HB PH SR). Fixed orders, no A/B equipment.
+  Squads named A, B, C…
 - **Auto-balance, in priority order:**
   1. never over the per-apparatus cap (12 WAG / 15 MAG) when avoidable;
   2. a club's groups stay together — whole club in one squad if it fits; else each level as a
      unit; else per group, and later pieces prefer a squad already holding that club;
   3. squads single-level where possible; **Infinity is never mixed with other levels** (hard rule;
      a manual mix is flagged, not blocked);
-  4. athletes on only 1–2 apparatus go where their first apparatus comes earliest in the rotation;
+  4. athletes on only 1–2 apparatus go where their first apparatus comes earliest (the squad's first
+     competing slot on it: its position in the order, or its timeline slot when the pattern has one);
   5. then even out the busiest apparatus.
 - Within a squad, groups are listed by level, then club name (independents after clubs).
 - **Swap all groups with** another squad (squads keep letter + start apparatus).
-- **Routines per rotation** table (rotation × apparatus, squad letter, totals, over-cap highlight).
+- **Routines per rotation** table (rotation × equipment, squad letter, totals, over-cap highlight).
+  With a timeline (7 squads) the rows are its 8 slots and a squad counts where it competes (C or
+  W/C); a warm-up-only slot adds nothing. The cap is per squad per apparatus (VT-Platform and
+  VT-Ground are both Vault).
 - Capacity guide: **MAG up to 80 in 6 squads, 160 in 12; WAG up to 85 in 8** (40 in 4 is the
-  platform figure *(assumption)*). Warn above, never block.
+  platform figure *(assumption)*). The other patterns use the same athletes-per-squad *(assumption)*
+  (MAG 80/6, WAG 85/8 per squad: 7 squads ≈ 74, MAG 2 ≈ 26, 3 ≈ 40) and say it is an estimate. Warn
+  above, never block.
 - Dates and times are not entered here any more: see the **Session schedule** (§6). The Squads screen links to it.
 
 ## 5. Host — T&T
@@ -153,9 +173,11 @@ Collation for all sessions: **scorecards by gym** (Green, Red, Yellow, Orange, P
 1–6; **rotation sheets by session number** (every gym's Session 1, then Session 2…).
 
 ### Artistic scorecards (landscape, one page per squad per apparatus)
-- Pages per apparatus in Olympic order; within an apparatus, squads **in the order they arrive**
-  (one flight MAG floor: A, F, E, D, C, B).
-- Header: meet + date, UCG logo, gym, session; band with squad letter and apparatus.
+- Pages per apparatus in Olympic order; within an apparatus, squads **in the order they compete on
+  it** (one flight MAG floor: A, F, E, D, C, B; WAG 7 squads vault: A, B, F, G, D, E, C, by
+  timeline slot, VT-Platform and VT-Ground pages mixed in that order).
+- Header: meet + date, UCG logo, gym, session; band with squad letter, apparatus, rotation and the
+  equipment name when the pattern names it (`VT-A`, `VT-Platform`, `BB-B`).
 - Columns: Level, Athlete, Club, **SV**, ND, J1 Score *(incl. ND)*, J2 Score *(incl. ND)*,
   **Final Score**, Scratch?. Heavy = SV, Final Score.
 - **Infinity** columns: **SV** *(10 + D-score)*, E-score *(incl. ND)*, ND, **Final Score**, Scratch?
@@ -169,6 +191,11 @@ Collation for all sessions: **scorecards by gym** (Green, Red, Yellow, Orange, P
 - Per squad: header row `Squad A` (no "(MAG)") + apparatus in rotation order (A-B equipment
   as the pattern says), grey band + heavy frame; rows `Club – Level` (+ `· Group B`) with routine
   counts; **light dashed rule** between levels; clear space between squads.
+- Patterns with BYEs (WAG 7 squads): a leading **BYE** column (squads without one start a column
+  later), equipment printed by name (`VT-Platform`, `VT-Ground`, `BB-A`, `BB-B`), the pattern's
+  **per-squad notes** in a column to the right of each squad (exact wording from the NE sheet), and the
+  **8-slot timeline** (squad letter × slot 1–8, cells `(W) VT-P`, `(C) VT-P`, `(W/C) UB`, `BYE`, `-`)
+  under the last squad. Black and white; competing cells in bold. Patterns without these print as before.
 
 ### T&T scorecards (landscape, 10 rows a page)
 - Per event (TR, DM, TU), squads in arrival order (TR: A, C, B); pages `page n of m`.

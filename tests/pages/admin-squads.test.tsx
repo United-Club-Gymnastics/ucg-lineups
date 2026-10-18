@@ -287,4 +287,67 @@ describe('Squads screen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('offline');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
+
+  describe('alternative rotation patterns', () => {
+    const MAG = ['FX', 'PH', 'SR', 'VT', 'PB', 'HB'];
+    const magAthletes = () => Array.from({ length: 9 }, (_, k) => ath(k < 5 ? 'mike' : 'nora', k < 5 ? 'Mike Gymnastics' : 'Nora Gymnastics', 'Dev', 'Developmental', MAG, {
+      id: `MAG_m${k}`, discipline: 'MAG', sessionId: 's2-red',
+    }));
+
+    it('WAG lists its three patterns; 7 squads shows the BYE columns, equipment names and the 8-slot rotation table, and saves its id', async () => {
+      const user = await open();
+      const labels = within(screen.getByRole('group', { name: 'Rotation' })).getAllByRole('button').map((b) => b.textContent);
+      expect(labels).toEqual(['One flight · 4 squads', 'Two flights, A/B equipment · 8', '7 squads (2 vaults, 2 beams)']);
+      await user.click(screen.getByRole('button', { name: '7 squads (2 vaults, 2 beams)' }));
+      expect(screen.getAllByRole('region', { name: /^Squad [A-Z]$/ })).toHaveLength(7);
+      expect(screen.queryByText(/^Flight 1/)).toBeNull();
+      expect(squad('B')).toHaveTextContent('BYE → VT-Ground → UB → BB-A → FX');
+      expect(squad('C')).toHaveTextContent('UB → BB-A → FX → VT-Platform');
+      const table = screen.getByRole('region', { name: 'Routines per rotation' });
+      expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Rotation', 'VT-P', 'VT-G', 'UB', 'BB-A', 'BB-B', 'FX', 'Total']);
+      expect(within(table).getAllByRole('row')).toHaveLength(1 + 8);
+      expect(screen.getByTestId('squads-capacity')).toHaveTextContent('Up to about 74 WAG athletes fit in 7 squads');
+      await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
+      expect(screen.getByText('All club groups are placed.')).toBeInTheDocument();
+      await savedBy();
+      expect(lastSaved().pattern).toBe('wag-7');
+      expect(lastSaved().squads).toHaveLength(7);
+    });
+
+    it('MAG lists its five patterns and a MAG session can use 3 squads', async () => {
+      const user = await open(fixture(magAthletes()));
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Session' }), 's2-red');
+      await screen.findByRole('heading', { name: /Session 2 – Red/ });
+      const labels = within(screen.getByRole('group', { name: 'Rotation' })).getAllByRole('button').map((b) => b.textContent);
+      expect(labels).toEqual(['One flight · 6 squads', 'Two flights, A/B equipment · 12', '2 squads', '3 squads', '3 squads, WAG overlap']);
+      await user.click(screen.getByRole('button', { name: '3 squads, WAG overlap' }));
+      expect(screen.getAllByRole('region', { name: /^Squad [A-Z]$/ })).toHaveLength(3);
+      expect(squad('B')).toHaveTextContent('VT → PB → FX → SR → HB → PH');
+      await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
+      await savedBy();
+      expect(lastSaved().pattern).toBe('mag-3-wag');
+    });
+
+    it('a saved pattern id that is not available for the discipline opens as the default with a notice, until the next change', async () => {
+      const doc = { pattern: 'mag-3', trayAthleteIds: [], schedule: { stretch: '', warmups: '', competition: '' }, squads: [{ name: 'A', cards: [] }] };
+      const user = await open(fixture(), parseSquadDoc(doc));
+      expect(screen.getByText(/not available for WAG \(“mag-3”\); it now uses Two flights, A\/B equipment · 8\./)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Two flights, A\/B equipment · 8/ })).toHaveAttribute('aria-pressed', 'true');
+      expect(store.saveSquadDoc).not.toHaveBeenCalled();
+      await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
+      expect(screen.queryByText(/not available for WAG/)).toBeNull();
+      await savedBy();
+      expect(lastSaved().pattern).toBe('parallel');
+    });
+
+    it('a saved 7-squad plan reopens as 7 squads', async () => {
+      const doc = {
+        pattern: 'wag-7', trayAthleteIds: [], schedule: { stretch: '', warmups: '', competition: '' },
+        squads: Array.from({ length: 7 }, (_, i) => ({ name: String.fromCharCode(65 + i), cards: [] })),
+      };
+      await open(fixture(), parseSquadDoc(doc));
+      expect(screen.getByRole('button', { name: /7 squads \(2 vaults, 2 beams\)/ })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getAllByRole('region', { name: /^Squad [A-Z]$/ })).toHaveLength(7);
+    });
+  });
 });

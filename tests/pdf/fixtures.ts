@@ -90,6 +90,43 @@ export function wagInfinityFixture(): ArtisticFixture {
   return placeArtistic(session, athletes, 'parallel');
 }
 
+/** WAG on the 7-squad pattern (2 vaults, 2 beams): invented clubs, 66 athletes. */
+export function wag7Fixture(): ArtisticFixture {
+  resetNames();
+  const session: ArtisticSession = { id: 's3-blue', number: 3, gym: 'Blue', discipline: 'WAG', levelCodes: ['XS', 'XP', 'XD', 'L9'] };
+  const athletes = artisticAthletes(session, [
+    { club: 'Alpha Gymnastics Club', level: 'XD', n: 7 },
+    { club: 'Alpha Gymnastics Club', level: 'L9', n: 1 },
+    { club: 'Beta Flyers', level: 'XS', n: 1 },
+    { club: 'Beta Flyers', level: 'XP', n: 10 },
+    { club: 'Gamma University Club', level: 'XS', n: 3 },
+    { club: 'Delta Tumblers', level: 'XP', n: 1 },
+    { club: 'Epsilon Gymnastics', level: 'XS', n: 1 },
+    { club: 'Epsilon Gymnastics', level: 'XP', n: 8 },
+    { club: 'Zeta Athletic Center', level: 'XS', n: 1 },
+    { club: 'Zeta Athletic Center', level: 'XP', n: 4 },
+    { club: 'Zeta Athletic Center', level: 'XD', n: 1 },
+    { club: 'Eta Gymnastics', level: 'L9', n: 12 },
+    { club: 'Theta Gym', level: 'XP', n: 7 },
+    { club: 'Independent Community Athlete', level: 'XD', n: 1, independent: true, apparatus: ['BB'] },
+  ]);
+  return placeArtistic(session, athletes, 'wag-7');
+}
+
+/** MAG on the 3-squad WAG-overlap pattern: invented clubs. */
+export function mag3WagFixture(): ArtisticFixture {
+  resetNames();
+  const session: ArtisticSession = { id: 's4-teal', number: 4, gym: 'Teal', discipline: 'MAG', levelCodes: ['Dev', 'Int', 'Adv'] };
+  const athletes = artisticAthletes(session, [
+    { club: 'Alpha Gymnastics Club', level: 'Dev', n: 8 },
+    { club: 'Beta Flyers', level: 'Int', n: 7 },
+    { club: 'Gamma University Club', level: 'Adv', n: 9 },
+    { club: 'Delta Tumblers', level: 'Int', n: 6 },
+    { club: 'Independent Community Athlete', level: 'Int', n: 1, independent: true, apparatus: ['PH'] },
+  ]);
+  return placeArtistic(session, athletes, 'mag-3-wag');
+}
+
 // --- T&T ----------------------------------------------------------------------------------------------------------
 
 export interface TntFixture {

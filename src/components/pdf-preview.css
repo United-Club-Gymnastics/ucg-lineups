@@ -77,3 +77,15 @@
 .pv-alt { background: #f2f2f2; }
 .pv-dash { border-top: 1pt dashed #000; }
 .pv-thead { font-size: 11pt; margin: 6pt 0 3pt; }
+
+/* rotation sheet: notes beside each squad, and the slot timeline */
+.pv-withnotes { display: grid; grid-template-columns: 1fr 128pt; column-gap: 6pt; align-items: start; }
+.pv-squadtable { min-width: 0; }
+.pv-notes { font-size: 7.5pt; font-style: italic; padding-top: 4pt; }
+.pv-notes p { margin: 0 0 2pt; }
+.pv-rhead > b.pv-long { font-size: 0.8em; white-space: nowrap; }
+.pv-timeline { border-collapse: collapse; width: 500pt; table-layout: fixed; }
+.pv-timeline th, .pv-timeline td { border: 0.75pt solid #000; text-align: center; padding: 0; white-space: nowrap; overflow: hidden; }
+.pv-timeline thead th { background: #dbdbdb; }
+.pv-timeline tbody th { width: 16pt; }
+.pv-timeline td.pv-compete { font-weight: 700; }

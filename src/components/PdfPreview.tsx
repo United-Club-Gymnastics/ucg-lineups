@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { MARK_PATHS, MARK_SIZE } from '../lib/pdf/logo-mark';
 import {
-  BRAND_NAME, LETTER, MARGIN, SITE, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
+  BRAND_NAME, LETTER, MARGIN, SITE, TIMELINE_ROW_UNITS, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
   type ArtisticRotationPage, type ArtisticScorecardPage, type Column, type Page, type SynchroPage, type TntRotationPage, type TntScorecardPage,
 } from '../lib/pdf/model';
 import { pageLabel } from '../lib/pdf/labels';
@@ -166,8 +166,9 @@ function Synchro({ pg }: { pg: SynchroPage }) {
 
 function ArtisticRotation({ pg }: { pg: ArtisticRotationPage }) {
   const u = artisticRotationUnit(pg.units);
-  const colW = 46;
+  const colW = pg.columnWidth;
   const grid = `1fr repeat(${pg.columnCount}, ${pt(colW)})`;
+  const tu = u * TIMELINE_ROW_UNITS;
   return (
     <>
       <div className="pv-rtitle">{pg.title}</div>
@@ -177,10 +178,11 @@ function ArtisticRotation({ pg }: { pg: ArtisticRotationPage }) {
         <b><i>Session athlete count: {pg.athleteCount}</i></b>
       </div>
       {pg.squads.map((s) => (
-        <div key={s.letter} className="pv-squadblock" style={{ marginBottom: pt(u * 0.8), fontSize: pt(Math.min(9, u * 0.62)) }}>
+        <div key={s.letter} className={`pv-squadblock${pg.hasNotes ? ' pv-withnotes' : ''}`} style={{ marginBottom: pt(u * 0.8), fontSize: pt(Math.min(9, u * 0.62)) }}>
+          <div className="pv-squadtable">
           <div className="pv-rgrid pv-rhead" style={{ gridTemplateColumns: grid, height: pt(u * 1.5) }}>
             <b className="pv-rsquad">{s.heading}</b>
-            {s.columns.map((c, k) => <b key={k}>{c}</b>)}
+            {s.columns.map((c, k) => <b key={k} className={c.length > 6 ? 'pv-long' : undefined}>{c}</b>)}
           </div>
           {s.empty && <div className="pv-rgrid pv-rrow" style={{ gridTemplateColumns: '1fr', height: pt(u) }}><i className="pv-grey" style={{ paddingLeft: pt(5) }}>No club groups placed</i></div>}
           {s.rows.map((r, i) => (
@@ -189,8 +191,25 @@ function ArtisticRotation({ pg }: { pg: ArtisticRotationPage }) {
               {r.counts.map((v, k) => <span key={k} className={v ? 'pv-n' : 'pv-n pv-zero'}>{v === null ? '' : v}</span>)}
             </div>
           ))}
+          </div>
+          {pg.hasNotes && <div className="pv-notes">{s.notes.map((n, i) => <p key={i}>{n}</p>)}</div>}
         </div>
       ))}
+      {pg.timeline && (
+        <table className="pv-timeline" style={{ fontSize: pt(Math.min(7, tu * 0.62)), marginTop: pt(u * 0.4) }}>
+          <thead>
+            <tr style={{ height: pt(tu) }}><th /> {pg.timeline.header.map((h) => <th key={h}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {pg.timeline.rows.map((r) => (
+              <tr key={r.letter} style={{ height: pt(tu) }}>
+                <th>{r.letter}</th>
+                {r.cells.map((c, k) => <td key={k} className={/^\((C|W\/C)\)/.test(c) ? 'pv-compete' : undefined}>{c}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </>
   );
 }

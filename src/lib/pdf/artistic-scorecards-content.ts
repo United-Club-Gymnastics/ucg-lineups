@@ -1,7 +1,7 @@
 // Pure: artistic (MAG/WAG) scorecards. Landscape, one page per squad per apparatus, apparatus in Olympic order, squads in the
 // order they arrive. Exactly 15 rows. Spec §6.
 import { APPARATUS } from '../apparatus';
-import { arrivalOrder, rotationFor, rotationIndexOf, columnCode } from '../rotation';
+import { arrivalOrder, columnCode, columnLabel, rotationFor, slotOf } from '../rotation';
 import { HEAVY_KEY, type ArtisticScorecardPage, type Column, type ScoreRow, type Unnumbered } from './model';
 import type { ArtisticSessionInput } from './session-input';
 
@@ -48,7 +48,8 @@ export function artisticScorecardPages(input: ArtisticSessionInput): Unnumbered<
       // Always exactly 15 rows. A squad above 15 on an apparatus still lists everyone (flagged upstream).
       while (rows.length < SCORECARD_ROWS) rows.push({ level: '', athlete: '', club: '', blank: true, levelBreak: false });
       const rot = rotationFor(i, pattern, session.discipline);
-      const r = rotationIndexOf(i, code, pattern, session.discipline);
+      const r = slotOf(i, code, pattern, session.discipline);
+      const column = rot.find((c) => columnCode(c) === code) ?? code;
       pages.push({
         kind: 'artistic-scorecard',
         meet,
@@ -60,7 +61,7 @@ export function artisticScorecardPages(input: ArtisticSessionInput): Unnumbered<
           code,
           discipline: session.discipline,
           rotation: r + 1,
-          equipment: rot[r] !== columnCode(rot[r]) ? rot[r] : '',
+          equipment: column !== code ? columnLabel(column, pattern, session.discipline) : '',
         },
         infinity,
         columns: infinity ? INFINITY_COLUMNS : STANDARD_COLUMNS,

@@ -69,7 +69,7 @@ export interface ArtisticScorecardPage extends BasePage {
     code: string;
     discipline: 'MAG' | 'WAG';
     rotation: number;
-    /** `VT-A` when the pattern has A/B equipment, else ''. */
+    /** `VT-A` / `VT-Platform` when the pattern names its equipment, else ''. */
     equipment: string;
   };
   infinity: boolean;
@@ -145,6 +145,18 @@ export interface RotationSquad {
   rows: RotationRow[];
   /** Nothing placed in this squad. */
   empty: boolean;
+  /** Note lines printed to the right of the squad (the pattern's per-squad notes); [] for none. */
+  notes: string[];
+}
+
+/** Height of a timeline row, in layout units (a club row is 1). */
+export const TIMELINE_ROW_UNITS = 0.9;
+
+/** The 8-slot warm-up / competition timeline printed under the squads (patterns that define one). */
+export interface RotationTimeline {
+  /** Slot numbers, `1`..`8`. */
+  header: string[];
+  rows: { letter: string; /** `(W) VT-P`, `(C) VT-P`, `(W/C) UB`, `BYE`, `-` */ cells: string[] }[];
 }
 
 export interface ArtisticRotationPage extends BasePage {
@@ -157,7 +169,13 @@ export interface ArtisticRotationPage extends BasePage {
   schedule: ScheduleItem[];
   athleteCount: number;
   columnCount: number;
+  /** Width of one equipment column in pt (wider when the equipment names are long, e.g. `VT-Platform`). */
+  columnWidth: number;
+  /** Squads have notes to print: the table narrows to leave a notes column on the right. */
+  hasNotes: boolean;
   squads: RotationSquad[];
+  /** On the last page of the session only. */
+  timeline: RotationTimeline | null;
   /** Layout units this page holds (see rotation content): the renderer scales row height to fit. */
   units: number;
 }

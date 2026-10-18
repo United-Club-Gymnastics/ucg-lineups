@@ -2,8 +2,8 @@
 // squad boundary). Per squad: header row with the apparatus in rotation order, then one row per club group with its routine
 // counts. Spec §6.
 import { APPARATUS } from '../apparatus';
-import { columnCode, rotationFor } from '../rotation';
-import type { ArtisticRotationPage, RotationRow, RotationSquad, Unnumbered } from './model';
+import { BYE, columnCode, columnLabel, patternDef, rotationFor } from '../rotation';
+import { TIMELINE_ROW_UNITS, type ArtisticRotationPage, type RotationRow, type RotationSquad, type RotationTimeline, type Unnumbered } from './model';
 import type { ArtisticGroupInput, ArtisticSessionInput } from './session-input';
 
 /** Layout units: a club row is 1, a squad header 1.5, the space between squads 0.8. A page holds up to this many. */
@@ -37,29 +37,57 @@ export function sessionLevelLine(input: ArtisticSessionInput): string {
   return [...ordered, ...rest].join(', ');
 }
 
+/** Timeline: a header row plus a row per squad, each a little shorter than a club row, with a gap above. */
+export const timelineUnits = (t: RotationTimeline): number => (t.rows.length + 1) * TIMELINE_ROW_UNITS + 1;
+
+/** Equipment columns this wide (pt); names longer than 6 characters (`VT-Platform`) get a wider column. */
+export const COLUMN_WIDTH = 46;
+export const WIDE_COLUMN_WIDTH = 54;
+
 export const squadUnits = (s: RotationSquad): number => HEADER_UNITS + Math.max(1, s.rows.length) + GAP_UNITS;
 
 export function artisticRotationPages(input: ArtisticSessionInput): Unnumbered<ArtisticRotationPage>[] {
   const { session, pattern, meet } = input;
+  const def = patternDef(pattern, session.discipline);
   const rots = input.squads.map((s) => rotationFor(s.index, pattern, session.discipline));
   const columnCount = Math.max(APPARATUS[session.discipline].length, ...rots.map((r) => r.length));
+  // With BYE squads the BYE column comes first, so a squad without one starts a column later (as on the original sheets).
+  const leading = def.sequences.some((q) => q.includes(BYE));
+  const label = (c: string) => (c === BYE ? BYE : columnLabel(c, pattern, session.discipline));
+  const pad = (cells: string[]) => {
+    const gap = Array<string>(columnCount - cells.length).fill('');
+    return leading ? [...gap, ...cells] : [...cells, ...gap];
+  };
+  const padCounts = (cells: (number | null)[]) => {
+    const gap = Array<null>(columnCount - cells.length).fill(null);
+    return leading ? [...gap, ...cells] : [...cells, ...gap];
+  };
+  const columnWidth = Object.values(def.equipment).some((n) => n.length > 6) ? WIDE_COLUMN_WIDTH : COLUMN_WIDTH;
 
   const squads: RotationSquad[] = input.squads.map((s, i) => {
     const merged = mergedRows(s.groups);
     const rows: RotationRow[] = merged.map((m, ix) => ({
       label: m.label,
-      counts: rots[i].map((c) => (m.routines[columnCode(c)] ?? 0)),
+      counts: padCounts(rots[i].map((c) => (c === BYE ? null : (m.routines[columnCode(c)] ?? 0)))),
       levelBreak: ix > 0 && merged[ix - 1].levelCode !== m.levelCode,
       alt: ix % 2 === 1,
     }));
     return {
       letter: s.letter,
       heading: `Squad ${s.letter}`,
-      columns: [...rots[i], ...Array<string>(columnCount - rots[i].length).fill('')],
+      columns: pad(rots[i].map(label)),
       rows,
       empty: rows.length === 0,
+      notes: def.notes?.[s.index] ?? [],
     };
   });
+  const hasNotes = squads.some((s) => s.notes.length > 0);
+  const timeline: RotationTimeline | null = def.timeline
+    ? {
+      header: Array.from({ length: Math.max(...def.timeline.map((r) => r.length)) }, (_, k) => String(k + 1)),
+      rows: input.squads.map((s) => ({ letter: s.letter, cells: [...(def.timeline![s.index] ?? [])] })),
+    }
+    : null;
 
   const chunks: RotationSquad[][] = [[]];
   let used = 0;
@@ -70,6 +98,8 @@ export function artisticRotationPages(input: ArtisticSessionInput): Unnumbered<A
     chunks[chunks.length - 1].push(s);
     used += u;
   }
+  // The timeline goes under the last squad; when it does not fit there it gets a page of its own.
+  if (timeline && used + timelineUnits(timeline) > ROTATION_PAGE_UNITS && chunks[chunks.length - 1].length > 0) chunks.push([]);
 
   const base = {
     meet,
@@ -82,12 +112,18 @@ export function artisticRotationPages(input: ArtisticSessionInput): Unnumbered<A
     ],
     athleteCount: input.athleteCount,
     columnCount,
+    columnWidth,
+    hasNotes,
   };
-  return chunks.map((c, i) => ({
-    kind: 'artistic-rotation' as const,
-    ...base,
-    squads: c,
-    units: c.reduce((t, s) => t + squadUnits(s), 0),
-    jump: { group: 'Rotation sheet', label: String(i + 1) },
-  }));
+  return chunks.map((c, i) => {
+    const last = i === chunks.length - 1;
+    return {
+      kind: 'artistic-rotation' as const,
+      ...base,
+      squads: c,
+      timeline: last ? timeline : null,
+      units: c.reduce((t, s) => t + squadUnits(s), 0) + (last && timeline ? timelineUnits(timeline) : 0),
+      jump: { group: 'Rotation sheet', label: String(i + 1) },
+    };
+  });
 }

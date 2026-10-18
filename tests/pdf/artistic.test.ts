@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { arrivalOrder, squadCountFor, type RotationPattern } from '../../src/lib/rotation';
 import { artisticRotationPages, groupLabel, ROTATION_PAGE_UNITS } from '../../src/lib/pdf/artistic-rotation-content';
+import { numberPages } from '../../src/lib/pdf/model';
+import { renderPdf } from '../../src/lib/pdf/render';
 import { artisticScorecardPages, INFINITY_COLUMNS, SCORECARD_ROWS, STANDARD_COLUMNS } from '../../src/lib/pdf/artistic-scorecards-content';
 import type { ArtisticGroupInput, ArtisticSessionInput } from '../../src/lib/pdf/session-input';
 
@@ -195,5 +197,95 @@ describe('artistic rotation sheet', () => {
   it('the level line lists only levels that are present, in session order', () => {
     const [p] = artisticRotationPages(input('MAG', 'one', [[group('A', 'Adv', ['x']), group('B', 'Dev', ['y'])]]));
     expect(p.subtitle).toBe('MAG – Orange Gym – Dev, Adv');
+  });
+});
+
+describe('alternative patterns: rotation sheet and scorecards', () => {
+  const wag7 = () => artisticRotationPages(input('WAG', 'wag-7', everySquad('WAG', 'wag-7')));
+  const raw = (pages: ReturnType<typeof wag7>) => renderPdf(numberPages(pages, 'x'), 'x', false).output();
+
+  it('WAG 7 squads: BYE columns, equipment names, notes and the timeline', () => {
+    const pages = wag7();
+    expect(pages).toHaveLength(1);
+    const [p] = pages;
+    expect(p.columnCount).toBe(5);
+    expect(p.hasNotes).toBe(true);
+    expect(p.squads.map((s) => s.columns)).toEqual([
+      ['', 'VT-Platform', 'UB', 'BB-B', 'FX'],
+      ['BYE', 'VT-Ground', 'UB', 'BB-A', 'FX'],
+      ['', 'UB', 'BB-A', 'FX', 'VT-Platform'],
+      ['', 'BB-A', 'FX', 'VT-Platform', 'UB'],
+      ['BYE', 'BB-B', 'FX', 'VT-Ground', 'UB'],
+      ['', 'FX', 'VT-Platform', 'UB', 'BB-B'],
+      ['BYE', 'FX', 'VT-Ground', 'UB', 'BB-A'],
+    ]);
+    // counts sit under their equipment; the BYE / blank column has none
+    expect(p.squads[0].rows[0].counts).toEqual([null, 1, 1, 1, 1]);
+    expect(p.squads[1].rows[0].counts).toEqual([null, 1, 1, 1, 1]);
+    expect(p.squads[2].notes).toEqual(['FX after Squad E']);
+    expect(p.squads[6].notes).toEqual(['Bump touch warm-up once F starts competing', 'UB/FX after Squad F']);
+    expect(p.columnWidth).toBeGreaterThan(46);
+    expect(p.timeline!.header).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+    expect(p.timeline!.rows.map((r) => r.letter)).toEqual('ABCDEFG'.split(''));
+    expect(p.timeline!.rows[0].cells).toEqual(['(W) VT-P', '(C) VT-P', '(W/C) UB', '(W) BB-B', '(C) BB-B', '(W) FX', '(C) FX', '-']);
+    expect(p.timeline!.rows[6].cells[0]).toBe('BYE');
+    expect(p.units).toBeLessThanOrEqual(ROTATION_PAGE_UNITS);
+  });
+
+  it('the PDF prints the notes and the timeline, in black and white', () => {
+    const out = raw(wag7());
+    // jsPDF escapes parentheses in text strings, so a printed `(W/C) UB` is `\(W/C\) UB` in the stream.
+    for (const t of ['UB/FX after Squad C', 'UB after Squad B', 'Bump touch warm-up once F starts', 'VT-Platform', 'VT-Ground', 'BYE', '\\(W/C\\) UB', '\\(C\\) VT-P', '\\(W\\) BB-B']) {
+      expect(out.includes(t), t).toBe(true);
+    }
+    expect(out).not.toMatch(/\d(?:\.\d+)? \d(?:\.\d+)? \d(?:\.\d+)? (?:rg|RG)\b/);
+  });
+
+  it('patterns without notes or a timeline draw as before (no notes column, no timeline)', () => {
+    const [p] = artisticRotationPages(input('MAG', 'mag-3', everySquad('MAG', 'mag-3')));
+    expect(p.hasNotes).toBe(false);
+    expect(p.timeline).toBeNull();
+    expect(p.squads.every((s) => s.notes.length === 0)).toBe(true);
+    expect(p.columnWidth).toBe(46);
+    const [a] = artisticRotationPages(input('WAG', 'parallel', everySquad('WAG', 'parallel')));
+    expect(a.timeline).toBeNull();
+    expect(a.columnWidth).toBe(46);
+  });
+
+  it('MAG 3 squads: three squads, fixed orders, six columns each', () => {
+    const [p] = artisticRotationPages(input('MAG', 'mag-3', everySquad('MAG', 'mag-3')));
+    expect(p.squads.map((s) => s.heading)).toEqual(['Squad A', 'Squad B', 'Squad C']);
+    expect(p.squads.map((s) => s.columns.join(' '))).toEqual(['FX PH SR VT PB HB', 'PH SR FX PB HB VT', 'SR FX PH HB VT PB']);
+  });
+
+  it('MAG 3 squads, WAG overlap: its own orders on the sheet', () => {
+    const [p] = artisticRotationPages(input('MAG', 'mag-3-wag', everySquad('MAG', 'mag-3-wag')));
+    expect(p.squads.map((s) => s.columns.join(' '))).toEqual(['FX VT PB PH SR HB', 'VT PB FX SR HB PH', 'PB FX VT HB PH SR']);
+    expect(JSON.stringify(p)).not.toContain('BYE');
+    const out = raw([p]);
+    expect(out).toMatch(/\(PB\) Tj/);
+  });
+
+  it('WAG 7 squads: scorecard pages in compete order, with the equipment name in the band', () => {
+    const pages = artisticScorecardPages(input('WAG', 'wag-7', everySquad('WAG', 'wag-7')));
+    expect(pages).toHaveLength(28);
+    const vault = pages.filter((p) => p.band.code === 'VT');
+    expect(vault.map((p) => p.band.squad).join('')).toBe('ABFGDEC');
+    expect(vault.map((p) => p.band.equipment)).toEqual(['VT-Platform', 'VT-Ground', 'VT-Platform', 'VT-Ground', 'VT-Platform', 'VT-Ground', 'VT-Platform']);
+    expect(vault.map((p) => p.band.rotation)).toEqual([2, 3, 4, 5, 6, 7, 8]);
+    expect(pages.filter((p) => p.band.code === 'BB').map((p) => p.band.equipment)).toEqual(['BB-A', 'BB-B', 'BB-A', 'BB-B', 'BB-A', 'BB-B', 'BB-A']);
+    expect(pages.filter((p) => p.band.code === 'UB').every((p) => p.band.equipment === '')).toBe(true);
+    for (const code of WAG) {
+      expect(pages.filter((p) => p.band.code === code).map((p) => p.band.squad)).toEqual(arrivalOrder(code, 'wag-7', 'WAG').map((i) => String.fromCharCode(65 + i)));
+    }
+  });
+
+  it('MAG 3 squads: scorecards follow arrivalOrder', () => {
+    for (const pattern of ['mag-2', 'mag-3', 'mag-3-wag']) {
+      const pages = artisticScorecardPages(input('MAG', pattern, everySquad('MAG', pattern)));
+      for (const code of MAG) {
+        expect(pages.filter((p) => p.band.code === code).map((p) => p.band.squad)).toEqual(arrivalOrder(code, pattern, 'MAG').map((i) => String.fromCharCode(65 + i)));
+      }
+    }
   });
 });

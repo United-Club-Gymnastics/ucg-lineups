@@ -155,7 +155,9 @@ export function toStoredSquadDoc(pattern: RotationPattern, plan: SquadPlan, card
 export function parseSquadDoc(raw: unknown): StoredSquadDoc | null {
   if (!raw || typeof raw !== 'object') return null;
   const d = raw as Record<string, unknown>;
-  const read = readPattern(d.pattern);
+  // Any non-empty id is kept as saved: whether it is a pattern of this session's discipline is decided where the discipline
+  // is known (`readPattern(id, discipline)`; unknown ids fall back to the discipline default with a notice).
+  const read = d.pattern === 'byes' ? readPattern('byes') : typeof d.pattern === 'string' && d.pattern ? { pattern: d.pattern, removedByes: false } : null;
   if (!read || !Array.isArray(d.squads) || !Array.isArray(d.trayAthleteIds)) return null;
   const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
   const squads = d.squads.map((s, i) => {

@@ -8,7 +8,7 @@ import { type FlightPair, type Flight, defaultFlights, mergeFlights, pairClubs, 
 import { planFromCards } from '../squad-balance';
 import { restoreSquads } from '../squad-restore';
 import { buildSessionData, fullName, type ArtisticSession, type Schedule, type StoredSquadDoc, EMPTY_SCHEDULE } from '../squad-data';
-import { squadLetter as artisticLetter, squadCountFor, apparatusCodes, defaultPattern, type RotationPattern } from '../rotation';
+import { squadLetter as artisticLetter, squadCountFor, apparatusCodes, defaultPattern, readPattern, type RotationPattern } from '../rotation';
 import { TNT_EVENTS, orderFor, squadLetter as tntLetter, type TntEvent, type TntCode } from '../tnt-squads';
 import { buildTntSessionData, type StoredTntDoc } from '../tnt-data';
 import { restoreTntSquads } from '../tnt-squads';
@@ -71,7 +71,8 @@ export function buildArtisticSessionInput(input: {
 }): ArtisticSessionInput {
   const { session, meet, stored } = input;
   const d = buildSessionData(session, input.athletes, input.ordersByClub);
-  const pattern: RotationPattern = stored?.pattern ?? defaultPattern(session.discipline);
+  // An id that is not a pattern of this discipline prints as the discipline's default (the Squads screen says so).
+  const pattern: RotationPattern = readPattern(stored?.pattern, session.discipline)?.pattern ?? defaultPattern(session.discipline);
   const count = squadCountFor(pattern, session.discipline);
   const meta = { number: session.number, gym: session.gym, levelCodes: session.levelCodes, discipline: session.discipline };
   const empty: ArtisticSquadInput[] = Array.from({ length: count }, (_, i) => ({ index: i, letter: artisticLetter(i), groups: [] }));
@@ -85,7 +86,7 @@ export function buildArtisticSessionInput(input: {
     levelRank: d.levelRank, clubLabel: d.clubLabel, independentLabel: d.independentLabel,
   };
   const restored = restoreSquads({ stored, discipline: session.discipline, sessionRegs: d.regs, savedGroups: d.savedGroups, ctx, describe: d.describe, levelName: (l) => d.levelNames.get(l) ?? l });
-  const plan = planFromCards(restored.cards, stored.pattern, session.discipline, ctx);
+  const plan = planFromCards(restored.cards, pattern, session.discipline, ctx);
   const byKey = new Map(restored.cards.map((c) => [c.key, c]));
 
   // Each club level's resolved orders (what the club page shows), computed once.
@@ -132,7 +133,7 @@ export function buildArtisticSessionInput(input: {
   }));
   const inSquad = new Set(plan.flatMap((s) => s.cardKeys.flatMap((k) => byKey.get(k)?.regIds ?? [])));
   const unplacedIds = [...d.athletes.keys()].filter((id) => !inSquad.has(id));
-  return { meet, session: meta, pattern: stored.pattern, schedule: stored.schedule, athleteCount: d.athleteCount, squads, unplaced: unplacedIds.length, noSquads: false };
+  return { meet, session: meta, pattern, schedule: stored.schedule, athleteCount: d.athleteCount, squads, unplaced: unplacedIds.length, noSquads: false };
 }
 
 // --- T&T ----------------------------------------------------------------------------------------------
