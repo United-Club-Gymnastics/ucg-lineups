@@ -42,6 +42,9 @@ export function buildCards(input: {
   discipline: ArtisticDiscipline;
   sessionRegs: GroupReg[];
   savedGroups: SavedGroupsRow[];
+  /** athlete id -> squad id (the squad's index as a string). When given, a group whose athletes sit in different
+   *  places becomes one card per place (fragments), as in the platform builder, instead of whole groups. */
+  squadOf?: Map<string, string>;
   clubLabel?: (clubId: string) => string;
   independentLabel?: (regId: string) => string;
   levelRank?: (levelId: string) => number;
@@ -51,12 +54,26 @@ export function buildCards(input: {
     sessionRegs: input.sessionRegs,
     eventRegs: input.sessionRegs,
     savedGroups: input.savedGroups,
-    squadOf: new Map(),
+    squadOf: input.squadOf ?? new Map(),
     clubLabel: input.clubLabel,
     independentLabel: input.independentLabel,
     levelRank: input.levelRank,
   });
-  return wholeGroups(cards);
+  return input.squadOf ? cards : wholeGroups(cards);
+}
+
+/** The plan implied by cards that carry a `squadId` (the squad's index as a string): each squad lists its cards in listing order. */
+export function planFromCards(
+  cards: SquadCard[],
+  pattern: RotationPattern,
+  discipline: ArtisticDiscipline,
+  ctx: Pick<CardContext, 'levelRank' | 'clubLabel' | 'independentLabel'>,
+): SquadPlan {
+  const byKey = new Map(cards.map((c) => [c.key, c]));
+  return emptyPlan(pattern, discipline).map((slot, i) => ({
+    ...slot,
+    cardKeys: sortKeys(cards.filter((c) => c.squadId === String(i)).map((c) => c.key), byKey, ctx),
+  }));
 }
 
 /** Display label: `Club – Level · Group B`, or `Name (Independent) – Level`. */
@@ -81,25 +98,6 @@ export function compareCards(a: SquadCard, b: SquadCard, ctx: Pick<CardContext, 
 
 export function emptyPlan(pattern: RotationPattern, discipline: ArtisticDiscipline): SquadPlan {
   return Array.from({ length: squadCountFor(pattern, discipline) }, (_, i) => ({ name: squadLetter(i), cardKeys: [] }));
-}
-
-/**
- * A stored plan (or nothing) made current: exactly the pattern's number of squads, named A, B, C...; keys that are
- * not cards any more are dropped, duplicates keep their first squad. Cards of squads beyond the count go to the tray.
- */
-export function reconcilePlan(
-  stored: { cardKeys?: unknown }[] | undefined,
-  pattern: RotationPattern,
-  discipline: ArtisticDiscipline,
-  validKeys: Iterable<string>,
-): SquadPlan {
-  const valid = new Set(validKeys);
-  const seen = new Set<string>();
-  return emptyPlan(pattern, discipline).map((slot, i) => {
-    const raw = stored?.[i]?.cardKeys;
-    const keys = Array.isArray(raw) ? raw.filter((k): k is string => typeof k === 'string') : [];
-    return { ...slot, cardKeys: keys.filter((k) => valid.has(k) && !seen.has(k) && (seen.add(k), true)) };
-  });
 }
 
 export const placedKeys = (plan: SquadPlan): Set<string> => new Set(plan.flatMap((s) => s.cardKeys));

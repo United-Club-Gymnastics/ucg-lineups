@@ -41,6 +41,8 @@ export interface SquadSessionData {
   levelRank: (levelId: string) => number;
   clubLabel: (clubId: string) => string;
   independentLabel: (regId: string) => string;
+  /** Any athlete (even one no longer competing or in another session): name, club and level for notices. */
+  describe: (id: string) => { name: string; clubName: string; levelName: string } | undefined;
 }
 
 export const fullName = (a: Pick<StoredAthlete, 'first' | 'last'>): string => `${a.first} ${a.last}`.trim();
@@ -99,7 +101,10 @@ export function buildSessionData(
     if (st === 'split') needSplit++;
   }
 
-  return { regs, savedGroups, cards, athleteCount: here.length, stillAz, needSplit, athletes, clubNames, levelNames, levelRank, clubLabel, independentLabel };
+  const everyone = new Map(allAthletes.map((a) => [a.id, a]));
+  const describe = (id: string) => { const a = everyone.get(id); return a ? { name: fullName(a), clubName: a.independent ? 'Independent' : a.clubName, levelName: a.levelName } : undefined; };
+
+  return { describe, regs, savedGroups, cards, athleteCount: here.length, stillAz, needSplit, athletes, clubNames, levelNames, levelRank, clubLabel, independentLabel };
 }
 
 // --- stored plan -----------------------------------------------------------------------------------
@@ -112,32 +117,53 @@ export interface Schedule {
 
 export const EMPTY_SCHEDULE: Schedule = { stretch: '', warmups: '', competition: '' };
 
-/** `squads/{sessionId}` as stored (minus `updatedAt`, which the writer adds). */
+/**
+ * `squads/{sessionId}` as stored (minus `updatedAt`, which the writer adds). Each placed card records the athletes
+ * in it, so a club re-splitting its groups later cannot silently put other athletes in a placed slot.
+ * `trayAthleteIds` = athletes the host knew about and left unplaced (so a newly added athlete can be told apart).
+ * No nested arrays. The earlier `cardKeys` shape is not read (there was never live data in it): such a doc counts as nothing saved.
+ */
+export interface StoredSquadCard {
+  key: string;
+  athleteIds: string[];
+}
 export interface StoredSquadDoc {
   pattern: RotationPattern;
-  squads: { name: string; cardKeys: string[] }[];
+  squads: { name: string; cards: StoredSquadCard[] }[];
+  trayAthleteIds: string[];
   schedule: Schedule;
 }
 
-export const toStoredSquadDoc = (pattern: RotationPattern, plan: SquadPlan, schedule: Schedule): StoredSquadDoc => ({
-  pattern,
-  squads: plan.map((s) => ({ name: s.name, cardKeys: [...s.cardKeys] })),
-  schedule: { ...schedule },
-});
+/** @param cards every card on the screen (placed ones carry their athletes; the rest are the tray). */
+export function toStoredSquadDoc(pattern: RotationPattern, plan: SquadPlan, cards: SquadCard[], schedule: Schedule): StoredSquadDoc {
+  const byKey = new Map(cards.map((c) => [c.key, c]));
+  const placed = new Set(plan.flatMap((s) => s.cardKeys));
+  return {
+    pattern,
+    squads: plan.map((s) => ({
+      name: s.name,
+      cards: s.cardKeys.filter((k) => byKey.has(k)).map((k) => ({ key: k, athleteIds: [...byKey.get(k)!.regIds] })),
+    })),
+    trayAthleteIds: cards.filter((c) => !placed.has(c.key)).flatMap((c) => c.regIds),
+    schedule: { ...schedule },
+  };
+}
 
-/** Read a stored document defensively; anything unusable is "nothing saved". */
-export function parseSquadDoc(raw: unknown): { pattern: RotationPattern; squads: { cardKeys: string[] }[]; schedule: Schedule } | null {
+/** Read a stored document defensively; anything unusable (including the old `cardKeys` shape) is "nothing saved". */
+export function parseSquadDoc(raw: unknown): StoredSquadDoc | null {
   if (!raw || typeof raw !== 'object') return null;
   const d = raw as Record<string, unknown>;
   const pattern = ROTATION_PATTERNS.find((p) => p === d.pattern);
-  if (!pattern) return null;
-  const squads = Array.isArray(d.squads)
-    ? d.squads.map((s) => {
-      const keys = (s as { cardKeys?: unknown } | null)?.cardKeys;
-      return { cardKeys: Array.isArray(keys) ? keys.filter((k): k is string => typeof k === 'string') : [] };
-    })
-    : [];
+  if (!pattern || !Array.isArray(d.squads) || !Array.isArray(d.trayAthleteIds)) return null;
+  const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  const squads = d.squads.map((s, i) => {
+    const o = (s ?? {}) as { name?: unknown; cards?: unknown };
+    const cards = Array.isArray(o.cards)
+      ? o.cards.map((c) => ({ key: typeof (c as { key?: unknown })?.key === 'string' ? (c as { key: string }).key : '', athleteIds: strs((c as { athleteIds?: unknown })?.athleteIds) }))
+      : [];
+    return { name: typeof o.name === 'string' ? o.name : `Squad ${i + 1}`, cards };
+  });
   const sch = (d.schedule && typeof d.schedule === 'object' ? d.schedule : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === 'string' ? v : '');
-  return { pattern, squads, schedule: { stretch: str(sch.stretch), warmups: str(sch.warmups), competition: str(sch.competition) } };
+  return { pattern, squads, trayAthleteIds: strs(d.trayAthleteIds), schedule: { stretch: str(sch.stretch), warmups: str(sch.warmups), competition: str(sch.competition) } };
 }

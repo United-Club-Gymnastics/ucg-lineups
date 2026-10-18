@@ -8,16 +8,17 @@ import {
   ROTATION_PATTERNS, firstApparatus, routinesPerRotation, squadCountFor, squadLetter,
   type ArtisticDiscipline, type RotationPattern,
 } from '../lib/rotation';
-import { autoBalance, capacityGuide, clearPlan, emptyPlan, moveCard, placedKeys, planStats, reconcilePlan, swapSquads, type SquadPlan } from '../lib/squad-balance';
+import { autoBalance, capacityGuide, clearPlan, emptyPlan, moveCard, placedKeys, planStats, swapSquads, type SquadCard, type SquadPlan } from '../lib/squad-balance';
+import { restoreSquads, type RestoreChange, type Restored } from '../lib/squad-restore';
 import { squadRoutineCap } from '../lib/squad-builder';
 import {
-  EMPTY_SCHEDULE, buildSessionData, isArtisticSession, parseSquadDoc, sessionTitle, sortSessionsByGym, toStoredSquadDoc,
+  EMPTY_SCHEDULE, buildSessionData, isArtisticSession, sessionTitle, sortSessionsByGym, toStoredSquadDoc,
   type ArtisticSession, type Schedule, type SquadSessionData, type StoredSquadDoc,
 } from '../lib/squad-data';
 import './squads.css';
 
 type Loaded = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; input: SquadsInput };
-type StoredDoc = ReturnType<typeof parseSquadDoc>;
+type StoredDoc = StoredSquadDoc | null;
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 
@@ -158,49 +159,53 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
 }) {
   const discipline = session.discipline;
   const data: SquadSessionData = useMemo(() => buildSessionData(session, input.athletes, input.ordersByClub), [session, input]);
-  const cards = data.cards;
   const cap = squadRoutineCap(discipline);
+  const ctx = useMemo(() => ({
+    discipline, apparatusOf: (id: string) => data.athletes.get(id)?.apparatus ?? [],
+    levelRank: data.levelRank, clubLabel: data.clubLabel, independentLabel: data.independentLabel,
+  }), [discipline, data]);
+  const levelName = (l: string) => data.levelNames.get(l) ?? l;
 
-  // Start from what is saved, reconciled to the current cards (clubs may have changed groups since).
+  // Start from what is saved. Saved cards hold athletes, so they are matched to the clubs' CURRENT groups; anything
+  // that moved since is listed in `changes` (never silently).
   const [start] = useState(() => {
-    const plan0 = reconcilePlan(stored?.squads, stored?.pattern ?? 'one', discipline, cards.map((c) => c.key));
-    const now = placedKeys(plan0);
-    const lost = new Set((stored?.squads ?? []).flatMap((s) => s.cardKeys).filter((k) => !now.has(k))).size;
-    return { plan: plan0, lost };
+    if (!stored) return { cards: data.cards, plan: emptyPlan('one', discipline), changes: [] as RestoreChange[], movedCount: 0 };
+    return restoreSquads({ stored, discipline, sessionRegs: data.regs, savedGroups: data.savedGroups, ctx, describe: data.describe, levelName });
   });
+  const [cards, setCards] = useState<SquadCard[]>(start.cards);
   const [pattern, setPattern] = useState<RotationPattern>(stored?.pattern ?? 'one');
   const [plan, setPlan] = useState<SquadPlan>(start.plan);
   const [sched, setSched] = useState<Schedule>(stored?.schedule ?? EMPTY_SCHEDULE);
   const [notice, setNotice] = useState('');
   const [confirm, setConfirm] = useState<Confirm>(null);
-  const dropped = start.lost;
+  const [showChanges, setShowChanges] = useState(true);
 
-  const commit = (p: RotationPattern, nextPlan: SquadPlan, nextSched: Schedule) => {
+  const commit = (p: RotationPattern, nextPlan: SquadPlan, nextCards: SquadCard[], nextSched: Schedule) => {
     setPattern(p);
     setPlan(nextPlan);
+    setCards(nextCards);
     setSched(nextSched);
-    scheduleSave(session.id, toStoredSquadDoc(p, nextPlan, nextSched));
+    scheduleSave(session.id, toStoredSquadDoc(p, nextPlan, nextCards, nextSched));
   };
 
-  const balanceFor = (p: RotationPattern) => autoBalance({
-    cards, pattern: p, discipline, apparatusOf: (id) => data.athletes.get(id)?.apparatus ?? [],
-    levelRank: data.levelRank, clubLabel: data.clubLabel, independentLabel: data.independentLabel,
-  });
+  // Auto-balance works on whole club groups, so it also resets any group that had been split across places.
+  const whole = data.cards;
+  const balanceFor = (p: RotationPattern) => autoBalance({ ...ctx, cards: whole, pattern: p });
   const anyPlaced = placedKeys(plan).size > 0;
   const ask = (c: NonNullable<Confirm>, direct: boolean) => { if (direct) c.run(); else setConfirm(c); };
 
   const doBalance = () => {
-    commit(pattern, balanceFor(pattern), sched);
+    commit(pattern, balanceFor(pattern), whole, sched);
     setNotice('Squads balanced: biggest groups first, evening out the busiest apparatus.');
   };
   const doClear = () => {
-    commit(pattern, clearPlan(plan), sched);
+    commit(pattern, clearPlan(plan), whole, sched);
     setNotice('All groups returned to the unplaced list.');
   };
   const requestPattern = (p: RotationPattern) => {
     if (p === pattern) return;
     const run = () => {
-      commit(p, anyPlaced ? balanceFor(p) : emptyPlan(p, discipline), sched);
+      commit(p, anyPlaced ? balanceFor(p) : emptyPlan(p, discipline), whole, sched);
       setNotice(anyPlaced ? 'Squads re-balanced for the new rotation pattern.' : '');
     };
     ask({
@@ -209,18 +214,17 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
       action: 'Change and re-balance', run,
     }, !anyPlaced);
   };
-  const onPlace = (key: string, to: number | null) => commit(pattern, moveCard(plan, key, to), sched);
+  const onPlace = (key: string, to: number | null) => commit(pattern, moveCard(plan, key, to), cards, sched);
   const onSwap = (a: number, b: number) => {
-    commit(pattern, swapSquads(plan, a, b), sched);
+    commit(pattern, swapSquads(plan, a, b), cards, sched);
     setNotice(`Swapped Squad ${squadLetter(a)} and Squad ${squadLetter(b)}. Their groups now start on ${firstApparatus(a, pattern, discipline)} and ${firstApparatus(b, pattern, discipline)}.`);
   };
-  const setField = (k: keyof Schedule, v: string) => commit(pattern, plan, { ...sched, [k]: v });
+  const setField = (k: keyof Schedule, v: string) => commit(pattern, plan, cards, { ...sched, [k]: v });
 
   const byKey = useMemo(() => new Map(cards.map((c) => [c.key, c])), [cards]);
   const stats = useMemo(() => planStats(plan, byKey, discipline, data.levelRank), [plan, byKey, discipline, data]);
   const guide = capacityGuide(data.athleteCount, pattern, discipline);
   const summary = routinesPerRotation(pattern, discipline, stats.map((s) => s.routines), cap);
-  const levelName = (l: string) => data.levelNames.get(l) ?? l;
   const gymDisc = `${discipline} · ${session.gym} Gym · ${session.levelCodes.map(levelName).join(', ')}`;
 
   return (
@@ -235,7 +239,7 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
           </div>
           <div className="sq-actions">
             <button
-              type="button" className="btn primary" disabled={cards.length === 0}
+              type="button" className="btn primary" disabled={whole.length === 0}
               onClick={() => ask({ title: 'Auto-balance?', body: 'This replaces the groups you have placed.', action: 'Auto-balance', run: doBalance }, !anyPlaced)}
             >
               Auto-balance
@@ -265,11 +269,7 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
         </div>
 
         <div className={`adm-banner ${guide.tone === 'warn' ? 'warn' : 'ok'}`} role="status" data-testid="squads-capacity">{guide.text}</div>
-        {dropped > 0 && (
-          <div className="adm-banner warn" role="status">
-            {dropped} placed group{dropped === 1 ? '' : 's'} no longer exist{dropped === 1 ? 's' : ''} (a club changed its groups or roster) and went back to the unplaced list.
-          </div>
-        )}
+        {start.movedCount > 0 && showChanges && <ChangesNotice restored={start} onDismiss={() => setShowChanges(false)} />}
         {notice && <p className="sq-notice" role="status" aria-live="polite">{notice}</p>}
 
         <details className="sq-how">
@@ -286,7 +286,7 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
 
       <RotationTable summary={summary} cap={cap} />
 
-      {cards.length === 0 ? (
+      {whole.length === 0 ? (
         <section className="adm-card"><p className="adm-muted">No athletes are entered in this session yet.</p></section>
       ) : (
         <SquadBoard discipline={discipline} pattern={pattern} plan={plan} cards={cards} data={data} onPlace={onPlace} onSwap={onSwap} />
@@ -301,6 +301,29 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave }: {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+const CHANGE_TEXT: Record<RestoreChange['kind'], string> = {
+  dropped: 'no longer in this club and level, or no longer competing; removed from Squad',
+  added: 'new since you placed squads; in the unplaced list',
+  regrouped: 'their club changed its groups; still in Squad',
+};
+
+function ChangesNotice({ restored, onDismiss }: { restored: Restored; onDismiss: () => void }) {
+  const n = restored.movedCount;
+  return (
+    <div className="adm-banner warn" role="status" data-testid="squads-changes">
+      <p className="sq-changes-title"><strong>{n} athlete{n === 1 ? '' : 's'} moved since you placed squads.</strong> Nothing else was changed.</p>
+      <ul className="sq-changes">
+        {restored.changes.map((c, i) => (
+          <li key={i}>
+            {c.clubLabel} · {c.levelName}: {c.names.join(', ')} ({CHANGE_TEXT[c.kind]}{c.kind === 'added' ? '' : ` ${c.squad ?? ''}`})
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="btn small" onClick={onDismiss}>Dismiss</button>
     </div>
   );
 }

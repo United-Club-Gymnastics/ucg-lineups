@@ -97,17 +97,28 @@ describe('buildSessionData', () => {
 });
 
 describe('stored squad doc', () => {
-  it('round-trips with no nested arrays', () => {
-    const doc = toStoredSquadDoc('byes', [{ name: 'A', cardKeys: ['k1', 'k2'] }, { name: 'B', cardKeys: [] }], { stretch: '8:00', warmups: '8:15', competition: '9:00' });
-    expect(doc.squads.every((s) => !Array.isArray(s) && Array.isArray(s.cardKeys))).toBe(true);
-    const back = parseSquadDoc(JSON.parse(JSON.stringify(doc)));
-    expect(back).toEqual({ pattern: 'byes', squads: [{ cardKeys: ['k1', 'k2'] }, { cardKeys: [] }], schedule: { stretch: '8:00', warmups: '8:15', competition: '9:00' } });
+  const sch = { stretch: '8:00', warmups: '8:15', competition: '9:00' };
+  it('round-trips athletes per card with no nested arrays', () => {
+    const d = buildSessionData(session, many(3, {}), {});
+    const [c] = d.cards;
+    const unplaced = d.cards.length;
+    const plan = [{ name: 'A', cardKeys: [c.key] }, { name: 'B', cardKeys: [] }];
+    const doc = toStoredSquadDoc('byes', plan, d.cards, sch);
+    expect(doc.squads[0].cards).toEqual([{ key: c.key, athleteIds: c.regIds }]);
+    expect(doc.trayAthleteIds).toEqual(d.cards.slice(1).flatMap((x) => x.regIds));
+    expect(unplaced).toBeGreaterThan(0);
+    expect(doc.squads.every((s) => s.cards.every((k) => Array.isArray(k.athleteIds) && !Array.isArray(k)))).toBe(true);
+    expect(parseSquadDoc(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
   });
-  it('treats junk as nothing saved and fills schedule defaults', () => {
+  it('treats junk and the old cardKeys shape as nothing saved', () => {
     expect(parseSquadDoc(null)).toBeNull();
     expect(parseSquadDoc({ pattern: 'three' })).toBeNull();
-    expect(parseSquadDoc({ pattern: 'one', squads: [{ cardKeys: [1, 'ok'] }, 7] })).toEqual({
-      pattern: 'one', squads: [{ cardKeys: ['ok'] }, { cardKeys: [] }], schedule: { stretch: '', warmups: '', competition: '' },
+    expect(parseSquadDoc({ pattern: 'one', squads: [{ name: 'A', cardKeys: ['k'] }], schedule: sch })).toBeNull();
+  });
+  it('fills defaults for partial docs', () => {
+    expect(parseSquadDoc({ pattern: 'one', trayAthleteIds: ['x', 1], squads: [{ cards: [{ key: 'k', athleteIds: ['a', 2] }, 7] }, 3] })).toEqual({
+      pattern: 'one', trayAthleteIds: ['x'], schedule: { stretch: '', warmups: '', competition: '' },
+      squads: [{ name: 'Squad 1', cards: [{ key: 'k', athleteIds: ['a'] }, { key: '', athleteIds: [] }] }, { name: 'Squad 2', cards: [] }],
     });
   });
 });

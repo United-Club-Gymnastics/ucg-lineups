@@ -91,11 +91,14 @@ describe('Squads screen', () => {
     const doc = lastSaved();
     expect(doc.pattern).toBe('one');
     expect(doc.squads.map((s: { name: string }) => s.name)).toEqual(['A', 'B', 'C', 'D']);
-    const keys: string[] = doc.squads.flatMap((s: { cardKeys: string[] }) => s.cardKeys);
+    type Card = { key: string; athleteIds: string[] };
+    const keys: string[] = doc.squads.flatMap((s: { cards: Card[] }) => s.cards.map((c) => c.key));
+    expect(doc.trayAthleteIds).toEqual([]);
+    expect(doc.squads.flatMap((s: { cards: Card[] }) => s.cards.flatMap((c) => c.athleteIds))).toHaveLength(17);
     expect(keys.filter((k) => !k.startsWith('indep::')).sort()).toEqual(['alpha::XS::0::-', 'bravo::XP::0::-', 'charlie::Inf::0::-', 'charlie::XS::0::-']);
     expect(keys.filter((k) => k.startsWith('indep::'))).toHaveLength(1);
-    const inf = doc.squads.find((s: { cardKeys: string[] }) => s.cardKeys.includes('charlie::Inf::0::-'));
-    expect(inf.cardKeys).toEqual(['charlie::Inf::0::-']);
+    const inf = doc.squads.find((s: { cards: Card[] }) => s.cards.some((c) => c.key === 'charlie::Inf::0::-'));
+    expect(inf.cards.map((c: Card) => c.key)).toEqual(['charlie::Inf::0::-']);
     expect(doc.schedule).toEqual({ stretch: '', warmups: '', competition: '' });
     await waitFor(() => expect(screen.getByTestId('squads-save')).toHaveTextContent(/^Saved · /));
   });
@@ -109,7 +112,7 @@ describe('Squads screen', () => {
     act(() => { captured.props!.onDragEnd!({ active: { id: 'bravo::XP::0::-' }, over: { id: 'tray' } } as never); });
     expect(screen.getByText(/Unplaced club groups \(4\)/)).toBeInTheDocument();
     await savedBy();
-    expect(lastSaved().squads[2].cardKeys).toEqual(['alpha::XS::0::-']);
+    expect(lastSaved().squads[2].cards.map((c: { key: string }) => c.key)).toEqual(['alpha::XS::0::-']);
   });
 
   it('flags a manual mix of Infinity with another level, and an over-cap squad', async () => {
@@ -181,21 +184,37 @@ describe('Squads screen', () => {
     expect(within(squad('B')).getByText(/Specialists: Pat Solo \(BB\): first up rotation 2/)).toBeInTheDocument();
   });
 
-  it('restores a saved plan, saves schedule fields, and drops cards that no longer exist', async () => {
+  it('restores a saved plan from its athletes, saves schedule fields, and lists what moved since', async () => {
+    const input = fixture();
+    const alpha = input.athletes.filter((a) => a.clubId === 'alpha').map((a) => a.id);
+    const added = ath('alpha', 'Alpha Gymnastics', 'XS', 'Silver XS', WAG, { first: 'Newcomer', last: 'Invented' }); // joined after placement
+    input.athletes.push(added);
     const doc = {
       pattern: 'one',
-      squads: [{ cardKeys: ['alpha::XS::0::-', 'gone::XS::0::-'] }, { cardKeys: [] }, { cardKeys: [] }, { cardKeys: [] }],
+      squads: [
+        { name: 'A', cards: [{ key: 'alpha::XS::0::-', athleteIds: [...alpha, 'WAG_alpha_left'] }] },
+        { name: 'B', cards: [] }, { name: 'C', cards: [] }, { name: 'D', cards: [] },
+      ],
+      trayAthleteIds: input.athletes.filter((a) => a.clubId !== 'alpha' && a.id !== added.id).map((a) => a.id),
       schedule: { stretch: '8:00', warmups: '8:15', competition: '9:00' },
     };
-    const user = await open(fixture(), doc);
-    expect(within(squad('A')).getByText('Alpha Gymnastics – Silver XS')).toBeInTheDocument();
+    const user = await open(input, doc);
+    expect(within(squad('A')).getByText(/Alpha Gymnastics – Silver XS/)).toBeInTheDocument();
     expect(screen.getByLabelText('Open stretch')).toHaveValue('8:00');
-    expect(screen.getByText(/1 placed group no longer exists/)).toBeInTheDocument();
+    const note = screen.getByTestId('squads-changes');
+    expect(note).toHaveTextContent('2 athletes moved since you placed squads.');
+    expect(note).toHaveTextContent('Newcomer Invented (new since you placed squads; in the unplaced list)');
+    expect(note).toHaveTextContent('WAG_alpha_left');
+    expect(store.saveSquadDoc).not.toHaveBeenCalled(); // restoring alone writes nothing
+    await user.click(within(note).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByTestId('squads-changes')).toBeNull();
     await user.clear(screen.getByLabelText('Competition'));
     await user.type(screen.getByLabelText('Competition'), '10:30');
     await savedBy();
-    expect(lastSaved().schedule.competition).toBe('10:30');
-    expect(lastSaved().squads[0].cardKeys).toEqual(['alpha::XS::0::-']);
+    const saved = lastSaved();
+    expect(saved.schedule.competition).toBe('10:30');
+    expect(saved.squads[0].cards[0].athleteIds.sort()).toEqual([...alpha].sort()); // dropped athlete gone from the record
+    expect(saved.trayAthleteIds).toContain(added.id); // the newcomer is now a known, unplaced athlete
   });
 
   it('switching sessions and back keeps the latest edits', async () => {

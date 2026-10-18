@@ -3,7 +3,7 @@ import { apparatusLookup } from '../../src/lib/competition-order';
 import { rotationFor } from '../../src/lib/rotation';
 import type { RotationPattern } from '../../src/lib/rotation';
 import {
-  autoBalance, buildCards, capacityGuide, cardLabel, clearPlan, emptyPlan, moveCard, planStats, placedKeys, reconcilePlan,
+  autoBalance, buildCards, capacityGuide, cardLabel, clearPlan, emptyPlan, moveCard, planFromCards, planStats, placedKeys,
   sortKeys, squadSpecialists, squadStats, swapSquads, unplacedCards, type SquadCard,
 } from '../../src/lib/squad-balance';
 import type { GroupReg } from '../../src/lib/squad-builder';
@@ -264,16 +264,18 @@ describe('plan operations', () => {
     expect(unplacedCards(plan, cs).map((c) => c.key)).toEqual([cs[1].key, cs[2].key]);
     expect(clearPlan(plan).every((s) => s.cardKeys.length === 0)).toBe(true);
   });
+});
 
-  it('reconcilePlan drops unknown and duplicate keys and resizes to the pattern', () => {
-    const stored = [{ cardKeys: ['k1', 'gone', 'k2'] }, { cardKeys: ['k2', 'k3'] }, { cardKeys: 'bad' }, { cardKeys: [] }, { cardKeys: ['k4'] }];
-    const one = reconcilePlan(stored, 'one', 'WAG', ['k1', 'k2', 'k3', 'k4']);
-    expect(one).toHaveLength(4);
-    expect(one.map((s) => s.cardKeys)).toEqual([['k1', 'k2'], ['k3'], [], []]);
-    const two = reconcilePlan(stored, 'parallel', 'WAG', ['k1', 'k2', 'k3', 'k4']);
-    expect(two).toHaveLength(8);
-    expect(two[4].cardKeys).toEqual(['k4']);
-    expect(reconcilePlan(undefined, 'one', 'MAG', [])).toHaveLength(6);
+describe('cards with places', () => {
+  it('a squadOf map gives one card per place, and planFromCards puts each in its squad', () => {
+    const regs = group('a', 'Dev', 4, WAG_ALL);
+    const ids = regs.map((r) => r.id);
+    const squadOf = new Map([[ids[0], '2'], [ids[1], '2'], [ids[2], '0']]);
+    const clubLabel = (id: string) => id;
+    const cards = buildCards({ discipline: 'WAG', sessionRegs: regs, savedGroups: [], squadOf, clubLabel, levelRank });
+    expect(cards.map((c) => [c.squadId, c.regIds.length])).toEqual(expect.arrayContaining([['2', 2], ['0', 1], [null, 1]]));
+    const plan = planFromCards(cards, 'one', 'WAG', { levelRank, clubLabel });
+    expect(plan.map((s) => s.cardKeys.length)).toEqual([1, 0, 1, 0]);
   });
 });
 
