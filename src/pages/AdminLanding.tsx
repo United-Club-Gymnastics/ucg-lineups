@@ -1,7 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { isDomainAdmin, onUser, signInAdmin, signOutAdmin } from '../lib/firebase';
 import { Tabs } from '../components/ui';
+import MeetSwitcher, { FirstMeet } from '../components/MeetSwitcher';
+import { db } from '../lib/firebase';
+import { createMeet, listMeets, renameMeet, setMeetArchived, type MeetInfo } from '../lib/data/meet-store';
+import { pickMeet, readSelectedMeet, visibleMeets, writeSelectedMeet } from '../lib/selected-meet';
 // Lazy: pulls in ExcelJS, which is large and only admins need.
 const AdminImport = lazy(() => import('./AdminImport'));
 const AdminSquads = lazy(() => import('./AdminSquads'));
@@ -32,8 +36,32 @@ export default function AdminLanding() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>('import');
   const [error, setError] = useState('');
+  const [meets, setMeets] = useState<MeetInfo[] | null>(null);
+  const [meetsError, setMeetsError] = useState('');
+  const [meetId, setMeetId] = useState<string | null>(null);
 
   useEffect(() => onUser(setUser), []);
+
+  const isAdmin = isDomainAdmin(user);
+  const loadMeets = useCallback((prefer?: string | null) => listMeets(db).then((all) => {
+    setMeetsError('');
+    setMeets(all);
+    const id = pickMeet(all, prefer ?? readSelectedMeet());
+    setMeetId(id);
+    if (id) writeSelectedMeet(id);
+  }, (e) => {
+    setMeetsError(e instanceof Error ? e.message : 'Could not load the meets.');
+  }), []);
+  useEffect(() => { if (isAdmin) void loadMeets(); }, [isAdmin, loadMeets]);
+
+  function selectMeet(id: string) {
+    setMeetId(id);
+    writeSelectedMeet(id);
+  }
+  async function onCreateMeet(name: string) {
+    const id = await createMeet(db, name);
+    await loadMeets(id);
+  }
 
   async function signIn() {
     setError('');
@@ -79,14 +107,35 @@ export default function AdminLanding() {
           <button className="btn ghost small" type="button" onClick={() => void signOutAdmin()}>Sign out</button>
         </div>
       </header>
-      <nav aria-label="Admin sections" className="adm-tabs">
-        <Tabs tabs={TABS} active={tab} onChange={setTab} />
-      </nav>
-      {tab === 'import' && <Suspense fallback={<p>Loading…</p>}><AdminImport /></Suspense>}
-      {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads onOpenSchedule={() => setTab('exports')} /></Suspense>}
-      {tab === 'tnt' && <Suspense fallback={<p>Loading…</p>}><AdminTnt /></Suspense>}
-      {tab === 'exports' && <Suspense fallback={<p>Loading…</p>}><AdminExports /></Suspense>}
-      {tab !== 'import' && tab !== 'squads' && tab !== 'tnt' && tab !== 'exports' && <ComingNext label={TABS.find((t) => t.id === tab)!.label} />}
+      {meetsError && (
+        <div className="adm-banner err" role="alert">
+          Could not load the meets: {meetsError}
+          <div className="adm-actions"><button className="btn" type="button" onClick={() => void loadMeets()}>Try again</button></div>
+        </div>
+      )}
+      {!meetsError && meets === null && <p role="status">Loading meets…</p>}
+      {meets && visibleMeets(meets).length === 0 && <FirstMeet onCreate={onCreateMeet} />}
+      {meets && meetId && (
+        <>
+          <MeetSwitcher
+            meets={visibleMeets(meets)}
+            selectedId={meetId}
+            onSelect={selectMeet}
+            onCreate={onCreateMeet}
+            onRename={async (name) => { await renameMeet(db, meetId, name); await loadMeets(meetId); }}
+            onArchive={async () => { await setMeetArchived(db, meetId, true); await loadMeets(null); }}
+          />
+          <nav aria-label="Admin sections" className="adm-tabs">
+            <Tabs tabs={TABS} active={tab} onChange={setTab} />
+          </nav>
+          {/* key={meetId}: switching meets remounts the screen, so nothing from the other meet is shown or saved into this one. */}
+          {tab === 'import' && <Suspense fallback={<p>Loading…</p>}><AdminImport key={meetId} meetId={meetId} /></Suspense>}
+          {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads key={meetId} meetId={meetId} onOpenSchedule={() => setTab('exports')} /></Suspense>}
+          {tab === 'tnt' && <Suspense fallback={<p>Loading…</p>}><AdminTnt key={meetId} meetId={meetId} /></Suspense>}
+          {tab === 'exports' && <Suspense fallback={<p>Loading…</p>}><AdminExports key={meetId} meetId={meetId} /></Suspense>}
+          {tab === 'clubs' && <ComingNext label="Clubs & email" />}
+        </>
+      )}
     </main>
   );
 }

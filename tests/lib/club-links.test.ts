@@ -61,10 +61,11 @@ describe('buildClubLinks', () => {
   });
 
   it('keeps clubs separate, publishes clubs with no athletes as empty, and skips clubs without a token', () => {
-    const out = buildClubLinks([ath({ id: 'WAG_1', first: 'Ann' }), ath({ id: 'WAG_9', first: 'Bo', clubId: 'club-b' })], sessions, clubs);
+    const out = buildClubLinks([ath({ id: 'WAG_1', first: 'Ann' }), ath({ id: 'WAG_9', first: 'Bo', clubId: 'club-b' })], sessions, clubs, undefined, 'm1');
+    expect(out.every((x) => x.doc.meetId === 'm1')).toBe(true);
     expect(out.map((x) => x.token)).toEqual(['tokA', 'tokB']);
     expect(out[1].doc.sessions[0].levels[0].athletes.map((x) => x.id)).toEqual(['WAG_9']);
-    expect(buildClubLinks([], sessions, [clubs[1]])[0].doc).toEqual({ clubId: 'club-b', clubName: 'Club B', sessions: [], levelKeys: [] });
+    expect(buildClubLinks([], sessions, [clubs[1]], undefined, 'm1')[0].doc).toEqual({ meetId: 'm1', clubId: 'club-b', clubName: 'Club B', sessions: [], levelKeys: [] });
   });
 
   it('accepts a single club (regenerated token)', () => {

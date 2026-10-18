@@ -27,17 +27,17 @@ type StoredDoc = StoredTntDoc | null;
 
 const whenFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-export default function AdminTnt() {
+export default function AdminTnt({ meetId }: { meetId: string }) {
   const [load, setLoad] = useState<Loaded>({ kind: 'loading' });
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
   const saver = useRef<Autosaver<StoredTntDoc> | null>(null);
-  if (saver.current === null) saver.current = new Autosaver<StoredTntDoc>((sessionId, value) => saveTntDoc(db, sessionId, value), setSave);
+  if (saver.current === null) saver.current = new Autosaver<StoredTntDoc>((sessionId, value) => saveTntDoc(db, meetId, sessionId, value), setSave);
 
   const fetchInput = useCallback(() => {
-    loadTntInput(db)
+    loadTntInput(db, meetId)
       .then((input) => setLoad({ kind: 'ready', input }))
       .catch((e) => setLoad({ kind: 'error', message: e instanceof Error ? e.message : 'Could not load T&T data.' }));
-  }, []);
+  }, [meetId]);
   useEffect(() => { fetchInput(); }, [fetchInput]);
   const refresh = () => {
     setLoad({ kind: 'loading' });
@@ -67,10 +67,11 @@ export default function AdminTnt() {
       </section>
     );
   }
-  return <TntScreen input={load.input} save={save} onRetry={() => void saver.current!.flush()} onReload={refresh} schedule={(id, doc) => saver.current!.schedule(id, doc)} />;
+  return <TntScreen meetId={meetId} input={load.input} save={save} onRetry={() => void saver.current!.flush()} onReload={refresh} schedule={(id, doc) => saver.current!.schedule(id, doc)} />;
 }
 
-function TntScreen({ input, save, onRetry, onReload, schedule }: {
+function TntScreen({ meetId, input, save, onRetry, onReload, schedule }: {
+  meetId: string;
   input: TntInput;
   save: SaveState;
   onRetry: () => void;
@@ -84,13 +85,13 @@ function TntScreen({ input, save, onRetry, onReload, schedule }: {
   const [assignments, setAssignments] = useState<SynchroAssignments>(input.assignments);
   const assignRef = useRef(assignments);
   const [assignError, setAssignError] = useState('');
-  /** Store the host's session choice for a pair (`synchroSessions/main`). */
+  /** Store the host's session choice for a pair (`meets/{id}/synchroSessions/main`). */
   const assign = (pairId: string, toSessionId: string) => {
     const next = assignPair(assignRef.current, pairId, toSessionId);
     assignRef.current = next;
     setAssignments(next);
     setAssignError('');
-    saveSynchroAssignment(db, pairId, toSessionId).catch((e) => setAssignError(e instanceof Error ? e.message : 'Could not save the session choice.'));
+    saveSynchroAssignment(db, meetId, pairId, toSessionId).catch((e) => setAssignError(e instanceof Error ? e.message : 'Could not save the session choice.'));
   };
   const [docs, setDocs] = useState<Record<string, StoredDoc>>({});
   const [docError, setDocError] = useState('');
@@ -99,11 +100,11 @@ function TntScreen({ input, save, onRetry, onReload, schedule }: {
   useEffect(() => {
     if (!sessionId || hasDoc) return;
     let cancelled = false;
-    loadTntDoc(db, sessionId)
+    loadTntDoc(db, meetId, sessionId)
       .then((d) => { if (!cancelled) setDocs((prev) => ({ ...prev, [sessionId]: d })); })
       .catch((e) => { if (!cancelled) setDocError(e instanceof Error ? e.message : 'Could not load the saved squads.'); });
     return () => { cancelled = true; };
-  }, [sessionId, hasDoc]);
+  }, [meetId, sessionId, hasDoc]);
 
   // Keep the loaded copy current so switching sessions and back never shows an older plan.
   const remember = (id: string, doc: StoredTntDoc) => {

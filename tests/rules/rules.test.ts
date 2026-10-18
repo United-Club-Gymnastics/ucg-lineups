@@ -16,28 +16,38 @@ afterAll(() => env.cleanup());
 
 const TOKEN = 'tokenAAAAAAAAAAAAAAAAAA';
 const OTHER = 'tokenBBBBBBBBBBBBBBBBBB';
+const TOKEN2 = 'tokenCCCCCCCCCCCCCCCCCC'; // the same club's link for the second meet
 const LEVEL = 's1-green__L7';
 const past = () => Timestamp.fromMillis(Date.now() - 3600e3);
 const future = () => Timestamp.fromMillis(Date.now() + 3600e3);
 
-async function seed(deadline: Timestamp | null = null) {
+const M1 = 'nationals-ab12';
+const M2 = 'regionals-cd34';
+const m = (meet: string, path: string) => `meets/${meet}/${path}`;
+
+/** Two meets: M1 (the default under test) and M2. TOKEN/OTHER belong to M1; X2 belongs to M2. */
+async function seed(deadline: Timestamp | null = null, deadline2: Timestamp | null = null) {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
-    await setDoc(doc(db, 'settings/meet'), { meetName: 'Test Nationals', orderDeadline: deadline });
-    for (const [t, id] of [[TOKEN, 'club-a'], [OTHER, 'club-b']] as const) {
-      await setDoc(doc(db, `clubLinks/${t}`), {
-        clubId: id,
-        clubName: `Club ${id}`,
-        sessions: [],
-        levelKeys: id === 'club-a' ? [LEVEL, 's1-green__L8'] : ['s2-red__L7'],
-      });
+    await setDoc(doc(db, m(M1, 'settings/meet')), { meetName: 'Test Nationals', orderDeadline: deadline });
+    await setDoc(doc(db, m(M2, 'settings/meet')), { meetName: 'Test Regionals', orderDeadline: deadline2 });
+    await setDoc(doc(db, `meets/${M1}`), { name: 'Test Nationals' });
+    await setDoc(doc(db, `meets/${M2}`), { name: 'Test Regionals' });
+    for (const [t, id, meetId, keys] of [
+      [TOKEN, 'club-a', M1, [LEVEL, 's1-green__L8']],
+      [OTHER, 'club-b', M1, ['s2-red__L7']],
+      [TOKEN2, 'club-a', M2, [LEVEL]],
+    ] as const) {
+      await setDoc(doc(db, `clubLinks/${t}`), { meetId, clubId: id, clubName: `Club ${id}`, sessions: [], levelKeys: keys });
     }
-    await setDoc(doc(db, 'athletes/WAG_0001'), { first: 'Ann', last: 'Example' });
-    await setDoc(doc(db, 'clubs/club-a'), { name: 'Club A', token: TOKEN, emails: ['coach@example.com'] });
-    await setDoc(doc(db, 'squads/s1-green'), { squads: [] });
-    await setDoc(doc(db, 'sessions/s1-green'), { number: 1 });
-    await setDoc(doc(db, 'emailLog/x'), { sent: true });
+    for (const meet of [M1, M2]) {
+      await setDoc(doc(db, m(meet, 'athletes/WAG_0001')), { first: 'Ann', last: 'Example' });
+      await setDoc(doc(db, m(meet, 'clubs/club-a')), { name: 'Club A', token: TOKEN, emails: ['coach@example.com'] });
+      await setDoc(doc(db, m(meet, 'squads/s1-green')), { squads: [] });
+      await setDoc(doc(db, m(meet, 'sessions/s1-green')), { number: 1 });
+      await setDoc(doc(db, m(meet, 'emailLog/x')), { sent: true });
+    }
     await setDoc(doc(db, 'admins/helper@gmail.com'), { added: true });
   });
 }
@@ -70,13 +80,13 @@ describe('club links', () => {
 
   test('a wrong token reads nothing useful and cannot be created by the public', async () => {
     await assertSucceeds(getDoc(doc(publicDb(), 'clubLinks/nope'))); // get is open; the doc simply does not exist
-    await assertFails(setDoc(doc(publicDb(), 'clubLinks/mine'), { clubId: 'x', clubName: 'X', sessions: [], levelKeys: [LEVEL] }));
+    await assertFails(setDoc(doc(publicDb(), 'clubLinks/mine'), { meetId: M1, clubId: 'x', clubName: 'X', sessions: [], levelKeys: [LEVEL] }));
     await assertFails(updateDoc(doc(publicDb(), `clubLinks/${TOKEN}`), { levelKeys: ['anything'] }));
     await assertFails(deleteDoc(doc(publicDb(), `clubLinks/${TOKEN}`)));
   });
 
   test('admins can write links', async () => {
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'clubLinks/new'), { clubId: 'x', clubName: 'X', sessions: [], levelKeys: [] }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'clubLinks/new'), { meetId: M1, clubId: 'x', clubName: 'X', sessions: [], levelKeys: [] }));
   });
 });
 
@@ -125,13 +135,36 @@ describe('club orders', () => {
     await assertSucceeds(setDoc(orderRef(publicDb()), order()));
   });
 
+  test("a club is locked by ITS meet's deadline, not another meet's", async () => {
+    // M1 closed, M2 open: the M1 club is locked, the M2 link (same club, same level key) still writes.
+    await seed(past(), future());
+    await assertFails(setDoc(orderRef(publicDb(), TOKEN), order()));
+    await assertSucceeds(setDoc(orderRef(publicDb(), TOKEN2), order()));
+    // And the other way round: M1 open, M2 closed.
+    await seed(future(), past());
+    await assertSucceeds(setDoc(orderRef(publicDb(), TOKEN), order()));
+    await assertFails(setDoc(orderRef(publicDb(), TOKEN2), order()));
+    // Admins still write after a deadline.
+    await assertSucceeds(setDoc(orderRef(domainAdminDb(), TOKEN2), order()));
+  });
+
+  test('a link whose meet has no settings, or that has no meetId, cannot write (fails closed)', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'clubLinks/noMeetIdTokenAAAAAA'), { clubId: 'x', clubName: 'X', sessions: [], levelKeys: [LEVEL] });
+      await setDoc(doc(db, 'clubLinks/ghostMeetTokenAAAAA'), { meetId: 'ghost-0000', clubId: 'x', clubName: 'X', sessions: [], levelKeys: [LEVEL] });
+    });
+    await assertFails(setDoc(orderRef(publicDb(), 'noMeetIdTokenAAAAAA'), order()));
+    await assertFails(setDoc(orderRef(publicDb(), 'ghostMeetTokenAAAAA'), order()));
+  });
+
   test('no deadline set (null, missing or blank) leaves ordering open', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'settings/meet'), { meetName: 'x' });
+      await setDoc(doc(ctx.firestore(), m(M1, 'settings/meet')), { meetName: 'x' });
     });
     await assertSucceeds(setDoc(orderRef(publicDb()), order()));
     await env.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'settings/meet'), { orderDeadline: '' });
+      await setDoc(doc(ctx.firestore(), m(M1, 'settings/meet')), { orderDeadline: '' });
     });
     await assertSucceeds(setDoc(orderRef(publicDb()), order()));
   });
@@ -143,55 +176,77 @@ describe('club orders', () => {
 
 describe('settings', () => {
   beforeEach(() => seed());
+  const settings = (meet: string) => m(meet, 'settings/meet');
 
-  test('settings/meet is public to read, admin-only to write; other settings are admin-only', async () => {
-    await assertSucceeds(getDoc(doc(publicDb(), 'settings/meet')));
-    await assertFails(setDoc(doc(publicDb(), 'settings/meet'), { orderDeadline: null }));
-    await assertFails(setDoc(doc(outsiderDb(), 'settings/meet'), { orderDeadline: null }));
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { orderDeadline: future() }));
-    await assertFails(getDoc(doc(publicDb(), 'settings/other')));
+  test("a meet's settings/meet is public to read, admin-only to write; other settings and the meet document are admin-only", async () => {
+    await assertSucceeds(getDoc(doc(publicDb(), settings(M1))));
+    await assertSucceeds(getDoc(doc(publicDb(), settings(M2))));
+    await assertFails(setDoc(doc(publicDb(), settings(M1)), { orderDeadline: null }));
+    await assertFails(setDoc(doc(outsiderDb(), settings(M1)), { orderDeadline: null }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), settings(M1)), { orderDeadline: future() }));
+    await assertFails(getDoc(doc(publicDb(), m(M1, 'settings/other'))));
+    await assertFails(getDoc(doc(publicDb(), `meets/${M1}`)));
+    await assertFails(getDocs(collection(publicDb(), 'meets')));
+    await assertSucceeds(getDocs(collection(domainAdminDb(), 'meets')));
   });
 
-  test('step 6: the Exports screen merges meet name/date (admin only) and a T&T competition time into the session', async () => {
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { meetName: 'Test Nationals', meetDate: 'Oct 22', orderDeadline: future() }));
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { meetName: 'Test Nationals 2', meetDate: 'Oct 23' }, { merge: true }));
-    const snap = await getDoc(doc(publicDb(), 'settings/meet'));
+  test('the old top-level settings/meet is no longer public', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), 'settings/meet'), { meetName: 'old' }); });
+    await assertFails(getDoc(doc(publicDb(), 'settings/meet')));
+    await assertSucceeds(getDoc(doc(domainAdminDb(), 'settings/meet')));
+  });
+
+  test('admin creates and renames a meet; the public cannot', async () => {
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'meets/new-ef56'), { name: 'New', createdAt: serverTimestamp(), archived: false }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), 'meets/new-ef56'), { archived: true }, { merge: true }));
+    await assertFails(setDoc(doc(publicDb(), 'meets/evil-0000'), { name: 'x' }));
+    await assertFails(setDoc(doc(outsiderDb(), 'meets/evil-0000'), { name: 'x' }));
+  });
+
+  test('step 6: the Exports screen merges meet name/date (admin only) and a session schedule override', async () => {
+    await assertSucceeds(setDoc(doc(domainAdminDb(), settings(M1)), { meetName: 'Test Nationals', meetDate: 'Oct 22', orderDeadline: future() }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), settings(M1)), { meetName: 'Test Nationals 2', meetDate: 'Oct 23' }, { merge: true }));
+    const snap = await getDoc(doc(publicDb(), settings(M1)));
     expect(snap.data()).toMatchObject({ meetName: 'Test Nationals 2', meetDate: 'Oct 23' });
     expect(snap.data()!.orderDeadline).toBeTruthy(); // the merge left the deadline alone
-    await assertFails(setDoc(doc(publicDb(), 'settings/meet'), { meetName: 'x' }, { merge: true }));
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'sessions/s1-purple'), { competitionTime: 'Thursday 7:30 AM' }, { merge: true }));
-    await assertFails(setDoc(doc(publicDb(), 'sessions/s1-purple'), { competitionTime: 'x' }, { merge: true }));
+    expect((await getDoc(doc(publicDb(), settings(M2)))).data()!.meetName).toBe('Test Regionals'); // the other meet is untouched
+    await assertFails(setDoc(doc(publicDb(), settings(M1)), { meetName: 'x' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M1, 'sessions/s1-purple')), { scheduleOverride: { competition: 'Thursday 7:30 AM' } }, { merge: true }));
+    await assertFails(setDoc(doc(publicDb(), m(M1, 'sessions/s1-purple')), { scheduleOverride: { competition: 'x' } }, { merge: true }));
   });
 });
 
-describe('schedule and synchro session choices (catch-all admin rule, no rule change)', () => {
+describe('schedule and synchro session choices (admin-only under meets/**)', () => {
   beforeEach(() => seed());
 
   test('schedule rows merge by session number; overrides live on the session; the public can read the rows but write nothing', async () => {
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { schedule: { '1': { date: '2026-10-22', competition: '7:30 AM' } } }, { merge: true }));
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'settings/meet'), { schedule: { '2': { competition: '1:00 PM' } } }, { merge: true }));
-    const snap = await getDoc(doc(publicDb(), 'settings/meet'));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M1, 'settings/meet')), { schedule: { '1': { date: '2026-10-22', competition: '7:30 AM' } } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M1, 'settings/meet')), { schedule: { '2': { competition: '1:00 PM' } } }, { merge: true }));
+    const snap = await getDoc(doc(publicDb(), m(M1, 'settings/meet')));
     expect(Object.keys(snap.data()!.schedule).sort()).toEqual(['1', '2']);
-    await assertFails(setDoc(doc(publicDb(), 'settings/meet'), { schedule: { '1': { competition: 'x' } } }, { merge: true }));
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'sessions/s1-purple'), { scheduleOverride: { date: '', competition: '9:00 AM' } }, { merge: true }));
-    await assertFails(setDoc(doc(publicDb(), 'sessions/s1-purple'), { scheduleOverride: { competition: 'x' } }, { merge: true }));
-    await assertFails(getDoc(doc(publicDb(), 'sessions/s1-purple')));
+    await assertFails(setDoc(doc(publicDb(), m(M1, 'settings/meet')), { schedule: { '1': { competition: 'x' } } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M1, 'sessions/s1-purple')), { scheduleOverride: { date: '', competition: '9:00 AM' } }, { merge: true }));
+    await assertFails(setDoc(doc(publicDb(), m(M1, 'sessions/s1-purple')), { scheduleOverride: { competition: 'x' } }, { merge: true }));
+    await assertFails(getDoc(doc(publicDb(), m(M1, 'sessions/s1-purple'))));
   });
 
   test('synchroSessions/main: admin only; one pair at a time with a merge write leaves the others alone and creates the doc', async () => {
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'synchroSessions/main'), { assignments: { 'pair.1': 's1-purple' } }, { merge: true }));
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'synchroSessions/main'), { assignments: { pair2: 's2-purple' } }, { merge: true }));
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'synchroSessions/main'), { assignments: { 'pair.1': deleteField() } }, { merge: true }));
-    const snap = await getDoc(doc(domainAdminDb(), 'synchroSessions/main'));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M1, 'synchroSessions/main')), { assignments: { 'pair.1': 's1-purple' } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M1, 'synchroSessions/main')), { assignments: { pair2: 's2-purple' } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M1, 'synchroSessions/main')), { assignments: { 'pair.1': deleteField() } }, { merge: true }));
+    const snap = await getDoc(doc(domainAdminDb(), m(M1, 'synchroSessions/main')));
     expect(snap.data()!.assignments).toEqual({ pair2: 's2-purple' });
-    await assertFails(getDoc(doc(publicDb(), 'synchroSessions/main')));
-    await assertFails(setDoc(doc(outsiderDb(), 'synchroSessions/main'), { assignments: {} }, { merge: true }));
+    await assertFails(getDoc(doc(publicDb(), m(M1, 'synchroSessions/main'))));
+    await assertFails(setDoc(doc(outsiderDb(), m(M1, 'synchroSessions/main')), { assignments: {} }, { merge: true }));
   });
 });
 
-describe('admin-only collections', () => {
+describe('admin-only collections (all under meets/{meetId}/)', () => {
   beforeEach(() => seed());
-  const PATHS = ['athletes/WAG_0001', 'clubs/club-a', 'sessions/s1-green', 'squads/s1-green', 'emailLog/x', 'emailSettings/main', 'admins/helper@gmail.com'];
+  const PATHS = [
+    ...[M1, M2].flatMap((meet) => ['athletes/WAG_0001', 'clubs/club-a', 'sessions/s1-green', 'squads/s1-green', 'emailLog/x', 'emailSettings/main'].map((p) => m(meet, p))),
+    'admins/helper@gmail.com',
+  ];
 
   test('public and outside accounts cannot read or write', async () => {
     for (const p of PATHS) {
@@ -199,21 +254,42 @@ describe('admin-only collections', () => {
       await assertFails(getDoc(doc(outsiderDb(), p)));
       await assertFails(setDoc(doc(outsiderDb(), p), { x: 1 }));
     }
-    await assertFails(getDocs(collection(outsiderDb(), 'athletes')));
+    await assertFails(getDocs(collection(outsiderDb(), m(M1, 'athletes'))));
+    await assertFails(getDocs(collection(publicDb(), m(M2, 'clubs'))));
   });
 
-  test('a verified @unitedclubgymnastics.org account is an admin (case-insensitive)', async () => {
+  test('a non-admin cannot read another meet\'s athletes, even with a club link into one meet', async () => {
+    // Holding a club token (a link in M1) grants nothing under meets/**.
+    await assertFails(getDoc(doc(publicDb(), m(M1, 'athletes/WAG_0001'))));
+    await assertFails(getDoc(doc(publicDb(), m(M2, 'athletes/WAG_0001'))));
+    await assertFails(getDocs(collection(outsiderDb(), m(M2, 'athletes'))));
+  });
+
+  test('the old top-level paths are denied to everyone but admins (only clubLinks and clubOrders stay open to a token)', async () => {
+    const OLD = ['athletes/WAG_0001', 'clubs/club-a', 'sessions/s1-green', 'squads/s1-green', 'emailLog/x', 'synchroSessions/main', 'settings/meet'];
+    await env.withSecurityRulesDisabled(async (ctx) => { for (const p of OLD) await setDoc(doc(ctx.firestore(), p), { x: 1 }); });
+    for (const p of OLD) {
+      await assertFails(getDoc(doc(publicDb(), p)));
+      await assertFails(getDoc(doc(outsiderDb(), p)));
+      await assertFails(setDoc(doc(publicDb(), p), { x: 2 }));
+    }
+    await assertSucceeds(getDoc(doc(publicDb(), `clubLinks/${TOKEN}`)));
+    await assertSucceeds(getDoc(orderRef(publicDb())));
+  });
+
+  test('a verified @unitedclubgymnastics.org account is an admin of every meet (case-insensitive)', async () => {
     for (const p of PATHS) await assertSucceeds(getDoc(doc(domainAdminDb(), p)));
-    await assertSucceeds(setDoc(doc(domainAdminDb(), 'athletes/WAG_0002'), { first: 'Bea' }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M1, 'athletes/WAG_0002')), { first: 'Bea' }));
+    await assertSucceeds(setDoc(doc(domainAdminDb(), m(M2, 'athletes/WAG_0002')), { first: 'Cy' }));
   });
 
   test('unverified or look-alike domains are not admins', async () => {
-    await assertFails(getDoc(doc(unverifiedDomainDb(), 'athletes/WAG_0001')));
-    await assertFails(getDoc(doc(lookalikeDb(), 'athletes/WAG_0001')));
+    await assertFails(getDoc(doc(unverifiedDomainDb(), m(M1, 'athletes/WAG_0001'))));
+    await assertFails(getDoc(doc(lookalikeDb(), m(M1, 'athletes/WAG_0001'))));
   });
 
   test('an admins/{email} document grants admin to an outside address', async () => {
-    await assertSucceeds(getDoc(doc(listedAdminDb(), 'athletes/WAG_0001')));
+    await assertSucceeds(getDoc(doc(listedAdminDb(), m(M1, 'athletes/WAG_0001'))));
     await assertSucceeds(setDoc(doc(listedAdminDb(), 'admins/another@gmail.com'), { added: true }));
     await assertFails(setDoc(doc(outsiderDb(), 'admins/someone@gmail.com'), { added: true }));
   });

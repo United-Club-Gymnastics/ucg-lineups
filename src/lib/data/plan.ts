@@ -1,6 +1,7 @@
 import { diffAthletes, type ImportDiff, type StoredAthlete } from '../import/diff';
 import { assignTokens, newClubToken } from '../import/token';
 import { DEFAULT_GYM_ORDER, type ImportModel } from '../import/types';
+import { meetPaths } from './meet-paths';
 
 export interface StoredClub {
   id: string;
@@ -41,17 +42,19 @@ export interface ImportPlan {
 export function planImport(
   model: ImportModel,
   existing: { athletes: StoredAthlete[]; clubs: StoredClub[]; hasSettings: boolean },
+  meetId: string,
   makeToken: () => string = newClubToken,
 ): ImportPlan {
   const diff = diffAthletes(existing.athletes, model.athletes);
+  const p = meetPaths(meetId);
   const ops: WriteOp[] = [];
 
-  for (const a of diff.added) ops.push({ path: `athletes/${a.id}`, data: { ...a, removed: false }, merge: false });
-  for (const c of diff.changed) ops.push({ path: `athletes/${c.athlete.id}`, data: { ...c.athlete, removed: false }, merge: false });
-  for (const id of diff.removed) ops.push({ path: `athletes/${id}`, data: { removed: true }, merge: true });
+  for (const a of diff.added) ops.push({ path: p.athlete(a.id), data: { ...a, removed: false }, merge: false });
+  for (const c of diff.changed) ops.push({ path: p.athlete(c.athlete.id), data: { ...c.athlete, removed: false }, merge: false });
+  for (const id of diff.removed) ops.push({ path: p.athlete(id), data: { removed: true }, merge: true });
 
   for (const s of model.sessions) {
-    ops.push({ path: `sessions/${s.id}`, data: { number: s.number, gym: s.gym, discipline: s.discipline, levelCodes: s.levelCodes }, merge: true });
+    ops.push({ path: p.session(s.id), data: { number: s.number, gym: s.gym, discipline: s.discipline, levelCodes: s.levelCodes }, merge: true });
   }
 
   const prev = new Map(existing.clubs.map((c) => [c.id, c]));
@@ -65,10 +68,10 @@ export function planImport(
     const old = prev.get(c.id);
     if (!old) newClubs++;
     const emails = c.emails.length ? c.emails : (old?.emails ?? []);
-    ops.push({ path: `clubs/${c.id}`, data: { name: c.name, emails, token: tokens[c.id] }, merge: true });
+    ops.push({ path: p.club(c.id), data: { name: c.name, emails, token: tokens[c.id] }, merge: true });
   }
 
-  if (!existing.hasSettings) ops.push({ path: 'settings/meet', data: { ...DEFAULT_MEET_SETTINGS }, merge: true });
+  if (!existing.hasSettings) ops.push({ path: p.settings, data: { ...DEFAULT_MEET_SETTINGS }, merge: true });
 
   return { diff, ops, newClubs };
 }

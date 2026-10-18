@@ -9,14 +9,14 @@ import { resolveLevel, type ArtisticDiscipline, type LevelOrder } from '../lib/c
 import { levelStatus, sessionStatus, STATUS_LABEL, type SessionStatus } from '../lib/club-status';
 import { APPARATUS } from '../lib/apparatus';
 import { groupLetter } from '../lib/competition-order';
-import { loadClubLink, loadLevelOrders, loadOrderDeadline, saveLevelOrder } from '../lib/data/club-store';
+import { loadClubLink, loadLevelOrders, loadPublicMeet, saveLevelOrder } from '../lib/data/club-store';
 import './club.css';
 
 type Load =
   | { kind: 'loading' }
   | { kind: 'invalid' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; link: ClubLinkDoc; deadline: Date | null; orders: Record<string, LevelOrder> };
+  | { kind: 'ready'; link: ClubLinkDoc; deadline: Date | null; meetName: string; orders: Record<string, LevelOrder> };
 
 const TONE: Record<SessionStatus, 'ok' | 'warn' | 'err' | 'info' | 'navy'> = {
   split: 'err', default: 'warn', custom: 'ok', none: 'info', tnt: 'navy',
@@ -35,9 +35,10 @@ export default function ClubPage() {
       try {
         const link = await loadClubLink(db, token);
         if (cancelled) return;
-        if (!link) { setLoad({ kind: 'invalid' }); return; }
-        const [deadline, orders] = await Promise.all([loadOrderDeadline(db), loadLevelOrders(db, token)]);
-        if (!cancelled) setLoad({ kind: 'ready', link, deadline, orders });
+        // A link without a meetId predates meets: treat it as not valid (UCG sends a fresh one).
+        if (!link || !link.meetId) { setLoad({ kind: 'invalid' }); return; }
+        const [meet, orders] = await Promise.all([loadPublicMeet(db, link.meetId), loadLevelOrders(db, token)]);
+        if (!cancelled) setLoad({ kind: 'ready', link, deadline: meet.deadline, meetName: meet.name, orders });
       } catch (e) {
         if (!cancelled) setLoad({ kind: 'error', message: e instanceof Error ? e.message : 'Could not load this page.' });
       }
@@ -63,10 +64,10 @@ export default function ClubPage() {
       </main>
     );
   }
-  return <ClubOrders key={token} token={token} link={load.link} deadline={load.deadline} initialOrders={load.orders} />;
+  return <ClubOrders key={token} token={token} link={load.link} deadline={load.deadline} meetName={load.meetName} initialOrders={load.orders} />;
 }
 
-function ClubOrders({ token, link, deadline, initialOrders }: { token: string; link: ClubLinkDoc; deadline: Date | null; initialOrders: Record<string, LevelOrder> }) {
+function ClubOrders({ token, link, deadline, meetName, initialOrders }: { token: string; link: ClubLinkDoc; deadline: Date | null; meetName: string; initialOrders: Record<string, LevelOrder> }) {
   const [orders, setOrders] = useState(initialOrders);
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
   const [sessionId, setSessionId] = useState(() => link.sessions.find((s) => s.discipline !== 'TNT')?.sessionId ?? '');
@@ -135,7 +136,7 @@ function ClubOrders({ token, link, deadline, initialOrders }: { token: string; l
   return (
     <main className="club">
       <header className="club-head">
-        <p className="club-eyebrow">UCG Nationals</p>
+        <p className="club-eyebrow">{meetName || 'UCG'}</p>
         <h1 className="display">{link.clubName}</h1>
         <p className="club-lead">
           Set the order your athletes compete in. Every change saves by itself, so there is nothing to submit.
