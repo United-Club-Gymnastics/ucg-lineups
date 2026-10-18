@@ -1,5 +1,5 @@
 // Adapted from ucg-platform@e57754a tests/components/competition-order-groups.test.tsx — keep in sync by hand
-// Changed: the card is now controlled (athletes/groups/sections/onChange props), so a small harness holds the
+// Changed: the card is now controlled (and one DndContext spans all groups; see cross-group-drag.test.tsx) (athletes/groups/sections/onChange props), so a small harness holds the
 // state and records every onChange. Store/Supabase/lock/toast tests are dropped (those features are gone);
 // added: read-only mode, apparatus filter, A-Z default, membershipChanged flag. Drag itself is not simulated (jsdom has no layout).
 import { describe, it, expect, vi } from 'vitest';
@@ -37,7 +37,7 @@ function Harness({
 }
 
 describe('CompetitionOrderCard — groups', () => {
-  it('seeds 14 WAG athletes into two even A-Z groups, one column per apparatus in each', () => {
+  it('seeds 14 WAG athletes into two even A-Z groups, the first apparatus shown in each', () => {
     render(<Harness ath={athletes()} />);
     expect(screen.getByText('Groups ready')).toBeTruthy();
     const a = screen.getByTestId('co-group-0');
@@ -46,7 +46,7 @@ describe('CompetitionOrderCard — groups', () => {
     expect(within(b).getByText('busiest event 7 / 12')).toBeTruthy();
     expect(within(a).getByText('7 athletes')).toBeTruthy();
     expect(within(a).getByText('Vault')).toBeTruthy();
-    expect(within(a).getByText('Uneven Bars')).toBeTruthy();
+    expect(within(a).queryByText('Uneven Bars')).toBeNull(); // one apparatus at a time (the page's event tabs)
     const vtA = within(a).getByTestId('co-0-VT').textContent ?? '';
     for (let i = 0; i < 7; i++) expect(vtA).toContain(nameOfId(`W${i}`));
     for (let i = 7; i < 14; i++) expect(vtA).not.toContain(nameOfId(`W${i}`));
@@ -129,16 +129,16 @@ describe('CompetitionOrderCard — groups', () => {
     expect(within(screen.getByTestId('co-group-0')).getByText('busiest event 7 / 12')).toBeTruthy();
   });
 
-  it('apparatus columns wrap in a grid, with no horizontal scroll container', () => {
+  it('has no horizontal scroll container', () => {
     const { container } = render(<Harness ath={athletes()} />);
-    expect(container.querySelector('.co-apparatus-grid')).toBeTruthy();
     for (const el of container.querySelectorAll<HTMLElement>('*')) expect(el.style.overflowX).not.toBe('auto');
   });
 
-  it('the apparatus prop shows just that column', () => {
+  it('the apparatus prop picks the shown apparatus', () => {
     render(<Harness ath={athletes()} apparatus="UB" />);
     const a = screen.getByTestId('co-group-0');
     expect(within(a).getByText('Uneven Bars')).toBeTruthy();
     expect(within(a).queryByText('Vault')).toBeNull();
+    expect(screen.getByTestId('co-0-UB')).toBeTruthy();
   });
 });

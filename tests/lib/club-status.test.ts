@@ -89,3 +89,39 @@ describe('sessionStatus', () => {
     expect(sessionStatus('TNT', ['split'])).toBe('tnt');
   });
 });
+
+import { dropAthlete } from '../../src/lib/club-order-model';
+
+describe('dropAthlete', () => {
+  const groups = [['a', 'b', 'c'], ['d', 'e']];
+  const sections = { VT: [['a', 'b', 'c'], ['d', 'e']], UB: [['c', 'b', 'a'], ['e', 'd']] };
+  const on = () => ['a', 'b', 'c', 'd', 'e'];
+
+  it('cross-group drop index: lands before the hovered athlete (downward and upward)', () => {
+    expect(dropAthlete(groups, sections, on, 'VT', 'a', { section: 1, overId: 'e' })!.sections.VT[1]).toEqual(['d', 'a', 'e']);
+    expect(dropAthlete(groups, sections, on, 'VT', 'e', { section: 0, overId: 'a' })!.sections.VT[0]).toEqual(['e', 'a', 'b', 'c']);
+  });
+
+  it('onto the group appends; into an empty group works', () => {
+    expect(dropAthlete(groups, sections, on, 'VT', 'a', { section: 1, overId: null })!.sections.VT[1]).toEqual(['d', 'e', 'a']);
+    const r = dropAthlete([['a', 'b'], []], { VT: [['a', 'b'], []] }, () => ['a', 'b'], 'VT', 'b', { section: 1, overId: null })!;
+    expect(r.groups).toEqual([['a'], ['b']]);
+    expect(r.sections.VT).toEqual([['a'], ['b']]);
+  });
+
+  it('newcomer goes first on the other apparatus and flags a membership change', () => {
+    const r = dropAthlete(groups, sections, on, 'VT', 'c', { section: 1, overId: 'e' })!;
+    expect(r.membershipChanged).toBe(true);
+    expect(r.groups).toEqual([['a', 'b'], ['c', 'd', 'e']]);
+    expect(r.sections.UB).toEqual([['b', 'a'], ['c', 'e', 'd']]);
+  });
+
+  it('same-group drop is a pure reorder; a no-op or unknown id returns null', () => {
+    const r = dropAthlete(groups, sections, on, 'VT', 'a', { section: 0, overId: 'c' })!;
+    expect(r.membershipChanged).toBe(false);
+    expect(r.sections.VT[0]).toEqual(['b', 'c', 'a']);
+    expect(r.groups).toBe(groups);
+    expect(dropAthlete(groups, sections, on, 'VT', 'a', { section: 0, overId: 'a' })).toBeNull();
+    expect(dropAthlete(groups, sections, on, 'VT', 'zz', { section: 0, overId: null })).toBeNull();
+  });
+});

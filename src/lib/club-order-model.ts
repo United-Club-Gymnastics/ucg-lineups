@@ -3,7 +3,7 @@
 import { APPARATUS } from './apparatus';
 import { compareByName, type LinkAthlete } from './club-links';
 import {
-  apparatusLookup, busiestApparatusCount, reconcileGroups, sectionCap, sectionsFromGroups, splitEvenly,
+  apparatusLookup, busiestApparatusCount, computeDropIndex, moveAthleteToGroup, moveInSections, reconcileGroups, sectionCap, sectionsFromGroups, splitEvenly,
   type ApparatusOf,
 } from './competition-order';
 
@@ -81,4 +81,41 @@ export function resolveLevel(discipline: ArtisticDiscipline, athletes: LinkAthle
     splitDecided: saved?.splitDecided === true,
     defaultGroups,
   };
+}
+
+export interface DropResult {
+  groups: string[][];
+  sections: Record<string, string[][]>;
+  membershipChanged: boolean;
+}
+
+/**
+ * Apply a drag-drop on apparatus `code`. `target.section` is the group the pointer ended in; `target.overId`
+ * is the athlete dropped onto, or null for the group itself (header / empty area: append).
+ * Same group: reorder that list only. Other group: the athlete lands exactly there on `code`, and goes FIRST
+ * in the new group on every other apparatus (`moveAthleteToGroup` + `sectionsFromGroups`). Returns null when
+ * nothing changes. Caps are not enforced here (an over-cap group is flagged, as with the move buttons).
+ */
+export function dropAthlete(
+  groups: string[][],
+  sections: Record<string, string[][]>,
+  regIdsOn: (code: string) => string[],
+  code: string,
+  id: string,
+  target: { section: number; overId: string | null },
+): DropResult | null {
+  const secs = sections[code] ?? [];
+  const from = secs.findIndex((s) => s.includes(id));
+  const to = target.section;
+  if (from < 0 || to < 0 || to >= secs.length) return null;
+  const at = computeDropIndex(secs, id, to, target.overId ?? '', target.overId === null);
+  const moved = moveInSections(secs, id, to, at);
+  if (from === to) {
+    if (moved[to].join('\u0000') === secs[to].join('\u0000')) return null;
+    return { groups, sections: { ...sections, [code]: moved }, membershipChanged: false };
+  }
+  const nextGroups = moveAthleteToGroup(groups, id, to);
+  const next: Record<string, string[][]> = {};
+  for (const c of Object.keys(sections)) next[c] = c === code ? moved : sectionsFromGroups(nextGroups, regIdsOn(c), sections[c]);
+  return { groups: nextGroups, sections: next, membershipChanged: true };
 }
