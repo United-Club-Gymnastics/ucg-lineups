@@ -21,7 +21,8 @@ export const MAX_BATCH = 450;
 export const DEFAULT_MEET_SETTINGS = {
   meetName: '',
   meetDate: '',
-  orderDeadline: '',
+  /** null = no deadline; the club-order rules treat any non-timestamp as open. */
+  orderDeadline: null as Date | null,
   gymOrder: DEFAULT_GYM_ORDER,
 };
 

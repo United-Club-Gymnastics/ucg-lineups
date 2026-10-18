@@ -1,9 +1,74 @@
 rules_version = '2';
-// Deny everything for now. Real rules (admin domain, club tokens, order deadline) come in a later step.
+
+// UCG Lineups. Deploy by hand, only with Julia's go-ahead (see CLAUDE.md).
+// Admin check mirrors nationals-tools: a verified @unitedclubgymnastics.org email, or an
+// admins/{lowercased email} document. Everything not listed below is denied.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email.lower().matches('.*@unitedclubgymnastics[.]org')
+            || exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())));
+    }
+
+    match /admins/{email} {
+      allow read, write: if isAdmin();
+    }
+
+    // Meet settings: anyone may read (the club page needs the order deadline); only admins write.
+    match /settings/meet {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // One document per club, named by the club's secret token. The token is the only credential:
+    // `get` is open, `list` is not, so links cannot be enumerated. Written by admins only.
+    // Holds names and roster per session (no emails, birth dates or bibs).
+    match /clubLinks/{token} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    function linkPath(token) {
+      return /databases/$(database)/documents/clubLinks/$(token);
+    }
+
+    // The deadline is a timestamp in settings/meet.orderDeadline; null, missing or any
+    // non-timestamp value means "no deadline".
+    function orderingOpen() {
+      let s = get(/databases/$(database)/documents/settings/meet).data;
+      return !('orderDeadline' in s) || !(s.orderDeadline is timestamp) || request.time < s.orderDeadline;
+    }
+
+    function validOrder() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['groups', 'sections', 'splitDecided', 'updatedAt'])
+        && d.keys().hasAll(['groups', 'sections', 'splitDecided', 'updatedAt'])
+        && d.groups is list && d.groups.size() <= 30
+        && d.sections is map && d.sections.keys().size() <= 8
+        && d.splitDecided is bool
+        && d.updatedAt == request.time;
+    }
+
+    // clubOrders/{token}/levels/{levelKey}: groups: [{ ids }], sections: { <apparatus>: [{ ids }] },
+    // splitDecided, updatedAt. Whoever holds the token may write the levels the admin listed
+    // in that club's link, until the order deadline.
+    match /clubOrders/{token}/levels/{levelKey} {
+      allow read: if isAdmin() || exists(linkPath(token));
+      allow create, update: if isAdmin()
+        || (exists(linkPath(token))
+            && levelKey in get(linkPath(token)).data.levelKeys
+            && orderingOpen()
+            && validOrder());
+      allow delete: if isAdmin();
+    }
+
+    // athletes, clubs, sessions, squads, emailLog, emailSettings and everything else: admins only.
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
   }
 }

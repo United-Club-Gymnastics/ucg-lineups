@@ -14,6 +14,7 @@ vi.mock('../../src/lib/firebase', () => ({
 vi.mock('../../src/lib/data/store', () => ({
   loadStored: vi.fn(async () => ({ athletes: [], clubs: [], hasSettings: false })),
   applyImport: vi.fn(),
+  publishClubLinks: vi.fn(),
 }));
 
 import AdminLanding from '../../src/pages/AdminLanding';

@@ -24,11 +24,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
       - run: npm ci
       - name: Lint
         run: npm run lint
       - name: Unit tests
         run: npm test
+      - name: Firestore rules tests (emulator)
+        run: npm run test:rules
       - name: Build
         run: npm run build
       - uses: actions/configure-pages@v6

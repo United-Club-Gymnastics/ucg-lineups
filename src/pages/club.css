@@ -1,0 +1,32 @@
+/* Club page. Navy ink on light surfaces; coral/pale accents only as fills behind navy text. */
+.club { max-width: 960px; margin: 0 auto; padding: 16px; min-width: 0; }
+.club-head h1 { font-size: 44px; margin: 0 0 8px; overflow-wrap: anywhere; }
+.club-eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--navy-700); }
+.club-lead { margin: 0 0 8px; max-width: 60ch; }
+.club-save { margin: 4px 0 12px; font-size: 13.5px; font-weight: 600; color: var(--ink); min-height: 1.5em; }
+.club-note { margin: 8px 0; font-size: 13.5px; color: var(--ink); }
+.club-banner { border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; margin: 8px 0 12px; color: var(--ink); }
+.club-banner p { margin: 0 0 8px; }
+.club-banner.warn { background: var(--gold-100); border: 1px solid var(--gold); }
+.club-banner.err { background: var(--coral-100); border: 1px solid var(--coral-500); }
+.club-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); min-width: 0; }
+.club-sessions { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.club-sessions li { min-width: 0; max-width: 100%; }
+.club-chip { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; text-align: left; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 14px; padding: 8px 12px; font-size: 14px; max-width: 100%; }
+button.club-chip { cursor: pointer; }
+button.club-chip:hover { border-color: var(--navy-600); }
+button.club-chip.active { border-color: var(--navy-800); box-shadow: inset 0 0 0 1px var(--navy-800); background: var(--ice-100); }
+button.club-chip:focus-visible, .club .tab:focus-visible, .club .btn:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }
+.club-chip.static { background: var(--ice-100); }
+.club-chip-label { font-weight: 700; }
+.club-chip-meta { font-size: 12px; color: var(--ink-soft); font-weight: 600; }
+.club .tab { color: var(--ink); }
+.club .tab.active { color: var(--white); }
+.club .tabs-pill { margin: 8px 0 12px; }
+.club-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--coral-500); border: 1px solid var(--navy-800); margin-left: 6px; }
+.club .tab.active .club-dot { border-color: var(--white); }
+@media (max-width: 480px) {
+  .club { padding: 12px; }
+  .club-head h1 { font-size: 34px; }
+  .club-card { padding: 10px; }
+}
