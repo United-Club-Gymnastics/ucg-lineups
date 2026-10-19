@@ -6,7 +6,7 @@ import type { MeetInfo } from '../lib/data/meet-store';
 type Dialog = null | 'new' | 'rename' | 'archive';
 
 /** Meet dropdown plus New / Rename / Archive. Presentational: the page owns the data. */
-export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, onRename, onArchive, onBringInData }: {
+export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, onRename, onArchive, onBringInData, onUpgradeLinks }: {
   /** Visible (not archived) meets, newest first. */
   meets: MeetInfo[];
   selectedId: string;
@@ -16,6 +16,8 @@ export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, on
   onArchive: () => Promise<void>;
   /** Given only when earlier (pre-meets) data still exists: shows "Bring in earlier data". */
   onBringInData?: () => void;
+  /** Given only when club links in the old per-meet shape exist: shows "Upgrade club links". */
+  onUpgradeLinks?: () => void;
 }) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [name, setName] = useState('');
@@ -45,6 +47,7 @@ export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, on
         <button className="btn ghost small" type="button" onClick={() => open('rename')}>Rename</button>
         <button className="btn ghost small" type="button" onClick={() => open('archive')}>Archive</button>
         {onBringInData && <button className="btn ghost small" type="button" onClick={onBringInData}>Bring in earlier data</button>}
+        {onUpgradeLinks && <button className="btn ghost small" type="button" onClick={onUpgradeLinks}>Upgrade club links</button>}
       </div>
 
       {(dialog === 'new' || dialog === 'rename') && (
@@ -63,7 +66,7 @@ export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, on
       )}
       {dialog === 'archive' && (
         <Modal title="Archive this meet?" onClose={() => setDialog(null)}>
-          <p>{current?.name} is hidden from the list. Nothing is deleted, and its club links keep working.</p>
+          <p>{current?.name} is hidden from the list and from the clubs&rsquo; meet switcher (they can no longer change its orders). Nothing is deleted: the clubs&rsquo; saved orders stay where they are.</p>
           {error && <div className="adm-banner err" role="alert">{error}</div>}
           <div className="adm-actions">
             <button className="btn ghost" type="button" onClick={() => setDialog(null)}>Cancel</button>

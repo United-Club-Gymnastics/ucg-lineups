@@ -27,7 +27,7 @@ export async function loadSquadsInput(db: Firestore, meetId: string): Promise<Sq
   const [sessions, athletes, clubs, gymOrder] = await Promise.all([loadSessions(db, meetId), loadAthletesForDisplay(db, meetId), loadClubs(db, meetId), loadGymOrder(db, meetId)]);
   const ordersByClub: Record<string, Record<string, LevelOrder>> = {};
   await Promise.all(clubs.filter((c) => c.token).map(async (c) => {
-    ordersByClub[c.id] = await loadLevelOrders(db, c.token);
+    ordersByClub[c.id] = await loadLevelOrders(db, c.token, meetId);
   }));
   return { sessions, athletes, gymOrder, ordersByClub };
 }

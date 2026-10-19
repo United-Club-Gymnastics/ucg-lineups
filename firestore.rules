@@ -25,24 +25,35 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // One document per club, named by the club's secret token. The token is the only credential:
+    // One document per club, named by the club's secret token (ONE link across all meets). The token is the only credential:
     // `get` is open, `list` is not, so links cannot be enumerated. Written by admins only.
-    // Holds names and roster per session (no emails, birth dates or bibs) and the meetId it belongs to.
+    // { clubId, clubName, meets: { <meetId>: { meetName, createdAt, sessions, levelKeys } } }: names and roster per session
+    // (no emails, birth dates or bibs) for each meet the club is in. An archived meet is removed from `meets`.
     match /clubLinks/{token} {
       allow get: if true;
       allow list: if isAdmin();
       allow write: if isAdmin();
     }
 
+    // clubTokens/{clubId} = { token }: which token is the club's. Admin only (it falls to the catch-all below, listed here so the
+    // intent is explicit): a club must not be able to read the table of everyone's tokens.
+    match /clubTokens/{clubId} {
+      allow read, write: if isAdmin();
+    }
+
     function linkPath(token) {
       return /databases/$(database)/documents/clubLinks/$(token);
     }
 
-    // The deadline is a timestamp in meets/{link.meetId}/settings/meet.orderDeadline: the meet the
-    // link belongs to, never another one. Null, missing or any non-timestamp value means "no deadline".
-    // A link with no meetId, or a meet with no settings document, makes the get() fail, so writes are refused.
-    function orderingOpen(token) {
-      let meetId = get(linkPath(token)).data.meetId;
+    // The club may order meet `meetId` only if the link lists it (it is not archived or unknown) and may write only the level
+    // keys that meet lists.
+    function meetInLink(token, meetId) {
+      return 'meets' in get(linkPath(token)).data && meetId in get(linkPath(token)).data.meets;
+    }
+
+    // The deadline is a timestamp in meets/{meetId}/settings/meet.orderDeadline: that meet's own, never another one. Null, missing
+    // or any non-timestamp value means "no deadline". A meet with no settings document makes the get() fail, so writes are refused.
+    function orderingOpen(meetId) {
       let s = get(/databases/$(database)/documents/meets/$(meetId)/settings/meet).data;
       return !('orderDeadline' in s) || !(s.orderDeadline is timestamp) || request.time < s.orderDeadline;
     }
@@ -57,17 +68,23 @@ service cloud.firestore {
         && d.updatedAt == request.time;
     }
 
-    // clubOrders/{token}/levels/{levelKey}: groups: [{ ids }], sections: { <apparatus>: [{ ids }] },
-    // splitDecided, updatedAt. Whoever holds the token may write the levels the admin listed
-    // in that club's link, until the order deadline.
-    match /clubOrders/{token}/levels/{levelKey} {
+    // clubOrders/{token}/meets/{meetId}/levels/{levelKey}: groups: [{ ids }], sections: { <apparatus>: [{ ids }] }, splitDecided,
+    // updatedAt. Whoever holds the token may write the levels the link lists for that meet, until THAT meet's order deadline.
+    match /clubOrders/{token}/meets/{meetId}/levels/{levelKey} {
       allow read: if isAdmin() || exists(linkPath(token));
       allow create, update: if isAdmin()
         || (exists(linkPath(token))
-            && levelKey in get(linkPath(token)).data.levelKeys
-            && orderingOpen(token)
+            && meetInLink(token, meetId)
+            && levelKey in get(linkPath(token)).data.meets[meetId].levelKeys
+            && orderingOpen(meetId)
             && validOrder());
       allow delete: if isAdmin();
+    }
+
+    // The old per-meet-token path (before one link per club): read-only for clubs so a migration can read old orders; only admins write.
+    match /clubOrders/{token}/levels/{levelKey} {
+      allow read: if isAdmin() || exists(linkPath(token));
+      allow write: if isAdmin();
     }
 
     // meets/** (athletes, clubs, sessions, squads, synchroSessions, emailLog, emailSettings) and everything

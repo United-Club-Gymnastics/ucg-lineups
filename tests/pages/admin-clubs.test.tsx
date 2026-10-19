@@ -12,6 +12,13 @@ const store = vi.hoisted(() => ({
   loadClubsScreenData: vi.fn(), saveClubEmails: vi.fn(), saveOrderDeadline: vi.fn(), saveEmailTemplates: vi.fn(), addEmailLog: vi.fn(), regenerateClubLink: vi.fn(),
 }));
 vi.mock('../../src/lib/data/email-store', () => store);
+const copy = vi.hoisted(() => ({
+  listMeets: vi.fn(),
+  loadOrderCopyInput: vi.fn(async () => []),
+  applyOrderCopy: vi.fn(),
+}));
+vi.mock('../../src/lib/data/meet-store', () => ({ listMeets: copy.listMeets }));
+vi.mock('../../src/lib/data/orders-copy-store', () => ({ loadOrderCopyInput: copy.loadOrderCopyInput, applyOrderCopy: copy.applyOrderCopy }));
 
 import AdminClubs from '../../src/pages/AdminClubs';
 import { choose } from '../helpers/select';
@@ -97,7 +104,7 @@ describe('Clubs table', () => {
     await user.click(screen.getByRole('button', { name: 'Regenerate link for Alpha Gymnastics' }));
     const dlg = screen.getByRole('dialog');
     expect(dlg).toHaveTextContent('The old link stops working straight away');
-    expect(dlg).toHaveTextContent('saved orders are copied');
+    expect(dlg).toHaveTextContent('saved orders for every meet are copied');
     expect(store.regenerateClubLink).not.toHaveBeenCalled();
     await user.click(within(dlg).getByRole('button', { name: 'Cancel' }));
     expect(store.regenerateClubLink).not.toHaveBeenCalled();
@@ -114,6 +121,24 @@ describe('Clubs table', () => {
     await user.click(screen.getByRole('button', { name: 'Regenerate link for Delta Gym' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Regenerate link' }));
     expect(await screen.findByText(/the link was NOT changed \(network\)\. Nothing was lost\./)).toBeInTheDocument();
+  });
+});
+
+describe('Start orders from another meet', () => {
+  it('is a button on the Clubs pill that opens the copy dialog for this meet, with the other meets as sources', async () => {
+    copy.listMeets.mockResolvedValue([
+      { id: 'm1', name: 'Finals', createdAt: 2, archived: false },
+      { id: 'm0', name: 'Prelims', createdAt: 1, archived: false },
+      { id: 'm9', name: 'Hidden', createdAt: 0, archived: true },
+    ]);
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: 'Start orders from another meet' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Start orders from another meet' });
+    expect(dlg).toHaveTextContent('Finals');
+    expect(within(dlg).getByRole('combobox', { name: 'Copy orders from' })).toHaveTextContent('Prelims');
+    await waitFor(() => expect(copy.loadOrderCopyInput).toHaveBeenCalledWith(fb.db, 'm0', 'm1'));
+    await user.click(within(dlg).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 

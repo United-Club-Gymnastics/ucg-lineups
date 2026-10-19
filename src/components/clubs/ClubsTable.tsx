@@ -19,11 +19,13 @@ const FILTERS: { id: string; label: string }[] = [
   { id: 'noemail', label: 'No email' },
 ];
 
-export default function ClubsTable({ rows, linkBase, onSaveEmails, onRegenerate }: {
+export default function ClubsTable({ rows, linkBase, onSaveEmails, onRegenerate, onStartFromMeet }: {
   rows: ClubRow[];
   linkBase: string;
   onSaveEmails: (clubId: string, emails: string[]) => Promise<void>;
   onRegenerate: (row: ClubRow) => Promise<RegenerateResult>;
+  /** Opens "Start orders from another meet" for this meet (given only when the admin can use it). */
+  onStartFromMeet?: () => void;
 }) {
   const [status, setStatus] = useState('all');
   const [search, setSearch] = useState('');
@@ -56,6 +58,12 @@ export default function ClubsTable({ rows, linkBase, onSaveEmails, onRegenerate 
         Clubs don't submit anything: orders save as they go, and each status comes from what the club has changed.
         "Nothing to order" means every event list has at most one athlete, so that club gets no reminder.
       </p>
+      {onStartFromMeet && (
+        <div className="cl-toolbar">
+          <button type="button" className="btn" onClick={onStartFromMeet}>Start orders from another meet</button>
+          <span className="adm-muted">For Finals: copy the orders clubs set in Prelims, so they are not reminded again.</span>
+        </div>
+      )}
       <div className="cl-filters">
         <label className="cl-field">
           <span>Status</span>
@@ -85,7 +93,7 @@ export default function ClubsTable({ rows, linkBase, onSaveEmails, onRegenerate 
       {confirmRow && (
         <Modal title="Regenerate this link?" onClose={() => { if (!busy) setConfirmRow(null); }}>
           <p><strong>{confirmRow.name}</strong> gets a new private link. The old link stops working straight away: anyone using it sees "This link isn't valid".</p>
-          <p>Their saved orders are copied to the new link first, so nothing is lost. Send the club the new link (the reminder emails always use the current one).</p>
+          <p>Their saved orders for every meet are copied to the new link first, so nothing is lost. The same new link works for all of the club's meets. Send the club the new link (the reminder emails always use the current one).</p>
           <div className="adm-actions">
             <button type="button" className="btn ghost" onClick={() => setConfirmRow(null)} disabled={busy}>Cancel</button>
             <button type="button" className="btn primary" onClick={() => void regenerate(confirmRow)} disabled={busy}>{busy ? 'Working…' : 'Regenerate link'}</button>

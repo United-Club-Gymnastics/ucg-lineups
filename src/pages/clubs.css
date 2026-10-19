@@ -96,3 +96,11 @@
 .cl-live.live .cl-live-dot { background: var(--navy-800); }
 .cl-live-err { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
 .cl-frozen { margin: 4px 0 8px; }
+
+/* Start orders from another meet / Upgrade club links dialogs. */
+.oc-field { display: grid; gap: 4px; margin: 12px 0; font-size: 13px; font-weight: 700; }
+.oc-big { margin: 12px 0 4px; font-size: 16px; }
+.oc-list { margin: 6px 0 10px; padding-left: 20px; font-size: 14px; }
+.oc-list li { margin: 3px 0; }
+.oc-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 14px; }
+.cl-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 4px 0 8px; }

@@ -26,27 +26,30 @@ const push = (path: string, rows: Record<string, Record<string, unknown>>) => at
 // The name fixes document is a single-document listener: `null` = the document does not exist yet.
 const pushFixes = (data: Record<string, unknown> | null) => at('meets/m1/nameFixes/main').forEach((l) => (l.next as unknown as (s: unknown) => void)({ exists: () => data !== null, data: () => data }));
 
-const CLUBS = { 'club-a': { name: 'Club A', emails: [], token: 'tok-a' }, 'club-b': { name: 'Club B', emails: [], token: 'tok-b' } };
+const CLUBS = { 'club-a': { name: 'Club A', emails: [] }, 'club-b': { name: 'Club B', emails: [] } };
+// One token per club across meets: clubTokens/{clubId}.
+const TOKENS = { 'club-a': { token: 'tok-a' }, 'club-b': { token: 'tok-b' } };
 const LEVEL = (updatedAt: number) => ({ order: [], updatedAt: { toMillis: () => updatedAt } });
 
 beforeEach(() => { fs.listeners.length = 0; vi.useFakeTimers(); });
 afterEach(() => vi.useRealTimers());
 
 describe('watchClubsLive', () => {
-  it('listens to the meet collections and one levels collection per club token, and reports nothing until all have answered', () => {
+  it('listens to the meet collections, the club tokens and one levels collection per club token for this meet, and reports nothing until all have answered', () => {
     const onChange = vi.fn();
     watchClubsLive({} as never, 'm1', { onChange, onError: vi.fn() });
-    expect(fs.listeners.map((l) => l.path).sort()).toEqual(['meets/m1/athletes', 'meets/m1/clubs', 'meets/m1/nameFixes/main', 'meets/m1/sessions']);
+    expect(fs.listeners.map((l) => l.path).sort()).toEqual(['clubTokens', 'meets/m1/athletes', 'meets/m1/clubs', 'meets/m1/nameFixes/main', 'meets/m1/sessions']);
     push('meets/m1/sessions', {});
     push('meets/m1/athletes', {});
     pushFixes(null);
+    push('clubTokens', TOKENS);
     push('meets/m1/clubs', CLUBS);
-    expect(fs.listeners.map((l) => l.path)).toContain('clubOrders/tok-a/levels');
-    expect(fs.listeners.map((l) => l.path)).toContain('clubOrders/tok-b/levels');
+    expect(fs.listeners.map((l) => l.path)).toContain('clubOrders/tok-a/meets/m1/levels');
+    expect(fs.listeners.map((l) => l.path)).toContain('clubOrders/tok-b/meets/m1/levels');
     expect(onChange).not.toHaveBeenCalled();
-    push('clubOrders/tok-a/levels', {});
+    push('clubOrders/tok-a/meets/m1/levels', {});
     expect(onChange).not.toHaveBeenCalled();
-    push('clubOrders/tok-b/levels', { 'wag-xs': LEVEL(5) });
+    push('clubOrders/tok-b/meets/m1/levels', { 'wag-xs': LEVEL(5) });
     expect(onChange).toHaveBeenCalledTimes(1);
     const live = onChange.mock.calls[0][0];
     expect(live.clubs.map((c: { id: string }) => c.id)).toEqual(['club-a', 'club-b']);
@@ -61,19 +64,20 @@ describe('watchClubsLive', () => {
     push('meets/m1/sessions', {});
     push('meets/m1/athletes', {});
     pushFixes(null);
+    push('clubTokens', TOKENS);
     push('meets/m1/clubs', CLUBS);
-    push('clubOrders/tok-a/levels', {});
-    push('clubOrders/tok-b/levels', {});
+    push('clubOrders/tok-a/meets/m1/levels', {});
+    push('clubOrders/tok-b/meets/m1/levels', {});
     onChange.mockClear();
     return { onChange, onError, stop };
   }
 
   it('debounces a burst of changes into one recomputation', () => {
     const { onChange } = started();
-    push('clubOrders/tok-a/levels', { x: LEVEL(1) });
+    push('clubOrders/tok-a/meets/m1/levels', { x: LEVEL(1) });
     vi.advanceTimersByTime(200);
-    push('clubOrders/tok-a/levels', { x: LEVEL(2) });
-    push('clubOrders/tok-b/levels', { y: LEVEL(3) });
+    push('clubOrders/tok-a/meets/m1/levels', { x: LEVEL(2) });
+    push('clubOrders/tok-b/meets/m1/levels', { y: LEVEL(3) });
     vi.advanceTimersByTime(299);
     expect(onChange).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
@@ -84,22 +88,22 @@ describe('watchClubsLive', () => {
 
   it('adds a listener for a new token and drops the listener of a token that went away', () => {
     const { onChange } = started();
-    const oldA = fs.listeners.find((l) => l.path === 'clubOrders/tok-a/levels')!;
-    push('meets/m1/clubs', { 'club-a': { ...CLUBS['club-a'], token: 'tok-a2' }, 'club-b': CLUBS['club-b'] });
+    const oldA = fs.listeners.find((l) => l.path === 'clubOrders/tok-a/meets/m1/levels')!;
+    push('clubTokens', { 'club-a': { token: 'tok-a2' }, 'club-b': TOKENS['club-b'] });
     expect(oldA.off).toHaveBeenCalledTimes(1);
-    expect(at('clubOrders/tok-a/levels')).toHaveLength(0);
-    expect(at('clubOrders/tok-a2/levels')).toHaveLength(1);
-    expect(at('clubOrders/tok-b/levels')).toHaveLength(1);
+    expect(at('clubOrders/tok-a/meets/m1/levels')).toHaveLength(0);
+    expect(at('clubOrders/tok-a2/meets/m1/levels')).toHaveLength(1);
+    expect(at('clubOrders/tok-b/meets/m1/levels')).toHaveLength(1);
     vi.advanceTimersByTime(1000);
     expect(onChange).not.toHaveBeenCalled(); // held until the new token's first snapshot
-    push('clubOrders/tok-a2/levels', {});
+    push('clubOrders/tok-a2/meets/m1/levels', {});
     vi.advanceTimersByTime(300);
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it('stops every listener and any pending recomputation when cleaned up', () => {
     const { onChange, stop } = started();
-    push('clubOrders/tok-a/levels', { x: LEVEL(1) });
+    push('clubOrders/tok-a/meets/m1/levels', { x: LEVEL(1) });
     stop();
     expect(fs.listeners.every((l) => l.off.mock.calls.length === 1)).toBe(true);
     vi.advanceTimersByTime(1000);
@@ -108,13 +112,13 @@ describe('watchClubsLive', () => {
 
   it('reports a failing listener once and stops the rest', () => {
     const { onError, onChange, stop } = started();
-    fs.listeners.find((l) => l.path === 'clubOrders/tok-b/levels')!.error(new Error('Missing or insufficient permissions.'));
+    fs.listeners.find((l) => l.path === 'clubOrders/tok-b/meets/m1/levels')!.error(new Error('Missing or insufficient permissions.'));
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0][0].message).toMatch(/permissions/);
     expect(fs.listeners.every((l) => l.off.mock.calls.length >= 1)).toBe(true);
     fs.listeners[0].error(new Error('again'));
     expect(onError).toHaveBeenCalledTimes(1);
-    push('clubOrders/tok-a/levels', { x: LEVEL(9) });
+    push('clubOrders/tok-a/meets/m1/levels', { x: LEVEL(9) });
     vi.advanceTimersByTime(1000);
     expect(onChange).not.toHaveBeenCalled();
     stop();
@@ -125,9 +129,10 @@ describe('watchClubsLive', () => {
     watchClubsLive({} as never, 'm1', { onChange, onError: vi.fn() });
     push('meets/m1/sessions', {});
     push('meets/m1/athletes', { WAG_a: { first: 'Ada', last: 'MurrayMetzger', clubId: 'club-a' } });
+    push('clubTokens', TOKENS);
     push('meets/m1/clubs', CLUBS);
-    push('clubOrders/tok-a/levels', {});
-    push('clubOrders/tok-b/levels', {});
+    push('clubOrders/tok-a/meets/m1/levels', {});
+    push('clubOrders/tok-b/meets/m1/levels', {});
     expect(onChange).not.toHaveBeenCalled();
     pushFixes({ fixes: [{ field: 'last', from: 'MurrayMetzger', to: 'Murray Metzger' }] });
     expect(onChange).toHaveBeenCalledTimes(1);

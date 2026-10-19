@@ -12,7 +12,7 @@ export interface LinkAthlete {
 export interface LinkLevel {
   levelCode: string;
   levelName: string;
-  /** `<sessionId>__<levelCode>`: the document id under `clubOrders/{token}/levels/`. */
+  /** `<sessionId>__<levelCode>`: the document id under `clubOrders/{token}/meets/{meetId}/levels/`. */
   levelKey: string;
   athletes: LinkAthlete[];
 }
@@ -30,13 +30,59 @@ export interface LinkSession {
   levels: LinkLevel[];
 }
 
+/** One meet's part of a club's link: what the club page shows and the rules check for that meet. */
+export interface MeetLinkEntry {
+  meetName: string;
+  /** Milliseconds since the epoch when the meet was created (0 when unknown): the newest meet is the page's default. */
+  createdAt: number;
+  /** Set on an archived meet; archiving normally removes the entry, so clubs never see it. */
+  archived?: boolean;
+  sessions: LinkSession[];
+  /** The level keys a club may write in this meet (`clubOrders/{token}/meets/{meetId}/levels/{levelKey}`). */
+  levelKeys: string[];
+}
+
+/**
+ * `clubLinks/{token}`: ONE private link per club across all meets (spec §3). `meets` is keyed by meet id; publishing a meet
+ * merges just that meet's entry, so the other meets' entries are never touched.
+ */
 export interface ClubLinkDoc {
-  /** The meet this link belongs to: the club page reads that meet's public settings (deadline, name). */
+  clubId: string;
+  clubName: string;
+  meets: Record<string, MeetLinkEntry>;
+}
+
+export interface MeetRef {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+/** The club page's meet list: not archived, newest first (then name, then id, so the order is stable). */
+export function linkMeets(link: ClubLinkDoc): { meetId: string; entry: MeetLinkEntry }[] {
+  return Object.entries(link.meets ?? {})
+    .filter(([, e]) => e && !e.archived)
+    .map(([meetId, entry]) => ({ meetId, entry }))
+    .sort((a, b) => (b.entry.createdAt ?? 0) - (a.entry.createdAt ?? 0) || (a.entry.meetName ?? '').localeCompare(b.entry.meetName ?? '') || a.meetId.localeCompare(b.meetId));
+}
+
+/** A link in the old shape (one meet: `meetId` + `sessions`, no `meets` map). Such links stop working after "Upgrade club links". */
+export interface OldClubLinkDoc {
   meetId: string;
   clubId: string;
   clubName: string;
   sessions: LinkSession[];
   levelKeys: string[];
+}
+
+export function isNewLink(raw: unknown): raw is ClubLinkDoc {
+  const d = raw as { meets?: unknown } | null;
+  return !!d && typeof d === 'object' && !!d.meets && typeof d.meets === 'object' && !Array.isArray(d.meets);
+}
+
+export function isOldLink(raw: unknown): raw is OldClubLinkDoc {
+  const d = raw as { meetId?: unknown; meets?: unknown } | null;
+  return !!d && typeof d === 'object' && typeof d.meetId === 'string' && d.meetId !== '' && !isNewLink(raw);
 }
 
 export interface ClubRef {
@@ -67,14 +113,15 @@ export function sortSessions<T extends SessionRef>(sessions: T[], gymOrder: stri
 /**
  * Build each club's link document. Only athletes who compete and are not removed count; independents
  * and athletes without a known session are left out. T&T sessions are listed without levels.
- * Pass any club list (for example one club after "Regenerate link"); clubs without a token are skipped.
+ * Pass any club list; clubs without a token are skipped. The result holds ONLY this meet's entry: write it with a merge so
+ * the club's other meets are left alone.
  */
 export function buildClubLinks(
   athletes: AthleteIn[],
   sessions: Session[],
   clubs: ClubRef[],
   gymOrder: string[] = DEFAULT_GYM_ORDER,
-  meetId = '',
+  meet: MeetRef = { id: '', name: '', createdAt: 0 },
 ): { token: string; doc: ClubLinkDoc }[] {
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
   const live = athletes.filter((a) => a.competes && !a.removed && !a.independent && sessionById.has(a.sessionId));
@@ -113,11 +160,16 @@ export function buildClubLinks(
     out.push({
       token: club.token,
       doc: {
-        meetId,
         clubId: club.id,
         clubName: club.name,
-        sessions: linkSessions,
-        levelKeys: linkSessions.flatMap((s) => s.levels.map((l) => l.levelKey)),
+        meets: {
+          [meet.id]: {
+            meetName: meet.name,
+            createdAt: meet.createdAt,
+            sessions: linkSessions,
+            levelKeys: linkSessions.flatMap((s) => s.levels.map((l) => l.levelKey)),
+          },
+        },
       },
     });
   }

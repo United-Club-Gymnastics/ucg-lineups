@@ -1,8 +1,10 @@
-import { collection, doc, getDoc, getDocs, limit, query, where, writeBatch, type DocumentData, type Firestore } from 'firebase/firestore';
+import { collection, deleteField, doc, getDoc, getDocs, limit, query, where, writeBatch, type DocumentData, type Firestore } from 'firebase/firestore';
 import type { StoredAthlete } from '../import/diff';
 import type { ImportModel, Session } from '../import/types';
 import { buildClubLinks } from '../club-links';
 import { applyNameFixesToAthletes, clubsAffectedByChange, type NameFix } from '../name-fixes';
+import { ensureClubTokens, loadClubTokens } from './club-tokens';
+import { parseMeet } from './meet-store';
 import { meetPaths } from './meet-paths';
 import { loadNameFixes, saveNameFixes } from './name-fixes-store';
 import { chunk, planImport, type ImportPlan, type StoredClub } from './plan';
@@ -11,7 +13,8 @@ import { chunk, planImport, type ImportPlan, type StoredClub } from './plan';
 export const toStoredAthlete = (id: string, data: DocumentData): StoredAthlete => ({ ...(data as StoredAthlete), id });
 export const toStoredClub = (id: string, data: DocumentData): StoredClub => {
   const x = data as Partial<StoredClub>;
-  return { id, name: x.name ?? '', emails: x.emails ?? [], token: x.token ?? '' };
+  // The token lives in clubTokens/{clubId} (one per club across meets), not on the meet's club document.
+  return { id, name: x.name ?? '', emails: x.emails ?? [], token: '' };
 };
 /** Sessions stored before names existed have `number` + `gym` only: they read as `Session <number>` at `<gym>`. */
 export const toStoredSession = (id: string, data: DocumentData): Session => {
@@ -36,9 +39,10 @@ export async function loadAthletesForDisplay(db: Firestore, meetId: string): Pro
   return applyNameFixesToAthletes(athletes, fixes);
 }
 
+/** The meet's clubs, each with its token from `clubTokens/{clubId}` ('' when none yet). Admin only. */
 export async function loadClubs(db: Firestore, meetId: string): Promise<StoredClub[]> {
-  const snap = await getDocs(collection(db, meetPaths(meetId).clubs));
-  return snap.docs.map((d) => toStoredClub(d.id, d.data()));
+  const [snap, tokens] = await Promise.all([getDocs(collection(db, meetPaths(meetId).clubs)), loadClubTokens(db)]);
+  return snap.docs.map((d) => ({ ...toStoredClub(d.id, d.data()), token: tokens[d.id] ?? '' }));
 }
 
 export async function loadSessions(db: Firestore, meetId: string): Promise<Session[]> {
@@ -79,18 +83,44 @@ export async function applyImport(db: Firestore, meetId: string, model: ImportMo
 }
 
 /**
- * Publish the public `clubLinks/{token}` documents (roster per club, no emails/DOB/bibs), in batches.
- * Defaults to every club; pass a list to republish just some (for example after a token is regenerated).
+ * Publish this meet's part of the public `clubLinks/{token}` documents (roster per club, no emails/DOB/bibs), in batches.
+ * A club has ONE token across meets (`clubTokens/{clubId}`, created here on first publish) and ONE link document: this writes
+ * only `meets.<meetId>` into it (a merge), so the club's other meets are never touched. Defaults to every club of the meet;
+ * pass a list to republish just some. An archived meet is not published (use `unpublishMeetFromLinks`).
  */
 export async function publishClubLinks(db: Firestore, meetId: string, clubs?: StoredClub[]): Promise<number> {
-  const [athletes, sessions, allClubs] = await Promise.all([loadAthletesForDisplay(db, meetId), loadSessions(db, meetId), loadClubs(db, meetId)]);
-  const links = buildClubLinks(athletes, sessions, clubs ?? allClubs, undefined, meetId);
+  const [athletes, sessions, allClubs, meetSnap] = await Promise.all([
+    loadAthletesForDisplay(db, meetId), loadSessions(db, meetId), loadClubs(db, meetId), getDoc(doc(db, meetPaths(meetId).root)),
+  ]);
+  const meet = parseMeet(meetId, meetSnap.exists() ? meetSnap.data() : {});
+  if (meet.archived) return 0;
+  const want = clubs ?? allClubs;
+  const tokens = await ensureClubTokens(db, want.map((c) => c.id));
+  const links = buildClubLinks(athletes, sessions, want.map((c) => ({ ...c, token: tokens[c.id] })), undefined, { id: meetId, name: meet.name, createdAt: meet.createdAt });
   for (const part of chunk(links)) {
     const batch = writeBatch(db);
-    for (const l of part) batch.set(doc(db, 'clubLinks', l.token), l.doc);
+    for (const l of part) batch.set(doc(db, 'clubLinks', l.token), l.doc, { merge: true });
     await batch.commit();
   }
   return links.length;
+}
+
+/**
+ * Archiving a meet removes its entry from every club's link, so the club page stops listing it and the rules stop accepting
+ * writes for it. The clubs' saved orders stay where they are. Returns how many link documents were changed.
+ */
+export async function unpublishMeetFromLinks(db: Firestore, meetId: string): Promise<number> {
+  const snap = await getDocs(collection(db, 'clubLinks'));
+  const mine = snap.docs.filter((d) => {
+    const meets = d.data().meets as Record<string, unknown> | undefined;
+    return !!meets && Object.prototype.hasOwnProperty.call(meets, meetId);
+  });
+  for (const part of chunk(mine)) {
+    const batch = writeBatch(db);
+    for (const d of part) batch.set(doc(db, 'clubLinks', d.id), { meets: { [meetId]: deleteField() } }, { merge: true });
+    await batch.commit();
+  }
+  return mine.length;
 }
 
 export interface NameFixesSaved {

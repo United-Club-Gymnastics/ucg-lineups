@@ -20,6 +20,12 @@ vi.mock('../../src/lib/data/meet-store', () => ({
   setMeetArchived: vi.fn(async (_db: unknown, id: string, a: boolean) => { mem.meets.find((m) => m.id === id)!.archived = a; }),
 }));
 
+const links = vi.hoisted(() => ({ old: false, unpublish: vi.fn(async () => 1) }));
+vi.mock('../../src/lib/data/store', () => ({ hasTntSessions: vi.fn(async () => true), unpublishMeetFromLinks: links.unpublish }));
+vi.mock('../../src/lib/data/club-links-upgrade-store', () => ({
+  hasOldStyleLinks: vi.fn(async () => links.old), loadUpgradePlan: vi.fn(), applyUpgrade: vi.fn(),
+}));
+
 // Screens are stubbed: this test is about which meet they are handed, and that they remount on a switch.
 const mounts = vi.hoisted(() => ({ n: 0 }));
 vi.mock('../../src/pages/AdminImport', () => ({ default: ({ meetId }: { meetId: string }) => <p>Import for {meetId}</p> }));
@@ -42,6 +48,8 @@ const seed = (...ms: Partial<MeetInfo>[]) => {
 };
 
 beforeEach(() => {
+  links.old = false;
+  links.unpublish.mockClear();
   mem.meets = [];
   mem.n = 0;
   mounts.n = 0;
@@ -168,6 +176,7 @@ describe('meet switcher', () => {
     await user.click(screen.getByRole('button', { name: 'Archive meet' }));
     expect(await screen.findByText('Squads for s0')).toBeInTheDocument();
     expect(meetStore.setMeetArchived).toHaveBeenCalledWith({}, 's1', true);
+    expect(links.unpublish).toHaveBeenCalledWith({}, 's1'); // clubs stop seeing (and writing) the archived meet
     expect(mem.meets).toHaveLength(2); // still there
     await user.click(screen.getByRole('button', { name: 'Archive' }));
     await user.click(screen.getByRole('button', { name: 'Archive meet' }));
@@ -182,5 +191,19 @@ describe('meet switcher', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('offline');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Squads for s0')).toBeInTheDocument();
+  });
+});
+
+describe('Upgrade club links', () => {
+  it('shows the action only while links in the old per-meet shape exist', async () => {
+    seed({ name: 'Nationals' });
+    links.old = false;
+    const first = render(<AdminLanding />);
+    await screen.findByText('Squads for s0');
+    expect(screen.queryByRole('button', { name: 'Upgrade club links' })).toBeNull();
+    first.unmount();
+    links.old = true;
+    render(<AdminLanding />);
+    expect(await screen.findByRole('button', { name: 'Upgrade club links' })).toBeInTheDocument();
   });
 });
