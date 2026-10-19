@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { CompetitionOrderCard, type OrderChange } from '../components/CompetitionOrderCard';
+import Select from '../components/Select';
 import { Badge } from '../components/ui';
 import { Autosaver, type SaveState } from '../lib/autosave';
-import type { ClubLinkDoc, LinkLevel, LinkSession } from '../lib/club-links';
+import { linkMeets, type ClubLinkDoc, type LinkLevel, type LinkSession, type MeetLinkEntry } from '../lib/club-links';
 import { resolveLevel, type ArtisticDiscipline, type LevelOrder } from '../lib/club-order-model';
 import { levelStatus, sessionStatus, STATUS_LABEL, type SessionStatus } from '../lib/club-status';
 import { APPARATUS } from '../lib/apparatus';
@@ -16,7 +17,10 @@ type Load =
   | { kind: 'loading' }
   | { kind: 'invalid' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; link: ClubLinkDoc; deadline: Date | null; meetName: string; orders: Record<string, LevelOrder> };
+  | { kind: 'ready'; link: ClubLinkDoc; meets: Record<string, MeetData> };
+
+/** What the page holds per meet: its public facts (deadline, name) and the club's saved orders there. */
+interface MeetData { deadline: Date | null; name: string; orders: Record<string, LevelOrder> }
 
 const TONE: Record<SessionStatus, 'ok' | 'warn' | 'err' | 'info' | 'navy'> = {
   split: 'err', default: 'warn', custom: 'ok', none: 'info', tnt: 'navy',
@@ -35,10 +39,14 @@ export default function ClubPage() {
       try {
         const link = await loadClubLink(db, token);
         if (cancelled) return;
-        // A link without a meetId predates meets: treat it as not valid (UCG sends a fresh one).
-        if (!link || !link.meetId) { setLoad({ kind: 'invalid' }); return; }
-        const [meet, orders] = await Promise.all([loadPublicMeet(db, link.meetId), loadLevelOrders(db, token)]);
-        if (!cancelled) setLoad({ kind: 'ready', link, deadline: meet.deadline, meetName: meet.name, orders });
+        // loadClubLink returns null for a missing link and for an old per-meet link (those stop working).
+        if (!link) { setLoad({ kind: 'invalid' }); return; }
+        const entries = linkMeets(link);
+        const loaded = await Promise.all(entries.map(async ({ meetId }) => {
+          const [meet, orders] = await Promise.all([loadPublicMeet(db, meetId), loadLevelOrders(db, token, meetId)]);
+          return [meetId, { deadline: meet.deadline, name: meet.name, orders }] as const;
+        }));
+        if (!cancelled) setLoad({ kind: 'ready', link, meets: Object.fromEntries(loaded) });
       } catch (e) {
         if (!cancelled) setLoad({ kind: 'error', message: e instanceof Error ? e.message : 'Could not load this page.' });
       }
@@ -64,26 +72,29 @@ export default function ClubPage() {
       </main>
     );
   }
-  return <ClubOrders key={token} token={token} link={load.link} deadline={load.deadline} meetName={load.meetName} initialOrders={load.orders} />;
+  return <ClubOrders key={token} token={token} link={load.link} meets={load.meets} />;
 }
 
-function ClubOrders({ token, link, deadline, meetName, initialOrders }: { token: string; link: ClubLinkDoc; deadline: Date | null; meetName: string; initialOrders: Record<string, LevelOrder> }) {
-  const [orders, setOrders] = useState(initialOrders);
-  const [save, setSave] = useState<SaveState>({ kind: 'idle' });
-  const [sessionId, setSessionId] = useState(() => link.sessions.find((s) => s.discipline !== 'TNT')?.sessionId ?? '');
-  const [levelKey, setLevelKey] = useState('');
-  const [apparatus, setApparatus] = useState('');
+const KEY_SEP = '\u0001';
+const deadlineText = (d: Date | null, locked: boolean) => (d === null ? 'No deadline' : locked ? 'Locked' : `Locks ${dateFmt.format(d)}`);
 
-  // The deadline is checked when the page loads and again every minute, so an open page goes read-only.
+function ClubOrders({ token, link, meets }: { token: string; link: ClubLinkDoc; meets: Record<string, MeetData> }) {
+  // The meets the club is in (not archived), newest first; the newest is selected until the club picks another.
+  const list = useMemo(() => linkMeets(link), [link]);
+  const [meetId, setMeetId] = useState(() => list[0]?.meetId ?? '');
+  const [orders, setOrders] = useState(() => Object.fromEntries(Object.entries(meets).map(([id, m]) => [id, m.orders])));
+  const [save, setSave] = useState<SaveState>({ kind: 'idle' });
+
+  // Each meet's deadline is checked when the page loads and again every minute, so an open page goes read-only.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(t);
   }, []);
-  const locked = deadline !== null && now >= deadline.getTime();
+  const isLocked = (id: string) => { const d = meets[id]?.deadline ?? null; return d !== null && now >= d.getTime(); };
 
-  const saver = useRef<Autosaver<LevelOrder> | null>(null);
-  if (saver.current === null) saver.current = new Autosaver<LevelOrder>((key, order) => saveLevelOrder(db, token, key, order), setSave);
+  const saver = useRef<Autosaver<{ meetId: string; levelKey: string; order: LevelOrder }> | null>(null);
+  if (saver.current === null) saver.current = new Autosaver((_key, v) => saveLevelOrder(db, token, v.meetId, v.levelKey, v.order), setSave);
   useEffect(() => {
     const s = saver.current!;
     const flush = () => { void s.flush(); };
@@ -98,7 +109,97 @@ function ClubOrders({ token, link, deadline, meetName, initialOrders }: { token:
     };
   }, []);
 
-  const session: LinkSession | undefined = link.sessions.find((s) => s.sessionId === sessionId);
+  function commit(forMeet: string, levelKey: string, order: LevelOrder) {
+    setOrders((prev) => ({ ...prev, [forMeet]: { ...(prev[forMeet] ?? {}), [levelKey]: order } }));
+    saver.current!.schedule(`${forMeet}${KEY_SEP}${levelKey}`, { meetId: forMeet, levelKey, order });
+  }
+
+  const current = list.find((m) => m.meetId === meetId);
+  const locked = current ? isLocked(current.meetId) : false;
+  const currentDeadline = current ? meets[current.meetId]?.deadline ?? null : null;
+  const meetName = (id: string, e: MeetLinkEntry) => meets[id]?.name || e.meetName || 'Meet';
+
+  return (
+    <main className="club">
+      <header className="club-head">
+        <p className="club-eyebrow">UCG</p>
+        <h1 className="display">{link.clubName}</h1>
+        <p className="club-lead">
+          Set the order your athletes compete in. Every change saves by itself, so there is nothing to submit.
+          Until you change something, athletes are listed A&ndash;Z by first name.
+        </p>
+        <SaveIndicator state={save} locked={locked} onRetry={() => void saver.current!.flush()} />
+      </header>
+
+      {list.length === 0 ? (
+        <div className="club-card"><p>No meets are open for your club yet. This page will fill in once UCG sets one up.</p></div>
+      ) : (
+        <>
+          {list.length > 1 && (
+            list.length <= 4 ? (
+              <ul className="club-meets" aria-label="Your meets">
+                {list.map(({ meetId: id, entry }) => (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      className={`club-chip club-meet${id === meetId ? ' active' : ''}`}
+                      aria-pressed={id === meetId}
+                      onClick={() => setMeetId(id)}
+                    >
+                      <span className="club-chip-label">{meetName(id, entry)}</span>
+                      <span className="club-chip-meta">{deadlineText(meets[id]?.deadline ?? null, isLocked(id))}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="club-meet-select">
+                <label htmlFor="club-meet">Meet</label>
+                <Select
+                  id="club-meet" value={meetId} onChange={setMeetId}
+                  options={list.map(({ meetId: id, entry }) => ({ value: id, label: `${meetName(id, entry)} · ${deadlineText(meets[id]?.deadline ?? null, isLocked(id))}` }))}
+                />
+              </div>
+            )
+          )}
+
+          {locked ? (
+            <div className="club-banner warn" role="status" data-testid="club-locked">
+              The order deadline has passed{list.length > 1 && current ? ` for ${meetName(current.meetId, current.entry)}` : ''}, so orders are now locked and can&rsquo;t be changed here. Contact UCG if something needs to change.
+            </div>
+          ) : currentDeadline && (
+            <p className="club-note">Orders lock on {dateFmt.format(currentDeadline)}{list.length > 1 && current ? ` for ${meetName(current.meetId, current.entry)}` : ''}.</p>
+          )}
+          {list.length === 1 && current && <p className="club-note club-meetname">{meetName(current.meetId, current.entry)}</p>}
+
+          {current && (
+            <MeetOrders
+              key={current.meetId}
+              entry={current.entry}
+              orders={orders[current.meetId] ?? {}}
+              locked={locked}
+              onCommit={(levelKey, order) => commit(current.meetId, levelKey, order)}
+            />
+          )}
+        </>
+      )}
+    </main>
+  );
+}
+
+/** One meet's sessions, statuses and the order editor. Remounted (by key) when the club switches meet. */
+function MeetOrders({ entry, orders, locked, onCommit }: {
+  entry: MeetLinkEntry;
+  orders: Record<string, LevelOrder>;
+  locked: boolean;
+  onCommit: (levelKey: string, order: LevelOrder) => void;
+}) {
+  const sessionsList = entry.sessions;
+  const [sessionId, setSessionId] = useState(() => sessionsList.find((s) => s.discipline !== 'TNT')?.sessionId ?? '');
+  const [levelKey, setLevelKey] = useState('');
+  const [apparatus, setApparatus] = useState('');
+
+  const session: LinkSession | undefined = sessionsList.find((s) => s.sessionId === sessionId);
   const levels = useMemo(() => session?.levels ?? [], [session]);
   const level: LinkLevel | undefined = levels.find((l) => l.levelKey === levelKey) ?? levels[0];
   const discipline = session?.discipline as ArtisticDiscipline | undefined;
@@ -112,14 +213,9 @@ function ClubOrders({ token, link, deadline, meetName, initialOrders }: { token:
   const resolved = level && discipline ? resolveLevel(discipline, level.athletes, orders[level.levelKey]) : null;
   const activeApparatus = resolved && resolved.codes.includes(apparatus) ? apparatus : resolved?.codes[0] ?? '';
 
-  function commit(key: string, order: LevelOrder) {
-    setOrders((prev) => ({ ...prev, [key]: order }));
-    saver.current!.schedule(key, order);
-  }
-
   function onChange(change: OrderChange) {
     if (!level || !resolved || locked) return;
-    commit(level.levelKey, {
+    onCommit(level.levelKey, {
       groups: change.groups,
       sections: change.sections,
       splitDecided: resolved.splitDecided || change.membershipChanged,
@@ -128,37 +224,19 @@ function ClubOrders({ token, link, deadline, meetName, initialOrders }: { token:
 
   function keepSplit() {
     if (!level || !resolved || locked) return;
-    commit(level.levelKey, { groups: resolved.groups, sections: resolved.sectionsBy, splitDecided: true });
+    onCommit(level.levelKey, { groups: resolved.groups, sections: resolved.sectionsBy, splitDecided: true });
   }
 
   const needsSplit = !!resolved && resolved.levelBusiest > resolved.cap && !resolved.splitDecided;
 
   return (
-    <main className="club">
-      <header className="club-head">
-        <p className="club-eyebrow">{meetName || 'UCG'}</p>
-        <h1 className="display">{link.clubName}</h1>
-        <p className="club-lead">
-          Set the order your athletes compete in. Every change saves by itself, so there is nothing to submit.
-          Until you change something, athletes are listed A&ndash;Z by first name.
-        </p>
-        <SaveIndicator state={save} locked={locked} onRetry={() => void saver.current!.flush()} />
-      </header>
-
-      {locked ? (
-        <div className="club-banner warn" role="status" data-testid="club-locked">
-          The order deadline has passed, so orders are now locked and can&rsquo;t be changed here. Contact UCG if something needs to change.
-        </div>
-      ) : deadline && (
-        <p className="club-note">Orders lock on {dateFmt.format(deadline)}.</p>
-      )}
-
-      {link.sessions.length === 0 ? (
-        <div className="club-card"><p>No athletes are entered for your club yet. This page will fill in once UCG imports the registrations.</p></div>
+    <>
+      {sessionsList.length === 0 ? (
+        <div className="club-card"><p>No athletes are entered for your club in this meet yet. This page will fill in once UCG imports the registrations.</p></div>
       ) : (
         <>
           <ul className="club-sessions" aria-label="Your sessions">
-            {link.sessions.map((s) => {
+            {sessionsList.map((s) => {
               const st = statusOf(s);
               const body = (
                 <>
@@ -240,7 +318,7 @@ function ClubOrders({ token, link, deadline, meetName, initialOrders }: { token:
           )}
         </>
       )}
-    </main>
+    </>
   );
 }
 

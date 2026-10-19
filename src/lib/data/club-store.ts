@@ -1,13 +1,19 @@
 // Firestore access for the public club page. Everything here is reachable with only the club token.
 import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, type Firestore } from 'firebase/firestore';
-import type { ClubLinkDoc } from '../club-links';
-import { meetPaths } from './meet-paths';
+import { isNewLink, type ClubLinkDoc } from '../club-links';
+import { assertMeetId, meetPaths } from './meet-paths';
 import { fromStored, toStored, type LevelOrder } from '../club-order-model';
 
+/** The club's link, or null when there is none or it is an old per-meet link (those stop working: spec §3). */
 export async function loadClubLink(db: Firestore, token: string): Promise<ClubLinkDoc | null> {
   const snap = await getDoc(doc(db, 'clubLinks', token));
-  return snap.exists() ? (snap.data() as ClubLinkDoc) : null;
+  if (!snap.exists()) return null;
+  const d = snap.data();
+  return isNewLink(d) ? (d as ClubLinkDoc) : null;
 }
+
+/** `clubOrders/{token}/meets/{meetId}/levels`: where a club's orders for one meet live. */
+export const ordersPath = (token: string, meetId: string): string => `clubOrders/${token}/meets/${assertMeetId(meetId)}/levels`;
 
 export interface PublicMeet {
   /** The order deadline, or null when none is set. */
@@ -27,9 +33,9 @@ export async function loadPublicMeet(db: Firestore, meetId: string): Promise<Pub
   };
 }
 
-/** All saved level orders for this token, keyed by level key. */
-export async function loadLevelOrders(db: Firestore, token: string): Promise<Record<string, LevelOrder>> {
-  const snap = await getDocs(collection(db, 'clubOrders', token, 'levels'));
+/** All saved level orders for this token in one meet, keyed by level key (`clubOrders/{token}/meets/{meetId}/levels`). */
+export async function loadLevelOrders(db: Firestore, token: string, meetId: string): Promise<Record<string, LevelOrder>> {
+  const snap = await getDocs(collection(db, ordersPath(token, meetId)));
   const out: Record<string, LevelOrder> = {};
   for (const d of snap.docs) {
     const o = fromStored(d.data());
@@ -38,6 +44,6 @@ export async function loadLevelOrders(db: Firestore, token: string): Promise<Rec
   return out;
 }
 
-export async function saveLevelOrder(db: Firestore, token: string, levelKey: string, order: LevelOrder): Promise<void> {
-  await setDoc(doc(db, 'clubOrders', token, 'levels', levelKey), { ...toStored(order), updatedAt: serverTimestamp() });
+export async function saveLevelOrder(db: Firestore, token: string, meetId: string, levelKey: string, order: LevelOrder): Promise<void> {
+  await setDoc(doc(db, ordersPath(token, meetId), levelKey), { ...toStored(order), updatedAt: serverTimestamp() });
 }

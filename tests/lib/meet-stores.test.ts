@@ -18,7 +18,7 @@ const fs = vi.hoisted(() => {
 vi.mock('firebase/firestore', () => fs);
 
 import { createMeet, listMeets, renameMeet, setMeetArchived } from '../../src/lib/data/meet-store';
-import { loadAthletes, loadClubs, loadSessions, publishClubLinks, applyImport } from '../../src/lib/data/store';
+import { loadAthletes, loadClubs, loadSessions, publishClubLinks, unpublishMeetFromLinks, applyImport } from '../../src/lib/data/store';
 import { loadGymOrder, loadSquadDoc, saveSquadDoc } from '../../src/lib/data/squad-store';
 import { loadTntDoc, saveTntDoc } from '../../src/lib/data/tnt-store';
 import { loadPublicMeet } from '../../src/lib/data/club-store';
@@ -66,7 +66,7 @@ describe('data store functions take the meet id', () => {
     await loadAthletes(db, 'm2');
     await loadClubs(db, 'm2');
     await loadSessions(db, 'm2');
-    expect(fs.collection.mock.calls.map((c) => c[1])).toEqual(['meets/m2/athletes', 'meets/m2/clubs', 'meets/m2/sessions']);
+    expect(fs.collection.mock.calls.map((c) => c[1])).toEqual(['meets/m2/athletes', 'meets/m2/clubs', 'clubTokens', 'meets/m2/sessions']);
   });
 
   it('reads settings and the gym order from the meet', async () => {
@@ -94,18 +94,43 @@ describe('data store functions take the meet id', () => {
     expect(fs.batchOps).toEqual([['meets/m4/settings/meet', { meetName: 'N', meetDate: 'd' }, { merge: true }], ['meets/m4', { name: 'N' }, { merge: true }]]);
   });
 
-  it('an import and the published club links go to one meet, and each link carries its meetId', async () => {
+  it('an import writes no token; publishing mints one per club (clubTokens) and merges only this meet into the club\'s one link', async () => {
     fs.getDocs.mockImplementation(async (c: string) => ({
-      docs: c.endsWith('/clubs') ? [{ id: 'alpha', data: () => ({ name: 'Alpha', emails: [], token: 'TOK' }) }] : [],
+      docs: c.endsWith('/clubs') ? [{ id: 'alpha', data: () => ({ name: 'Alpha', emails: [] }) }] : [],
     }));
+    fs.getDoc.mockImplementation(async (p: string) => (p === 'meets/m5' ? { exists: () => true, data: () => ({ name: 'Finals', createdAt: { toMillis: () => 2000 } }) } : { exists: () => false }));
     const n = await publishClubLinks(db, 'm5');
     expect(n).toBe(1);
-    expect(fs.batchOps[0][0]).toBe('clubLinks/TOK');
-    expect(fs.batchOps[0][1]).toMatchObject({ meetId: 'm5', clubId: 'alpha' });
+    const tokenOp = fs.batchOps.find((o) => o[0] === 'clubTokens/alpha')!;
+    const token = (tokenOp[1] as { token: string }).token;
+    expect(token.length).toBeGreaterThan(15);
+    const linkOp = fs.batchOps.find((o) => o[0] === `clubLinks/${token}`)!;
+    expect(linkOp[1]).toMatchObject({ clubId: 'alpha', meets: { m5: { meetName: 'Finals', createdAt: 2000 } } });
+    expect(Object.keys((linkOp[1] as { meets: object }).meets)).toEqual(['m5']); // only this meet's entry
+    expect(linkOp[2]).toEqual({ merge: true }); // a merge: the club's other meets are left alone
+    expect(fs.batchOps.indexOf(tokenOp)).toBeLessThan(fs.batchOps.indexOf(linkOp));
 
     fs.batchOps.length = 0;
     await applyImport(db, 'm5', { athletes: [], clubs: [{ id: 'alpha', name: 'Alpha', emails: [] }], sessions: [{ id: 's1-orange', number: 1, gym: 'Orange', discipline: 'WAG', levelCodes: [] }], warnings: [] }, { athletes: [], clubs: [], hasSettings: false });
     expect(fs.batchOps.map((o) => o[0])).toEqual(['meets/m5/sessions/s1-orange', 'meets/m5/clubs/alpha', 'meets/m5/settings/meet']);
+    expect(fs.batchOps[1][1]).toEqual({ name: 'Alpha', emails: [] });
+  });
+
+  it('an existing token is reused for another meet, an archived meet publishes nothing, and archiving removes just that meet\'s entry', async () => {
+    fs.getDocs.mockImplementation(async (c: string) => ({
+      docs: c.endsWith('/clubs') ? [{ id: 'alpha', data: () => ({ name: 'Alpha', emails: [] }) }]
+        : c === 'col:clubTokens' ? [{ id: 'alpha', data: () => ({ token: 'ONE' }) }]
+        : c === 'col:clubLinks' ? [{ id: 'ONE', data: () => ({ meets: { m5: {}, m6: {} } }) }, { id: 'TWO', data: () => ({ meets: { m6: {} } }) }, { id: 'OLD', data: () => ({ meetId: 'm5' }) }]
+        : [],
+    }));
+    fs.getDoc.mockImplementation(async (p: string) => ({ exists: () => true, data: () => ({ name: p, archived: p === 'meets/m9', createdAt: { toMillis: () => 1 } }) }));
+    await publishClubLinks(db, 'm6');
+    expect(fs.batchOps.map((o) => o[0])).toEqual(['clubLinks/ONE']);
+    fs.batchOps.length = 0;
+    expect(await publishClubLinks(db, 'm9')).toBe(0); // archived: not published
+    expect(fs.batchOps).toEqual([]);
+    expect(await unpublishMeetFromLinks(db, 'm5')).toBe(1); // only ONE lists m5; the old-shape OLD is not touched
+    expect(fs.batchOps).toEqual([['clubLinks/ONE', { meets: { m5: 'DELETE' } }, { merge: true }]]);
   });
 
   it("the club page's public read is the link's meet settings", async () => {

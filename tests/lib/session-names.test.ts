@@ -194,10 +194,11 @@ describe('club links', () => {
       { id: 'mag-finals--dupont', name: 'MAG Finals', location: 'Dupont', discipline: 'MAG' as const, levelCodes: ['Dev'] },
     ];
     const ath = sessions.map((x, i) => ({ id: `a${i}`, first: 'Ada', last: 'Test', clubId: 'c', independent: false, levelCode: 'Dev', levelName: 'Dev', sessionId: x.id, apparatus: ['FX'], competes: true, discipline: 'MAG' as const }));
-    const [link] = buildClubLinks(ath, sessions, [{ id: 'c', name: 'Alpha', token: 't' }], ORDER, 'm1');
-    expect(link.doc.sessions.map((x) => x.label)).toEqual(['MAG Finals · Dupont', 'Session 1 · Orange']);
-    expect(link.doc.sessions[1]).toMatchObject({ name: 'Session 1', location: 'Orange', gym: 'Orange', number: 1 });
-    expect(link.doc.sessions[0].number).toBeUndefined();
+    const [link] = buildClubLinks(ath, sessions, [{ id: 'c', name: 'Alpha', token: 't' }], ORDER, { id: 'm1', name: 'M', createdAt: 1 });
+    const e = link.doc.meets.m1;
+    expect(e.sessions.map((x) => x.label)).toEqual(['MAG Finals · Dupont', 'Session 1 · Orange']);
+    expect(e.sessions[1]).toMatchObject({ name: 'Session 1', location: 'Orange', gym: 'Orange', number: 1 });
+    expect(e.sessions[0].number).toBeUndefined();
   });
 });
 

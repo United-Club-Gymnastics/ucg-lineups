@@ -1,5 +1,4 @@
 import { diffAthletes, type ImportDiff, type StoredAthlete } from '../import/diff';
-import { assignTokens, newClubToken } from '../import/token';
 import { DEFAULT_GYM_ORDER, type ImportModel } from '../import/types';
 import { meetPaths } from './meet-paths';
 
@@ -7,6 +6,7 @@ export interface StoredClub {
   id: string;
   name: string;
   emails: string[];
+  /** The club's private-link token from `clubTokens/{clubId}`; '' until its link has been published. */
   token: string;
 }
 
@@ -36,14 +36,14 @@ export interface ImportPlan {
 /**
  * Pure: work out every Firestore write an import needs. Unchanged athletes are not rewritten;
  * athletes missing from the import are flagged `removed: true`, never deleted; existing clubs keep
- * their token (and their emails when the import carries none); settings/meet defaults are written
- * only when it does not exist yet.
+ * their emails when the import carries none; settings/meet defaults are written only when it does not
+ * exist yet. Club tokens are NOT part of an import: a club has one token across all meets in
+ * `clubTokens/{clubId}`, created the first time its link is published.
  */
 export function planImport(
   model: ImportModel,
   existing: { athletes: StoredAthlete[]; clubs: StoredClub[]; hasSettings: boolean },
   meetId: string,
-  makeToken: () => string = newClubToken,
 ): ImportPlan {
   const diff = diffAthletes(existing.athletes, model.athletes);
   const p = meetPaths(meetId);
@@ -58,17 +58,12 @@ export function planImport(
   }
 
   const prev = new Map(existing.clubs.map((c) => [c.id, c]));
-  const tokens = assignTokens(
-    model.clubs.map((c) => c.id),
-    Object.fromEntries(existing.clubs.map((c) => [c.id, c.token])),
-    makeToken,
-  );
   let newClubs = 0;
   for (const c of model.clubs) {
     const old = prev.get(c.id);
     if (!old) newClubs++;
     const emails = c.emails.length ? c.emails : (old?.emails ?? []);
-    ops.push({ path: p.club(c.id), data: { name: c.name, emails, token: tokens[c.id] }, merge: true });
+    ops.push({ path: p.club(c.id), data: { name: c.name, emails }, merge: true });
   }
 
   if (!existing.hasSettings) ops.push({ path: p.settings, data: { ...DEFAULT_MEET_SETTINGS }, merge: true });

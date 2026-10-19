@@ -7,7 +7,9 @@ import { db } from '../lib/firebase';
 import LegacyCopyDialog from '../components/LegacyCopyDialog';
 import { applyLegacyOps, hasLegacyData, loadLegacy, loadMeetState } from '../lib/data/legacy-store';
 import { createMeet, listMeets, renameMeet, setMeetArchived, type MeetInfo } from '../lib/data/meet-store';
-import { hasTntSessions } from '../lib/data/store';
+import UpgradeLinksDialog from '../components/UpgradeLinksDialog';
+import { applyUpgrade, hasOldStyleLinks, loadUpgradePlan } from '../lib/data/club-links-upgrade-store';
+import { hasTntSessions, unpublishMeetFromLinks } from '../lib/data/store';
 import { pickMeet, readSelectedMeet, visibleMeets, writeSelectedMeet } from '../lib/selected-meet';
 // Lazy: pulls in ExcelJS, which is large and only admins need.
 const AdminImport = lazy(() => import('./AdminImport'));
@@ -28,6 +30,11 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'import', label: 'Import' },
 ];
 
+const upgradeApi = {
+  load: () => loadUpgradePlan(db),
+  apply: (plan: Parameters<typeof applyUpgrade>[1], onProgress: (d: number, t: number) => void) => applyUpgrade(db, plan, onProgress),
+};
+
 export default function AdminLanding() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>('squads');
@@ -37,6 +44,8 @@ export default function AdminLanding() {
   const [meetId, setMeetId] = useState<string | null>(null);
   const [legacy, setLegacy] = useState(false);
   const [legacyOpen, setLegacyOpen] = useState(false);
+  const [oldLinks, setOldLinks] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   // null = not known yet (the tab shows until we know). Re-checked on each tab change so a T&T import shows it straight away.
   const [hasTnt, setHasTnt] = useState<boolean | null>(null);
   useEffect(() => {
@@ -64,6 +73,8 @@ export default function AdminLanding() {
   useEffect(() => { if (isAdmin) void loadMeets(); }, [isAdmin, loadMeets]);
   // Cheap existence check; the button only shows when there is earlier data to bring in.
   useEffect(() => { if (isAdmin) void hasLegacyData(db).then(setLegacy); }, [isAdmin]);
+  // The "Upgrade club links" action shows only while links in the old per-meet shape exist.
+  useEffect(() => { if (isAdmin) void hasOldStyleLinks(db).then(setOldLinks); }, [isAdmin]);
 
   function selectMeet(id: string) {
     setMeetId(id);
@@ -143,6 +154,13 @@ export default function AdminLanding() {
           onDone={(id) => { setLegacyOpen(false); void loadMeets(id); }}
         />
       )}
+      {meets && upgradeOpen && (
+        <UpgradeLinksDialog
+          api={upgradeApi}
+          onClose={() => setUpgradeOpen(false)}
+          onDone={() => { setUpgradeOpen(false); void hasOldStyleLinks(db).then(setOldLinks); }}
+        />
+      )}
       {meets && meetId && (
         <>
           <MeetSwitcher
@@ -151,8 +169,14 @@ export default function AdminLanding() {
             onSelect={selectMeet}
             onCreate={onCreateMeet}
             onRename={async (name) => { await renameMeet(db, meetId, name); await loadMeets(meetId); }}
-            onArchive={async () => { await setMeetArchived(db, meetId, true); await loadMeets(null); }}
+            onArchive={async () => {
+              await setMeetArchived(db, meetId, true);
+              // Clubs stop seeing (and writing) an archived meet; if this fails the meet is still archived and can be retried from the console.
+              await unpublishMeetFromLinks(db, meetId);
+              await loadMeets(null);
+            }}
             onBringInData={legacy ? () => setLegacyOpen(true) : undefined}
+            onUpgradeLinks={oldLinks ? () => setUpgradeOpen(true) : undefined}
           />
           <nav aria-label="Admin sections" className="adm-tabs">
             <Tabs tabs={tabs} active={shown} onChange={setTab} />

@@ -3,6 +3,9 @@ import { auth, db } from '../lib/firebase';
 import { Tabs } from '../components/ui';
 import ClubsTable from '../components/clubs/ClubsTable';
 import ReminderPanel, { type ClubsView } from '../components/clubs/ReminderPanel';
+import OrderCopyDialog from '../components/OrderCopyDialog';
+import { listMeets, type MeetInfo } from '../lib/data/meet-store';
+import { applyOrderCopy, loadOrderCopyInput } from '../lib/data/orders-copy-store';
 import { buildClubRows } from '../lib/club-overview';
 import { loadClubsScreenData, regenerateClubLink, saveClubEmails, saveOrderDeadline, watchClubsLive, type ClubsLive, type ClubsScreenData, type EmailLogEntry } from '../lib/data/email-store';
 import { dateToPacific, formatDeadline, pacificToDate } from '../lib/pacific';
@@ -79,6 +82,12 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
   const saved = live?.saved ?? data.saved;
   const rows = useMemo(() => buildClubRows(athletes, sessions, clubs, saved, data.gymOrder), [athletes, sessions, clubs, saved, data.gymOrder]);
   const linkBase = pageBase();
+  const [copyMeets, setCopyMeets] = useState<MeetInfo[] | null>(null);
+  const [copyError, setCopyError] = useState('');
+  const copyApi = useMemo(() => ({
+    load: (sourceId: string, targetId: string) => loadOrderCopyInput(db, sourceId, targetId),
+    apply: (plan: Parameters<typeof applyOrderCopy>[2], onProgress: (d: number, t: number) => void) => applyOrderCopy(db, meetId, plan, onProgress),
+  }), [meetId]);
 
   return (
     <div className="cl">
@@ -86,8 +95,13 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
       <Tabs pill tabs={VIEWS} active={view} onChange={setView} />
       <div hidden={view !== 'clubs'} className="cl-view">
       <DeadlineCard meetId={meetId} deadline={deadline} onSaved={setDeadline} />
+      {copyError && <div className="adm-banner err" role="alert">{copyError}</div>}
       <ClubsTable
         rows={rows}
+        onStartFromMeet={() => {
+          setCopyError('');
+          listMeets(db).then((all) => setCopyMeets(all.filter((m) => !m.archived)), (e) => setCopyError(`Could not load the meets: ${e instanceof Error ? e.message : 'try again'}`));
+        }}
         linkBase={linkBase}
         onSaveEmails={async (clubId, emails) => {
           await saveClubEmails(db, meetId, clubId, emails);
@@ -102,6 +116,15 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
         }}
       />
       </div>
+      {copyMeets && copyMeets.find((m) => m.id === meetId) && (
+        <OrderCopyDialog
+          target={copyMeets.find((m) => m.id === meetId)!}
+          meets={copyMeets}
+          api={copyApi}
+          onClose={() => setCopyMeets(null)}
+          onDone={() => setCopyMeets(null)}
+        />
+      )}
       <ReminderPanel
         view={view}
         onView={setView}

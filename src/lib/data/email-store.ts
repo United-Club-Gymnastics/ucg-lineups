@@ -11,7 +11,10 @@ import type { StoredAthlete } from '../import/diff';
 import { DEFAULT_GYM_ORDER, type Session } from '../import/types';
 import { newClubToken } from '../import/token';
 import type { ReminderKind } from '../reminders';
+import { parseClubTokens, loadClubTokens, CLUB_TOKENS } from './club-tokens';
+import { ordersPath } from './club-store';
 import { meetPaths } from './meet-paths';
+import { listMeets } from './meet-store';
 import { chunk, type StoredClub } from './plan';
 import { loadAthletesForDisplay, loadClubs, loadSessions, publishClubLinks, toStoredAthlete, toStoredClub, toStoredSession } from './store';
 
@@ -26,9 +29,9 @@ const levelsOf = (snap: QuerySnapshot): Record<string, SavedLevel> => {
   return out;
 };
 
-/** One club's saved level orders with the time of each save. */
-export async function loadLevelOrdersWithTimes(db: Firestore, token: string): Promise<Record<string, SavedLevel>> {
-  return levelsOf(await getDocs(collection(db, 'clubOrders', token, 'levels')));
+/** One club's saved level orders in one meet, with the time of each save. */
+export async function loadLevelOrdersWithTimes(db: Firestore, token: string, meetId: string): Promise<Record<string, SavedLevel>> {
+  return levelsOf(await getDocs(collection(db, ordersPath(token, meetId))));
 }
 
 /** What the screen recomputes from while it is open. */
@@ -43,7 +46,7 @@ export interface ClubsLive {
 export const LIVE_DEBOUNCE_MS = 300;
 
 /**
- * Live view of the meet's clubs, athletes and sessions plus every club token's `clubOrders/{token}/levels` (one listener per
+ * Live view of the meet's clubs, athletes and sessions plus every club token's `clubOrders/{token}/meets/{meetId}/levels` (one listener per
  * token; a token that appears or goes away adds or drops its listener). Nothing is reported until every listener has answered
  * once, so a half-loaded state never shows every club as "Still A–Z". Later changes are batched: `onChange` fires once,
  * `debounceMs` after the last one. A failing listener reports once through `onError` and the whole watch stops (Retry starts a
@@ -59,6 +62,8 @@ export function watchClubsLive(
   let sessions: Session[] | null = null;
   let rawAthletes: StoredAthlete[] | null = null;
   let fixes: NameFix[] | null = null;
+  let rawClubs: StoredClub[] | null = null;
+  let tokens: Record<string, string> | null = null;
   let clubs: StoredClub[] | null = null;
   const levels = new Map<string, Record<string, SavedLevel>>(); // by token, once its first snapshot arrived
   const tokenStops = new Map<string, () => void>();
@@ -86,11 +91,12 @@ export function watchClubsLive(
     if (!emitted) emit(); else timer = setTimeout(emit, debounceMs);
   };
   const syncTokens = () => {
+    clubs = rawClubs && tokens ? rawClubs.map((c) => ({ ...c, token: tokens![c.id] ?? '' })) : null;
     const want = new Set((clubs ?? []).map((c) => c.token).filter(Boolean));
     for (const [t, off] of tokenStops) if (!want.has(t)) { off(); tokenStops.delete(t); levels.delete(t); }
     for (const t of want) {
       if (tokenStops.has(t)) continue;
-      tokenStops.set(t, onSnapshot(collection(db, 'clubOrders', t, 'levels'), (snap) => { levels.set(t, levelsOf(snap)); changed(); }, fail));
+      tokenStops.set(t, onSnapshot(collection(db, ordersPath(t, meetId)), (snap) => { levels.set(t, levelsOf(snap)); changed(); }, fail));
     }
   };
 
@@ -99,7 +105,8 @@ export function watchClubsLive(
     onSnapshot(collection(db, p.sessions), (s) => { sessions = s.docs.map((d) => toStoredSession(d.id, d.data())); changed(); }, fail),
     onSnapshot(collection(db, p.athletes), (s) => { rawAthletes = s.docs.map((d) => toStoredAthlete(d.id, d.data())); changed(); }, fail),
     onSnapshot(doc(db, p.nameFixes), (s) => { fixes = parseNameFixes(s.exists() ? s.data() : null); changed(); }, fail),
-    onSnapshot(collection(db, p.clubs), (s) => { clubs = s.docs.map((d) => toStoredClub(d.id, d.data())); syncTokens(); changed(); }, fail),
+    onSnapshot(collection(db, p.clubs), (s) => { rawClubs = s.docs.map((d) => toStoredClub(d.id, d.data())); syncTokens(); changed(); }, fail),
+    onSnapshot(collection(db, CLUB_TOKENS), (s) => { tokens = parseClubTokens(s.docs); syncTokens(); changed(); }, fail),
   );
   function stop() {
     stopped = true;
@@ -160,7 +167,7 @@ export async function loadClubsScreenData(db: Firestore, meetId: string): Promis
     getDoc(doc(db, p.settings)), getDoc(doc(db, p.emailSettings)), getDocs(collection(db, p.emailLog)),
   ]);
   const saved: Record<string, Record<string, SavedLevel>> = {};
-  await Promise.all(clubs.filter((c) => c.token).map(async (c) => { saved[c.id] = await loadLevelOrdersWithTimes(db, c.token); }));
+  await Promise.all(clubs.filter((c) => c.token).map(async (c) => { saved[c.id] = await loadLevelOrdersWithTimes(db, c.token, meetId); }));
   const s = settingsSnap.exists() ? settingsSnap.data() : {};
   const gym = Array.isArray(s.gymOrder) && s.gymOrder.length > 0 && s.gymOrder.every((x: unknown) => typeof x === 'string') ? (s.gymOrder as string[]) : DEFAULT_GYM_ORDER;
   const dl = s.orderDeadline as { toDate?: () => Date } | null | undefined;
@@ -195,37 +202,44 @@ export async function addEmailLog(db: Firestore, meetId: string, e: { template: 
 
 export interface RegenerateResult {
   token: string;
-  /** Saved level orders carried over to the new token. */
+  /** Saved level orders carried over to the new token, across all of the club's meets. */
   copied: number;
   /** false when the old link document could not be deleted (the old link may still open). */
   oldLinkRemoved: boolean;
 }
 
 /**
- * Mint a new private link for a club. Order matters, so a failure part-way never loses work:
- *  1. copy every saved level order from the old token to the new one (the old ones stay put),
- *  2. publish the club's `clubLinks/{new}` document,
- *  3. point the club at the new token,
+ * Mint a new private link for a club (ONE token across all its meets). Order matters, so a failure part-way never loses work:
+ *  1. copy every saved level order of every meet from the old token to the new one (the old ones stay put),
+ *  2. write the new `clubLinks/{new}` document: a copy of the old one (all the club's meets), then this meet's part refreshed,
+ *  3. point the club at the new token (`clubTokens/{clubId}`),
  *  4. delete `clubLinks/{old}` (the old link stops working).
  * Steps 1-3 throw before anything is removed; if step 4 fails the new link already works and the result says so.
  */
 export async function regenerateClubLink(db: Firestore, meetId: string, club: StoredClub, makeToken: () => string = newClubToken): Promise<RegenerateResult> {
-  const oldToken = club.token;
+  const oldToken = club.token || (await loadClubTokens(db))[club.id] || '';
   const token = makeToken();
   if (!token || token === oldToken) throw new Error('Could not make a new token.');
 
   let copied = 0;
+  let oldLink: Record<string, unknown> | undefined;
   if (oldToken) {
-    const old = await getDocs(collection(db, 'clubOrders', oldToken, 'levels'));
-    for (const part of chunk(old.docs)) {
-      const batch = writeBatch(db);
-      for (const d of part) batch.set(doc(db, 'clubOrders', token, 'levels', d.id), d.data());
-      await batch.commit();
+    const oldSnap = await getDoc(doc(db, 'clubLinks', oldToken));
+    if (oldSnap.exists()) oldLink = oldSnap.data();
+    // Every meet, archived ones too: an archived meet's orders are not in the link any more but must not be lost.
+    for (const m of await listMeets(db)) {
+      const old = await getDocs(collection(db, ordersPath(oldToken, m.id)));
+      for (const part of chunk(old.docs)) {
+        const batch = writeBatch(db);
+        for (const d of part) batch.set(doc(db, ordersPath(token, m.id), d.id), d.data());
+        await batch.commit();
+      }
+      copied += old.docs.length;
     }
-    copied = old.docs.length;
   }
+  if (oldLink) await setDoc(doc(db, 'clubLinks', token), oldLink);
+  await setDoc(doc(db, CLUB_TOKENS, club.id), { token });
   await publishClubLinks(db, meetId, [{ ...club, token }]);
-  await setDoc(doc(db, meetPaths(meetId).club(club.id)), { token }, { merge: true });
 
   let oldLinkRemoved = true;
   if (oldToken) {

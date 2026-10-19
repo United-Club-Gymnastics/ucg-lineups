@@ -30,7 +30,8 @@ beforeEach(() => {
   for (const k of Object.keys(fs.docs)) delete fs.docs[k];
   fs.data['meets/m1/athletes'] = [ATH('WAG_a', 'Ada', 'MurrayMetzger', 'club-a'), ATH('WAG_b', 'Bea', 'Plain', 'club-b')];
   fs.data['meets/m1/sessions'] = [{ id: 's1-green', number: 1, gym: 'Green', discipline: 'WAG', levelCodes: ['Dev'] }];
-  fs.data['meets/m1/clubs'] = [{ id: 'club-a', name: 'Club A', emails: [], token: 'tokA' }, { id: 'club-b', name: 'Club B', emails: [], token: 'tokB' }];
+  fs.data['meets/m1/clubs'] = [{ id: 'club-a', name: 'Club A', emails: [] }, { id: 'club-b', name: 'Club B', emails: [] }];
+  fs.data['clubTokens'] = [{ id: 'club-a', token: 'tokA' }, { id: 'club-b', token: 'tokB' }];
 });
 
 describe('name fixes storage', () => {
@@ -54,8 +55,8 @@ describe('where the fixes are applied', () => {
 
   it('the published club roster carries the fixed name, so a re-import (which republishes) keeps it', async () => {
     await publishClubLinks({} as never, 'm1');
-    const link = published.find(([p]) => p === 'clubLinks/tokA')![1] as { sessions: { levels: { athletes: { id: string; last: string }[] }[] }[] };
-    expect(link.sessions[0].levels[0].athletes).toEqual([expect.objectContaining({ id: 'WAG_a', last: 'Murray Metzger' })]);
+    const link = published.find(([p]) => p === 'clubLinks/tokA')![1] as { meets: Record<string, { sessions: { levels: { athletes: { id: string; last: string }[] }[] }[] }> };
+    expect(link.meets.m1.sessions[0].levels[0].athletes).toEqual([expect.objectContaining({ id: 'WAG_a', last: 'Murray Metzger' })]);
   });
 });
 
