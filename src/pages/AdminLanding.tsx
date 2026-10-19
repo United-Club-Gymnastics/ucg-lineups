@@ -11,6 +11,7 @@ const AdminImport = lazy(() => import('./AdminImport'));
 const AdminSquads = lazy(() => import('./AdminSquads'));
 const AdminTnt = lazy(() => import('./AdminTnt'));
 const AdminExports = lazy(() => import('./AdminExports'));
+const AdminClubs = lazy(() => import('./AdminClubs'));
 import './admin.css';
 
 type Tab = 'import' | 'clubs' | 'squads' | 'tnt' | 'exports';
@@ -22,15 +23,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'tnt', label: 'T&T' },
   { id: 'exports', label: 'Exports' },
 ];
-
-function ComingNext({ label }: { label: string }) {
-  return (
-    <section className="adm-card">
-      <h2 className="display">{label}</h2>
-      <p className="adm-muted">Coming next.</p>
-    </section>
-  );
-}
 
 export default function AdminLanding() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -133,7 +125,7 @@ export default function AdminLanding() {
           {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads key={meetId} meetId={meetId} onOpenSchedule={() => setTab('exports')} /></Suspense>}
           {tab === 'tnt' && <Suspense fallback={<p>Loading…</p>}><AdminTnt key={meetId} meetId={meetId} /></Suspense>}
           {tab === 'exports' && <Suspense fallback={<p>Loading…</p>}><AdminExports key={meetId} meetId={meetId} /></Suspense>}
-          {tab === 'clubs' && <ComingNext label="Clubs & email" />}
+          {tab === 'clubs' && <Suspense fallback={<p>Loading…</p>}><AdminClubs key={meetId} meetId={meetId} /></Suspense>}
         </>
       )}
     </main>

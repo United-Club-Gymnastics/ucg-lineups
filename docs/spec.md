@@ -213,14 +213,15 @@ Collation for all sessions: **scorecards by gym** (Green, Red, Yellow, Orange, P
 
 ## 7. Clubs & email (admin)
 
-- Clubs table: status by session, last change, contacts, private link (copy / regenerate).
-- Two reminder lists: **Still A–Z** (clubs with ≥1 session still default and no split pending;
-  the email lists only those sessions) and **Needs to decide a split** (gets only the split email).
-- Editable templates with `{club}`, `{sessions}`, `{deadline}`, `{link}`; per-club preview.
-- **Test mode is the default and the only mode until Julia approves real sends:** recipients are
-  rewritten to `jzsharpe+<club>@gmail.com` (or `nssharpe+…`). Sending to real club addresses is a
-  separate, explicit switch that ships via PR + review, and each real send needs Julia's go-ahead.
-- Send log (who got which reminder when); never uses the platform's Resend account.
+The **Clubs & email** tab works on the selected meet (§7a).
+
+- **Order deadline:** date + time in Pacific, saved to `meets/{id}/settings/meet.orderDeadline` as a Timestamp (it can be removed: no deadline).
+- **Clubs table**, one row per club: full name; per session the levels with athlete counts and the status the club sees (§3); last change (latest save of the club's orders); contact emails (editable inline, saved to `meets/{id}/clubs/{clubId}.emails`); the private link with **Copy** and **Regenerate link**. Filters: by status (or "No email") and a text search (club name or email).
+- **Regenerate link** asks first, then: copies the club's saved orders to the new token, publishes the new `clubLinks/{new}`, points the club at the new token, and only then deletes `clubLinks/{old}`. A failure before the last step leaves the old link working and nothing lost.
+- **Two reminder lists** (pure, `src/lib/reminders.ts`): **Still A–Z** = clubs with at least one MAG/WAG session still default and no split pending; the email lists only those sessions. **Needs to decide a split** = clubs with a level over one squad's cap they haven't kept or changed; they get only the split email, naming the levels that are too big (and are not on the A–Z list). Clubs with no contact email are listed apart ("No email — add one above") and are never sent to. T&T, "Nothing to order" and "Order set" get no reminder.
+- **Templates:** editable subject and body for each reminder, saved to `meets/{id}/emailSettings/main`, with `{club}`, `{sessions}`, `{levels}`, `{deadline}`, `{link}`, `{meet}`. Defaults are the prototype's wording (plain, friendly, A–Z is fine if they do nothing, keep the link private). Body markup: blank line = paragraph, `- ` bullets, `**bold**`, bare links. Per-club preview shows From, To (test alias plus the real address struck through) and Subject, the HTML body and the plain-text alternative. Sent messages are multipart/alternative.
+- **Test mode is the default and the only mode until Julia approves real sends:** every recipient is rewritten to `jzsharpe+<club id>@gmail.com` (or `nssharpe+…`, the admin's choice). There is **no code path that sends to a club's real address** in this version; the "Send to real club addresses" control is disabled ("Needs Julia's go-ahead for each send"). Real sending is a separate switch that ships via PR + review, and each real send needs Julia's go-ahead.
+- **Sending:** "Connect Gmail" (`connectGmail()`), then the selected list goes out one message at a time (about 400 ms apart) from the admin's Gmail as `info@unitedclubgymnastics.org`, with a progress bar and a result per club; an expired connection (401) stops the run. Each success is logged to `meets/{id}/emailLog` (template, club, test alias, subject, time, admin email, `mode: 'test'`); a log table is shown, and **Skip clubs already sent this reminder today** (Pacific day) is on by default. Never uses the platform's Resend account.
 
 ## 7a. Meets (several meets, one app)
 
@@ -262,7 +263,8 @@ Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[
 | `meets/{meetId}/clubs/{clubId}` | admin | full name, contact emails, token |
 | `meets/{meetId}/squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |
 | `meets/{meetId}/synchroSessions/main` | admin | `{ assignments: { <pairId>: <sessionId> } }`: the host's session choice per synchro pair |
-| `meets/{meetId}/emailLog/{id}`, `…/emailSettings/main` | admin | reminders sent; templates |
+| `meets/{meetId}/emailLog/{id}` | admin | one row per message sent: `{ template: 'az'\|'split', clubId, club, to (the test alias), subject, at, by (admin email), mode: 'test' }` |
+| `meets/{meetId}/emailSettings/main` | admin | `{ templates: { az: { subject, body }, split: { subject, body } } }` |
 | `clubLinks/{token}` | public **get** only (no list) | **meetId**, clubId, club name, the club's roster per session (names, levels, apparatus — no emails/DOB) |
 | `clubOrders/{token}/levels/{sessionId_level}` | club with token (until its meet's deadline), admin | groups, per-apparatus sections, splitDecided, updatedAt |
 | `admins/{email}` | console only | extra admins |

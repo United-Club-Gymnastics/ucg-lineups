@@ -15,6 +15,7 @@ vi.mock('../../src/lib/data/meet-store', () => ({
   listMeets: vi.fn(async () => [{ id: 'm1', name: 'Test Meet', createdAt: 1, archived: false }]),
   createMeet: vi.fn(), renameMeet: vi.fn(), setMeetArchived: vi.fn(),
 }));
+vi.mock('../../src/lib/data/email-store', () => ({ loadClubsScreenData: vi.fn(() => new Promise(() => {})) }));
 vi.mock('../../src/lib/data/store', () => ({
   loadStored: vi.fn(async () => ({ athletes: [], clubs: [], hasSettings: false })),
   applyImport: vi.fn(),
@@ -47,6 +48,6 @@ describe('admin shell', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Load stored data/ }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Apply import' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: 'Clubs & email' }));
-    expect(screen.getByText('Coming next.')).toBeInTheDocument();
+    expect(await screen.findByText(/Loading clubs, orders and the send log/)).toBeInTheDocument();
   });
 });

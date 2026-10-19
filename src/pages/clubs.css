@@ -1,0 +1,83 @@
+/* Clubs & email screen. Navy ink on light surfaces; status colour only as badge fills carrying navy text. */
+.cl { display: grid; min-width: 0; }
+.cl-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin: 8px 0; }
+.cl-field { display: grid; gap: 4px; font-size: 13.5px; color: var(--ink); min-width: min(100%, 200px); margin-bottom: 8px; }
+.cl-filters .cl-field { margin-bottom: 0; }
+.cl-field > span { font-weight: 700; }
+.cl-grow { flex: 1 1 240px; }
+.cl-field input, .cl-field select, .cl-field textarea, .cl-in {
+  font: inherit; padding: 8px 10px; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); min-height: 40px; min-width: 0; max-width: 100%; width: 100%;
+}
+.cl-field textarea { line-height: 1.45; resize: vertical; }
+.cl-field input::placeholder, .cl-in::placeholder { color: var(--ink-soft); opacity: 1; }
+.cl-field input:focus-visible, .cl-field select:focus-visible, .cl-field textarea:focus-visible, .cl-in:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }
+.cl-count { margin: 0; font-size: 13px; color: var(--ink); padding-bottom: 10px; }
+.cl-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.cl-head h2 { margin: 0; }
+.cl-state { font-size: 13px; color: var(--ink); min-height: 18px; margin: 4px 0 0; }
+.cl-state.err { color: var(--coral-text); font-weight: 700; }
+.cl-ph { background: var(--ice-100); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-right: 4px; font-size: 12.5px; }
+.cl-check { display: flex; gap: 8px; align-items: center; font-size: 14px; margin: 8px 0; color: var(--ink); }
+.cl-check input { width: 18px; height: 18px; }
+.cl-real-send { margin: 0; }
+.cl-who { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink); }
+.cl-who legend { font-size: 13px; font-weight: 700; padding: 0 4px; }
+.cl-who label { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+
+.cl-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 8px; max-width: 100%; }
+.cl-seg button { font: inherit; font-weight: 700; padding: 9px 14px; border: 0; background: var(--white); color: var(--ink); cursor: pointer; min-height: 40px; }
+.cl-seg button + button { border-left: 1px solid var(--navy-600); }
+.cl-seg button[aria-pressed='true'] { background: var(--navy-800); color: var(--white); }
+.cl-seg button:focus-visible { outline: 2px solid var(--navy-800); outline-offset: -4px; }
+
+/* Tables: real tables on wide screens, labelled stacked cells on narrow ones (no sideways scroll). */
+.cl-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cl-table th, .cl-table td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.cl-table thead th { font-weight: 700; white-space: nowrap; }
+.cl-name { font-weight: 700; min-width: 140px; }
+.cl-wrap { overflow-wrap: anywhere; }
+.cl-sessions { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cl-sessions li { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: center; }
+.cl-session { font-weight: 700; }
+.cl-levels { font-size: 13px; color: var(--ink); }
+.cl-link { font-size: 12.5px; background: var(--ice-100); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; display: inline-block; overflow-wrap: anywhere; }
+.cl-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.cl-table:not(.cl-log) td:nth-child(4) { min-width: 250px; }
+
+.cl-recips { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.cl-recips li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--white); }
+.cl-recips label { display: flex; gap: 8px; align-items: center; font-weight: 700; flex: 1 1 200px; min-width: 0; }
+.cl-recips label span { overflow-wrap: anywhere; }
+.cl-recips input { width: 18px; height: 18px; flex: none; }
+.cl-recip-note { font-size: 13px; color: var(--ink); flex: 2 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.cl-recip-note em { font-style: normal; font-weight: 700; }
+
+.cl-mailhead { margin: 10px 0; display: grid; gap: 4px; font-size: 14px; }
+.cl-mailhead > div { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.cl-mailhead dt { font-weight: 700; min-width: 60px; }
+.cl-mailhead dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.cl-real { color: var(--ink); text-decoration-thickness: 2px; }
+.cl-frame { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
+.cl-text { margin-top: 8px; font-size: 13.5px; }
+.cl-text summary { cursor: pointer; font-weight: 700; }
+.cl-text pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--ice-100); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; margin: 6px 0 0; font-family: inherit; }
+
+.cl-progress { display: flex; align-items: center; gap: 10px; margin: 12px 0 4px; }
+.cl-progress progress { flex: 1 1 auto; height: 14px; min-width: 0; accent-color: var(--navy-800); }
+.cl-results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; max-height: 280px; overflow: auto; font-size: 13.5px; }
+.cl-results li { padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--white); overflow-wrap: anywhere; }
+.cl-results li.bad { background: var(--coral-100); border-color: var(--coral-500); }
+
+@media (max-width: 900px) {
+  .cl-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .cl-table, .cl-table tbody, .cl-table tr, .cl-table th, .cl-table td { display: block; width: 100%; }
+  .cl-table tr { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 8px; margin-bottom: 10px; background: var(--white); }
+  .cl-table th, .cl-table td { border-bottom: 0; padding: 4px 2px; min-width: 0 !important; }
+  .cl-table td::before, .cl-table th[data-label]:not(.cl-name)::before { content: attr(data-label); display: block; font-size: 12px; font-weight: 700; color: var(--ink); }
+  .cl-table th.cl-name { font-size: 16px; }
+}
+@media (max-width: 520px) {
+  .cl-seg { display: grid; width: 100%; }
+  .cl-seg button { text-align: left; }
+  .cl-seg button + button { border-left: 0; border-top: 1px solid var(--navy-600); }
+}
