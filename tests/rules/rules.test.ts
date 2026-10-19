@@ -47,6 +47,7 @@ async function seed(deadline: Timestamp | null = null, deadline2: Timestamp | nu
       await setDoc(doc(db, m(meet, 'squads/s1-green')), { squads: [] });
       await setDoc(doc(db, m(meet, 'sessions/s1-green')), { number: 1 });
       await setDoc(doc(db, m(meet, 'emailLog/x')), { sent: true });
+      await setDoc(doc(db, m(meet, 'nameFixes/main')), { fixes: [{ field: 'last', from: 'MurrayMetzger', to: 'Murray Metzger' }] });
     }
     await setDoc(doc(db, 'admins/helper@gmail.com'), { added: true });
   });
@@ -241,10 +242,27 @@ describe('schedule and synchro session choices (admin-only under meets/**)', () 
   });
 });
 
+describe('name fixes (admin-only under meets/**, never in the public settings)', () => {
+  beforeEach(() => seed());
+
+  test('an admin reads and replaces the list; the public, an outsider and a club token holder cannot read or write it', async () => {
+    const ref = (db: ReturnType<typeof publicDb>) => doc(db, m(M1, 'nameFixes/main'));
+    await assertSucceeds(setDoc(ref(domainAdminDb()), { fixes: [{ field: 'first', from: 'MaryAnn', to: 'Mary Ann' }], updatedAt: serverTimestamp() }));
+    expect((await getDoc(ref(domainAdminDb()))).data()!.fixes).toHaveLength(1);
+    await assertFails(getDoc(ref(publicDb())));
+    await assertFails(getDoc(ref(outsiderDb())));
+    await assertFails(setDoc(ref(publicDb()), { fixes: [] }));
+    await assertFails(setDoc(ref(outsiderDb()), { fixes: [] }));
+    // The public settings document stays readable, but holds no names.
+    const settings = await getDoc(doc(publicDb(), m(M1, 'settings/meet')));
+    expect(JSON.stringify(settings.data())).not.toContain('MurrayMetzger');
+  });
+});
+
 describe('admin-only collections (all under meets/{meetId}/)', () => {
   beforeEach(() => seed());
   const PATHS = [
-    ...[M1, M2].flatMap((meet) => ['athletes/WAG_0001', 'clubs/club-a', 'sessions/s1-green', 'squads/s1-green', 'emailLog/x', 'emailSettings/main'].map((p) => m(meet, p))),
+    ...[M1, M2].flatMap((meet) => ['athletes/WAG_0001', 'clubs/club-a', 'sessions/s1-green', 'squads/s1-green', 'emailLog/x', 'emailSettings/main', 'nameFixes/main'].map((p) => m(meet, p))),
     'admins/helper@gmail.com',
   ];
 

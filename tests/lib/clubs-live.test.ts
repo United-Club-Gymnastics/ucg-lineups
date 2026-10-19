@@ -13,7 +13,7 @@ const fs = vi.hoisted(() => {
       return off;
     },
     // not used by watchClubsLive, but the module imports them
-    addDoc: vi.fn(), deleteDoc: vi.fn(), doc: vi.fn(), getDoc: vi.fn(), getDocs: vi.fn(), serverTimestamp: vi.fn(), setDoc: vi.fn(), Timestamp: {}, writeBatch: vi.fn(),
+    addDoc: vi.fn(), deleteDoc: vi.fn(), doc: (_db: unknown, ...p: string[]) => p.join('/'), getDoc: vi.fn(), getDocs: vi.fn(), serverTimestamp: vi.fn(), setDoc: vi.fn(), Timestamp: {}, writeBatch: vi.fn(),
   };
 });
 vi.mock('firebase/firestore', () => fs);
@@ -23,6 +23,8 @@ import { watchClubsLive } from '../../src/lib/data/email-store';
 const docs = (rows: Record<string, Record<string, unknown>>) => ({ docs: Object.entries(rows).map(([id, d]) => ({ id, data: () => d })) });
 const at = (path: string) => fs.listeners.filter((l) => l.path === path && !l.off.mock.calls.length);
 const push = (path: string, rows: Record<string, Record<string, unknown>>) => at(path).forEach((l) => l.next(docs(rows)));
+// The name fixes document is a single-document listener: `null` = the document does not exist yet.
+const pushFixes = (data: Record<string, unknown> | null) => at('meets/m1/nameFixes/main').forEach((l) => (l.next as unknown as (s: unknown) => void)({ exists: () => data !== null, data: () => data }));
 
 const CLUBS = { 'club-a': { name: 'Club A', emails: [], token: 'tok-a' }, 'club-b': { name: 'Club B', emails: [], token: 'tok-b' } };
 const LEVEL = (updatedAt: number) => ({ order: [], updatedAt: { toMillis: () => updatedAt } });
@@ -34,9 +36,10 @@ describe('watchClubsLive', () => {
   it('listens to the meet collections and one levels collection per club token, and reports nothing until all have answered', () => {
     const onChange = vi.fn();
     watchClubsLive({} as never, 'm1', { onChange, onError: vi.fn() });
-    expect(fs.listeners.map((l) => l.path).sort()).toEqual(['meets/m1/athletes', 'meets/m1/clubs', 'meets/m1/sessions']);
+    expect(fs.listeners.map((l) => l.path).sort()).toEqual(['meets/m1/athletes', 'meets/m1/clubs', 'meets/m1/nameFixes/main', 'meets/m1/sessions']);
     push('meets/m1/sessions', {});
     push('meets/m1/athletes', {});
+    pushFixes(null);
     push('meets/m1/clubs', CLUBS);
     expect(fs.listeners.map((l) => l.path)).toContain('clubOrders/tok-a/levels');
     expect(fs.listeners.map((l) => l.path)).toContain('clubOrders/tok-b/levels');
@@ -57,6 +60,7 @@ describe('watchClubsLive', () => {
     const stop = watchClubsLive({} as never, 'm1', { onChange, onError }, debounceMs);
     push('meets/m1/sessions', {});
     push('meets/m1/athletes', {});
+    pushFixes(null);
     push('meets/m1/clubs', CLUBS);
     push('clubOrders/tok-a/levels', {});
     push('clubOrders/tok-b/levels', {});
@@ -114,5 +118,23 @@ describe('watchClubsLive', () => {
     vi.advanceTimersByTime(1000);
     expect(onChange).not.toHaveBeenCalled();
     stop();
+  });
+
+  it('shows athletes with the meet\'s name fixes applied, and waits for the fixes before reporting', () => {
+    const onChange = vi.fn();
+    watchClubsLive({} as never, 'm1', { onChange, onError: vi.fn() });
+    push('meets/m1/sessions', {});
+    push('meets/m1/athletes', { WAG_a: { first: 'Ada', last: 'MurrayMetzger', clubId: 'club-a' } });
+    push('meets/m1/clubs', CLUBS);
+    push('clubOrders/tok-a/levels', {});
+    push('clubOrders/tok-b/levels', {});
+    expect(onChange).not.toHaveBeenCalled();
+    pushFixes({ fixes: [{ field: 'last', from: 'MurrayMetzger', to: 'Murray Metzger' }] });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].athletes).toEqual([{ id: 'WAG_a', first: 'Ada', last: 'Murray Metzger', clubId: 'club-a' }]);
+    // Removing the fix shows the export's spelling again.
+    pushFixes(null);
+    vi.advanceTimersByTime(300);
+    expect(onChange.mock.calls[1][0].athletes[0].last).toBe('MurrayMetzger');
   });
 });

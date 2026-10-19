@@ -18,9 +18,13 @@ vi.mock('../../src/lib/data/meet-store', () => ({
 vi.mock('../../src/lib/data/email-store', () => ({ loadClubsScreenData: vi.fn(() => new Promise(() => {})) }));
 vi.mock('../../src/lib/data/store', () => ({
   loadStored: vi.fn(async () => ({ athletes: [], clubs: [], hasSettings: false })),
+  loadAthletes: vi.fn(async () => []),
+  saveNameFixesAndRepublish: vi.fn(),
   applyImport: vi.fn(),
   publishClubLinks: vi.fn(),
 }));
+
+vi.mock('../../src/lib/data/name-fixes-store', () => ({ loadNameFixes: vi.fn(async () => []) }));
 
 import AdminLanding from '../../src/pages/AdminLanding';
 

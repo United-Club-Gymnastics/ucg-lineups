@@ -5,7 +5,7 @@ import type { Session } from '../import/types';
 import { parseTntDoc, type StoredTntDoc } from '../tnt-data';
 import { meetPaths } from './meet-paths';
 import { loadGymOrder } from './squad-store';
-import { loadAthletes, loadSessions } from './store';
+import { loadAthletesForDisplay, loadSessions } from './store';
 import { loadSynchroDoc } from './synchro-store';
 import type { SynchroAssignments, SynchroScratched } from '../synchro-flights';
 
@@ -21,7 +21,7 @@ export interface TntInput {
 
 /** A failed read throws: never show defaults for data we could not read. */
 export async function loadTntInput(db: Firestore, meetId: string): Promise<TntInput> {
-  const [sessions, athletes, gymOrder, synchro] = await Promise.all([loadSessions(db, meetId), loadAthletes(db, meetId), loadGymOrder(db, meetId), loadSynchroDoc(db, meetId)]);
+  const [sessions, athletes, gymOrder, synchro] = await Promise.all([loadSessions(db, meetId), loadAthletesForDisplay(db, meetId), loadGymOrder(db, meetId), loadSynchroDoc(db, meetId)]);
   return { sessions, athletes, gymOrder, assignments: synchro.assignments, scratched: synchro.scratched };
 }
 

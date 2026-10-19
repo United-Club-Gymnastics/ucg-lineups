@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type DragEvent } from 'react';
 import { db } from '../lib/firebase';
 import { Badge, Modal } from '../components/ui';
+import NameFixesCard from '../components/NameFixesCard';
 import { applyImport, loadStored, publishClubLinks, type StoredState } from '../lib/data/store';
 import { planImport } from '../lib/data/plan';
 import { assembleInput } from '../lib/import/assemble';
@@ -27,6 +28,8 @@ export default function AdminImport({ meetId }: { meetId: string }) {
   const [confirm, setConfirm] = useState(false);
   const [applying, setApplying] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  // Bumped after an import so the Name fixes card re-reads the athletes (new names to suggest).
+  const [importCount, setImportCount] = useState(0);
 
   const addFiles = useCallback(async (list: FileList | File[]) => {
     const next: LoadedFile[] = [];
@@ -100,6 +103,7 @@ export default function AdminImport({ meetId }: { meetId: string }) {
         setResult({ ok: false, text: `${summary} But publishing the club pages failed: ${e instanceof Error ? e.message : 'unknown error'}. Apply the import again to retry.` });
       }
       setConfirm(false);
+      setImportCount((n) => n + 1);
       await refreshStored();
     } catch (e) {
       setResult({ ok: false, text: e instanceof Error ? e.message : 'Import failed.' });
@@ -213,6 +217,8 @@ export default function AdminImport({ meetId }: { meetId: string }) {
       )}
 
       {result && <div className={`adm-banner ${result.ok ? 'ok' : 'err'}`} role={result.ok ? 'status' : 'alert'}>{result.text}</div>}
+
+      <NameFixesCard key={meetId} meetId={meetId} reloadKey={importCount} />
 
       {confirm && plan && (
         <Modal title="Apply this import?" onClose={() => setConfirm(false)}>

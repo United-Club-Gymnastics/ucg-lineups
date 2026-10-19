@@ -3,6 +3,7 @@
 import {
   addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, serverTimestamp, setDoc, Timestamp, writeBatch, type Firestore, type QuerySnapshot,
 } from 'firebase/firestore';
+import { applyNameFixesToAthletes, parseNameFixes, type NameFix } from '../name-fixes';
 import { fromStored } from '../club-order-model';
 import type { SavedLevel } from '../club-overview';
 import { parseTemplates, type Templates } from '../email-templates';
@@ -12,7 +13,7 @@ import { newClubToken } from '../import/token';
 import type { ReminderKind } from '../reminders';
 import { meetPaths } from './meet-paths';
 import { chunk, type StoredClub } from './plan';
-import { loadAthletes, loadClubs, loadSessions, publishClubLinks, toStoredAthlete, toStoredClub, toStoredSession } from './store';
+import { loadAthletesForDisplay, loadClubs, loadSessions, publishClubLinks, toStoredAthlete, toStoredClub, toStoredSession } from './store';
 
 const toMs = (v: unknown): number | null => (v && typeof (v as { toMillis?: unknown }).toMillis === 'function' ? (v as { toMillis: () => number }).toMillis() : null);
 
@@ -56,7 +57,8 @@ export function watchClubsLive(
   const p = meetPaths(meetId);
   let stopped = false;
   let sessions: Session[] | null = null;
-  let athletes: StoredAthlete[] | null = null;
+  let rawAthletes: StoredAthlete[] | null = null;
+  let fixes: NameFix[] | null = null;
   let clubs: StoredClub[] | null = null;
   const levels = new Map<string, Record<string, SavedLevel>>(); // by token, once its first snapshot arrived
   const tokenStops = new Map<string, () => void>();
@@ -68,14 +70,14 @@ export function watchClubsLive(
     stop();
     handlers.onError(e instanceof Error ? e : new Error('Live updates stopped.'));
   };
-  const ready = () => sessions && athletes && clubs && clubs.every((c) => !c.token || levels.has(c.token));
+  const ready = () => sessions && rawAthletes && fixes && clubs && clubs.every((c) => !c.token || levels.has(c.token));
   const emit = () => {
     timer = null;
-    if (stopped || !sessions || !athletes || !clubs || !ready()) return;
+    if (stopped || !sessions || !rawAthletes || !fixes || !clubs || !ready()) return;
     const saved: ClubsLive['saved'] = {};
     for (const c of clubs) if (c.token) saved[c.id] = levels.get(c.token) ?? {};
     emitted = true;
-    handlers.onChange({ sessions, athletes, clubs, saved });
+    handlers.onChange({ sessions, athletes: applyNameFixesToAthletes(rawAthletes, fixes), clubs, saved });
   };
   const changed = () => {
     if (stopped || !ready()) return;
@@ -95,7 +97,8 @@ export function watchClubsLive(
   const offs: (() => void)[] = [];
   offs.push(
     onSnapshot(collection(db, p.sessions), (s) => { sessions = s.docs.map((d) => toStoredSession(d.id, d.data())); changed(); }, fail),
-    onSnapshot(collection(db, p.athletes), (s) => { athletes = s.docs.map((d) => toStoredAthlete(d.id, d.data())); changed(); }, fail),
+    onSnapshot(collection(db, p.athletes), (s) => { rawAthletes = s.docs.map((d) => toStoredAthlete(d.id, d.data())); changed(); }, fail),
+    onSnapshot(doc(db, p.nameFixes), (s) => { fixes = parseNameFixes(s.exists() ? s.data() : null); changed(); }, fail),
     onSnapshot(collection(db, p.clubs), (s) => { clubs = s.docs.map((d) => toStoredClub(d.id, d.data())); syncTokens(); changed(); }, fail),
   );
   function stop() {
@@ -153,7 +156,7 @@ export interface ClubsScreenData {
 export async function loadClubsScreenData(db: Firestore, meetId: string): Promise<ClubsScreenData> {
   const p = meetPaths(meetId);
   const [sessions, athletes, clubs, settingsSnap, emailSnap, logSnap] = await Promise.all([
-    loadSessions(db, meetId), loadAthletes(db, meetId), loadClubs(db, meetId),
+    loadSessions(db, meetId), loadAthletesForDisplay(db, meetId), loadClubs(db, meetId),
     getDoc(doc(db, p.settings)), getDoc(doc(db, p.emailSettings)), getDocs(collection(db, p.emailLog)),
   ]);
   const saved: Record<string, Record<string, SavedLevel>> = {};

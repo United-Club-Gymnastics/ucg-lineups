@@ -48,6 +48,15 @@ comes from SF Events and goes stale).
   groups or squads. Athletes missing from a new import are marked removed (not deleted) and drop
   out of groups/squads through the platform's reconcile rules. The import screen shows a summary:
   added, changed, removed, unmatched rows.
+- **Name fixes (per meet).** ScoreFlippers exports and the Synchro tool drop the spaces from some names ("MurrayMetzger",
+  "StPierre"), and no source has the right spelling, so the host enters each fix once per meet on the Import tab: a first-name or
+  last-name fix `{ field, from (as in the export), to (shown as) }`. `from` matches on the compact form (lowercase letters and
+  digits), and `to` must keep the same compact form (only spaces, capitals, hyphens, accents change), so matching, ids, A–Z sort keys and
+  saved orders never move: a fix is display only, and it applies everywhere a name is shown (club page, squads, competing order,
+  synchro pairs, "Needs a session" and problem texts, emails, every PDF, Clubs & Emails). The Import tab suggests fixes for last
+  names and first names with an inner capital after a lowercase letter (not Mc, Mac, De, Di, Da, Du, La, Le, Lo, Van, Von, O'),
+  with the number of athletes; nothing applies until the host accepts one. Saving republishes the affected clubs' links. Fixes
+  survive re-imports (the import compares and stores the export's spelling).
 - Sessions: id from number + gym (`s1-orange`). Gym order for collation: **Green, Red, Yellow,
   Orange, Purple** (a setting).
 
@@ -263,6 +272,7 @@ Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[
 | `meets/{meetId}/clubs/{clubId}` | admin | full name, contact emails, token |
 | `meets/{meetId}/squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |
 | `meets/{meetId}/synchroSessions/main` | admin | `{ assignments: { <pairId>: <sessionId> } }`: the host's session choice per synchro pair |
+| `meets/{meetId}/nameFixes/main` | admin (catch-all; not in the public settings) | `{ fixes: [{ field: 'first'\|'last', from, to }], updatedAt }`: display-only name fixes (spec §2) |
 | `meets/{meetId}/emailLog/{id}` | admin | one row per message sent: `{ template: 'az'\|'split', clubId, club, to (the test alias), subject, at, by (admin email), mode: 'test' }` |
 | `meets/{meetId}/emailSettings/main` | admin | `{ templates: { az: { subject, body }, split: { subject, body } } }` |
 | `clubLinks/{token}` | public **get** only (no list) | **meetId**, clubId, club name, the club's roster per session (names, levels, apparatus — no emails/DOB) |

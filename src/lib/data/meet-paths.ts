@@ -24,6 +24,8 @@ export interface MeetPaths {
   synchro: string;
   emailLog: string;
   emailSettings: string;
+  /** `meets/{id}/nameFixes/main`: `{ fixes: [{ field, from, to }], updatedAt }`. Admin-only (never in the public settings/meet). */
+  nameFixes: string;
 }
 
 export function meetPaths(meetId: string): MeetPaths {
@@ -42,6 +44,7 @@ export function meetPaths(meetId: string): MeetPaths {
     synchro: `${root}/synchroSessions/main`,
     emailLog: `${root}/emailLog`,
     emailSettings: `${root}/emailSettings/main`,
+    nameFixes: `${root}/nameFixes/main`,
   };
 }
 

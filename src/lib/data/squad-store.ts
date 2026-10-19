@@ -6,7 +6,7 @@ import type { LevelOrder } from '../club-order-model';
 import { parseSquadDoc, type StoredSquadDoc } from '../squad-data';
 import { meetPaths } from './meet-paths';
 import { loadLevelOrders } from './club-store';
-import { loadAthletes, loadClubs, loadSessions } from './store';
+import { loadAthletesForDisplay, loadClubs, loadSessions } from './store';
 
 export interface SquadsInput {
   sessions: Session[];
@@ -24,7 +24,7 @@ export async function loadGymOrder(db: Firestore, meetId: string): Promise<strin
 
 /** Everything the screen needs except the session's own plan. A failed read throws: never show defaults for clubs we could not read. */
 export async function loadSquadsInput(db: Firestore, meetId: string): Promise<SquadsInput> {
-  const [sessions, athletes, clubs, gymOrder] = await Promise.all([loadSessions(db, meetId), loadAthletes(db, meetId), loadClubs(db, meetId), loadGymOrder(db, meetId)]);
+  const [sessions, athletes, clubs, gymOrder] = await Promise.all([loadSessions(db, meetId), loadAthletesForDisplay(db, meetId), loadClubs(db, meetId), loadGymOrder(db, meetId)]);
   const ordersByClub: Record<string, Record<string, LevelOrder>> = {};
   await Promise.all(clubs.filter((c) => c.token).map(async (c) => {
     ordersByClub[c.id] = await loadLevelOrders(db, c.token);
