@@ -7,6 +7,7 @@ import {
   type ArtisticRotationPage, type HeavyBoxStyle, type ArtisticScorecardPage, type Column, type Page, type RotationTimeline, type SynchroPage, type TntRotationPage, type TntScorecardPage,
 } from './model';
 import { splitPair } from './pair';
+import { rowUnits } from './artistic-rotation-content';
 import { parsePath } from './svg-path';
 
 /** One cell of a scorecard grid. Cells that touch share their edge: it is drawn once (see `Pen.boxes`). */
@@ -405,17 +406,20 @@ function drawArtisticRotation(p: Pen, pg: ArtisticRotationPage, W: number, H: nu
       y += unit;
     }
     s.rows.forEach((r) => {
-      if (r.alt) p.fill(L, y, TW, unit, TINT_ALT);
-      p.rect(L, y, TW, unit, THIN);
-      p.line(L + labelW, y, L + labelW, y + unit, THIN);
-      p.text(r.label, L + 5, y + unit / 2, { size: fs, style: 'bold', maxW: labelW - 8 });
+      // A row naming its athletes is taller: label on top, the names in smaller type underneath.
+      const rh = unit * rowUnits(r);
+      if (r.alt) p.fill(L, y, TW, rh, TINT_ALT);
+      p.rect(L, y, TW, rh, THIN);
+      p.line(L + labelW, y, L + labelW, y + rh, THIN);
+      p.text(r.label, L + 5, y + (r.names ? unit * 0.5 : rh / 2), { size: fs, style: 'bold', maxW: labelW - 8 });
+      if (r.names) p.text(r.names, L + 5, y + unit * 1.12, { size: fs * 0.85, maxW: labelW - 8 });
       r.counts.forEach((v, k) => {
         const x = L + labelW + k * colW;
-        if (k > 0) p.line(x, y, x, y + unit, THIN);
-        if (v !== null) p.text(String(v), x + colW / 2, y + unit / 2, { size: fs, style: v ? 'bold' : 'normal', align: 'center', gray: v ? 0 : GREY_TEXT });
+        if (k > 0) p.line(x, y, x, y + rh, THIN);
+        if (v !== null) p.text(String(v), x + colW / 2, y + rh / 2, { size: fs, style: v ? 'bold' : 'normal', align: 'center', gray: v ? 0 : GREY_TEXT });
       });
       if (r.levelBreak) p.line(L, y, L + TW, y, 1, [3, 2]);
-      y += unit;
+      y += rh;
     });
     if (s.notes.length > 0) {
       const nfs = Math.min(7.5, unit * 0.55);

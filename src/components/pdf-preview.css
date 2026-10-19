@@ -90,3 +90,8 @@
 .pv-timeline thead th { background: #dbdbdb; }
 .pv-timeline tbody th { width: 16pt; }
 .pv-timeline td.pv-compete { font-weight: 700; }
+
+/* Rotation rows that name their athletes (1–2 athletes, or independents): label above, names below in smaller type. */
+.pv-rrow > .pv-rlabel2 { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1pt; }
+.pv-rlabel2 > b, .pv-rnames { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-rnames { font-weight: 400; font-size: 0.85em; }

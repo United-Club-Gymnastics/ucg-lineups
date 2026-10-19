@@ -15,18 +15,26 @@ export const GAP_UNITS = 0.8;
 export const groupLabel = (g: ArtisticGroupInput): string =>
   `${g.clubName} – ${g.levelCode}${!g.independent && g.groupCount > 1 ? ` · Group ${String.fromCharCode(65 + g.groupIndex)}` : ''}`;
 
-interface Merged { label: string; levelCode: string; routines: Record<string, number> }
+interface Merged { label: string; levelCode: string; routines: Record<string, number>; athletes: string[]; indep: boolean }
+
+/** Rows this small list their athletes by name (independents always do). */
+export const NAME_ROW_MAX = 2;
+/** A row with a names line is this many layout units tall (a plain row is 1). */
+export const NAMES_ROW_UNITS = 1.6;
+
+export const rowUnits = (r: RotationRow): number => (r.names ? NAMES_ROW_UNITS : 1);
 
 /** One row per club group; an independent's athletes of one level are one row (as on the original sheet). */
 function mergedRows(groups: ArtisticGroupInput[]): Merged[] {
-  const out: (Merged & { indep: boolean })[] = [];
+  const out: Merged[] = [];
   for (const g of groups) {
     const last = out[out.length - 1];
     if (g.independent && last?.indep && last.levelCode === g.levelCode && last.label === groupLabel(g)) {
       for (const [c, n] of Object.entries(g.routines)) last.routines[c] = (last.routines[c] ?? 0) + n;
+      last.athletes.push(...(g.athletes ?? []));
       continue;
     }
-    out.push({ label: groupLabel(g), levelCode: g.levelCode, routines: { ...g.routines }, indep: g.independent });
+    out.push({ label: groupLabel(g), levelCode: g.levelCode, routines: { ...g.routines }, indep: g.independent, athletes: [...(g.athletes ?? [])] });
   }
   return out;
 }
@@ -45,7 +53,8 @@ export const timelineUnits = (t: RotationTimeline): number => (t.rows.length + 1
 export const COLUMN_WIDTH = 46;
 export const WIDE_COLUMN_WIDTH = 54;
 
-export const squadUnits = (s: RotationSquad): number => HEADER_UNITS + Math.max(1, s.rows.length) + GAP_UNITS;
+export const squadUnits = (s: RotationSquad): number =>
+  HEADER_UNITS + (s.rows.length === 0 ? 1 : s.rows.reduce((t, r) => t + rowUnits(r), 0)) + GAP_UNITS;
 
 export function artisticRotationPages(input: ArtisticSessionInput): Unnumbered<ArtisticRotationPage>[] {
   const { session, pattern, meet } = input;
@@ -69,6 +78,7 @@ export function artisticRotationPages(input: ArtisticSessionInput): Unnumbered<A
     const merged = mergedRows(s.groups);
     const rows: RotationRow[] = merged.map((m, ix) => ({
       label: m.label,
+      names: m.indep || m.athletes.length <= NAME_ROW_MAX ? [...m.athletes].sort((a, b) => a.localeCompare(b)).join(', ') : '',
       counts: padCounts(rots[i].map((c) => (c === BYE ? null : (m.routines[columnCode(c)] ?? 0)))),
       levelBreak: ix > 0 && merged[ix - 1].levelCode !== m.levelCode,
       alt: ix % 2 === 1,

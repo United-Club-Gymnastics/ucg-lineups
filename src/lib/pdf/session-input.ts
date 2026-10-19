@@ -40,6 +40,8 @@ export interface ArtisticGroupInput {
   /** Athletes of this card on each apparatus, in the club's competing order for that apparatus. */
   order: Record<string, ExportAthlete[]>;
   routines: Record<string, number>;
+  /** Everyone on this card, A–Z by first name (the rotation sheet names small groups and independents). */
+  athletes: string[];
 }
 
 export interface ArtisticSquadInput {
@@ -129,6 +131,7 @@ export function buildArtisticSessionInput(input: {
         groupCount: card.groupCount,
         order,
         routines: { ...card.routines },
+        athletes: card.regIds.filter((id) => d.athletes.has(id)).map((id) => person(id).name).sort((a, b) => a.localeCompare(b)),
       };
     }),
   }));
