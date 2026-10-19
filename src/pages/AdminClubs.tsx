@@ -3,7 +3,7 @@ import { auth, db } from '../lib/firebase';
 import ClubsTable from '../components/clubs/ClubsTable';
 import ReminderPanel from '../components/clubs/ReminderPanel';
 import { buildClubRows } from '../lib/club-overview';
-import { loadClubsScreenData, regenerateClubLink, saveClubEmails, saveOrderDeadline, type ClubsScreenData, type EmailLogEntry } from '../lib/data/email-store';
+import { loadClubsScreenData, regenerateClubLink, saveClubEmails, saveOrderDeadline, watchClubsLive, type ClubsLive, type ClubsScreenData, type EmailLogEntry } from '../lib/data/email-store';
 import { dateToPacific, formatDeadline, pacificToDate } from '../lib/pacific';
 import './clubs.css';
 
@@ -21,6 +21,20 @@ export default function AdminClubs({ meetId, pauseMs }: { meetId: string; pauseM
   }, [meetId]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Live updates: after the first load, the clubs, athletes, sessions and every club's saved orders are listened to, so a club
+  // changing its order shows here without a refresh. `attempt` restarts the listeners (Retry).
+  const loaded = load.kind === 'ready';
+  const [live, setLive] = useState<ClubsLive | null>(null);
+  const [liveError, setLiveError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!loaded) return;
+    return watchClubsLive(db, meetId, {
+      onChange: (s) => { setLive(s); setLiveError(''); },
+      onError: (e) => setLiveError(e.message || 'Live updates stopped.'),
+    });
+  }, [loaded, meetId, attempt]);
+
   if (load.kind === 'loading') return <section className="adm-card"><p role="status">Loading clubs, orders and the send log…</p></section>;
   if (load.kind === 'error') {
     return (
@@ -30,18 +44,37 @@ export default function AdminClubs({ meetId, pauseMs }: { meetId: string; pauseM
       </section>
     );
   }
-  return <ClubsScreen meetId={meetId} data={load.data} pauseMs={pauseMs} />;
+  return (
+    <ClubsScreen
+      meetId={meetId} data={load.data} live={live} pauseMs={pauseMs}
+      liveStatus={liveError ? { error: liveError } : live ? 'live' : 'connecting'}
+      onRetryLive={() => { setLiveError(''); setAttempt((n) => n + 1); }}
+    />
+  );
 }
 
-export function ClubsScreen({ meetId, data, pauseMs }: { meetId: string; data: ClubsScreenData; pauseMs?: number }) {
-  const [clubs, setClubs] = useState(data.clubs);
+export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connecting', onRetryLive, pauseMs }: {
+  meetId: string;
+  data: ClubsScreenData;
+  /** The live picture once the listeners have answered; until then (and if they fail) the one-time load is shown. */
+  live?: ClubsLive | null;
+  liveStatus?: 'connecting' | 'live' | { error: string };
+  onRetryLive?: () => void;
+  pauseMs?: number;
+}) {
+  const [localClubs, setClubs] = useState(data.clubs);
   const [log, setLog] = useState<EmailLogEntry[]>(data.log);
   const [deadline, setDeadline] = useState<Date | null>(data.deadline);
-  const rows = useMemo(() => buildClubRows(data.athletes, data.sessions, clubs, data.saved, data.gymOrder), [data, clubs]);
+  const clubs = live?.clubs ?? localClubs;
+  const athletes = live?.athletes ?? data.athletes;
+  const sessions = live?.sessions ?? data.sessions;
+  const saved = live?.saved ?? data.saved;
+  const rows = useMemo(() => buildClubRows(athletes, sessions, clubs, saved, data.gymOrder), [athletes, sessions, clubs, saved, data.gymOrder]);
   const linkBase = pageBase();
 
   return (
     <div className="cl">
+      <LiveStatus status={liveStatus} onRetry={onRetryLive} />
       <DeadlineCard meetId={meetId} deadline={deadline} onSaved={setDeadline} />
       <ClubsTable
         rows={rows}
@@ -71,6 +104,23 @@ export function ClubsScreen({ meetId, data, pauseMs }: { meetId: string; data: C
         pauseMs={pauseMs}
       />
     </div>
+  );
+}
+
+function LiveStatus({ status, onRetry }: { status: 'connecting' | 'live' | { error: string }; onRetry?: () => void }) {
+  if (typeof status === 'object') {
+    return (
+      <div className="adm-banner err cl-live-err" role="alert">
+        <span>Live updates stopped ({status.error}). What you see may be out of date.</span>
+        {onRetry && <button type="button" className="btn small" onClick={onRetry}>Retry</button>}
+      </div>
+    );
+  }
+  return (
+    <p className={`cl-live ${status}`} role="status">
+      <span className="cl-live-dot" aria-hidden="true" />
+      {status === 'live' ? 'Live: changes from clubs appear here by themselves' : 'Connecting to live updates…'}
+    </p>
   );
 }
 

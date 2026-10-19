@@ -15,7 +15,7 @@ function devGmailToken(): string | undefined {
   return import.meta.env.DEV ? (window as unknown as { __ucgGmailToken?: string }).__ucgGmailToken : undefined;
 }
 
-export default function ReminderPanel({ meetId, rows, templates: savedTemplates, meetName, deadline, linkBase, adminEmail, log, onLogged, pauseMs }: {
+export default function ReminderPanel({ meetId, rows: liveRows, templates: savedTemplates, meetName, deadline, linkBase, adminEmail, log: liveLog, onLogged, pauseMs }: {
   meetId: string;
   rows: ClubRow[];
   templates: Templates;
@@ -27,6 +27,11 @@ export default function ReminderPanel({ meetId, rows, templates: savedTemplates,
   onLogged: (e: EmailLogEntry) => void;
   pauseMs?: number;
 }) {
+  // While the admin confirms and sends, the lists stay exactly as they were when they pressed Send: a club changing its order
+  // (the table is live) or a log row being added by this very send must not change who gets the email or what the preview shows.
+  const [frozen, setFrozen] = useState<{ rows: ClubRow[]; log: EmailLogEntry[] } | null>(null);
+  const rows = frozen?.rows ?? liveRows;
+  const log = frozen?.log ?? liveLog;
   const reminders = useMemo(() => buildReminders(rows), [rows]);
   const rowById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
 
@@ -91,6 +96,7 @@ export default function ReminderPanel({ meetId, rows, templates: savedTemplates,
     if (!gmailToken) return;
     setConfirm(false);
     setSending(true);
+    setFrozen((f) => f ?? { rows: liveRows, log: liveLog });
     setSummary(null);
     setResults([]);
     setProgress({ done: 0, total: targets.length });
@@ -113,6 +119,7 @@ export default function ReminderPanel({ meetId, rows, templates: savedTemplates,
       },
     });
     setSending(false);
+    setFrozen(null);
     const ok = out.filter((r) => r.ok).length;
     const expired = out.length < messages.length;
     setSummary({
@@ -150,6 +157,7 @@ export default function ReminderPanel({ meetId, rows, templates: savedTemplates,
           </div>
         )}
 
+        {frozen && <p className="adm-muted cl-frozen" role="status">The list is held while you send: club changes made now show up when it finishes.</p>}
         {list.length === 0 ? (
           <p className="adm-muted">No clubs on this list.</p>
         ) : (
@@ -243,7 +251,7 @@ export default function ReminderPanel({ meetId, rows, templates: savedTemplates,
         {gmailError && <div className="adm-banner err" role="alert">{gmailError}</div>}
         <label className="cl-check"><input type="checkbox" checked={skipToday} onChange={(e) => setSkipToday(e.target.checked)} /> Skip clubs already sent this reminder today{skippedSent > 0 ? ` (${skippedSent} skipped)` : ''}</label>
         <div className="adm-actions">
-          <button type="button" className="btn primary" disabled={!gmailToken || targets.length === 0 || sending} onClick={() => setConfirm(true)}>
+          <button type="button" className="btn primary" disabled={!gmailToken || targets.length === 0 || sending} onClick={() => { setFrozen({ rows: liveRows, log: liveLog }); setConfirm(true); }}>
             Send {targets.length} test email{targets.length === 1 ? '' : 's'}
           </button>
           <label className="cl-check cl-real-send">
@@ -293,10 +301,10 @@ export default function ReminderPanel({ meetId, rows, templates: savedTemplates,
       </section>
 
       {confirm && (
-        <Modal title="Send test emails?" onClose={() => setConfirm(false)}>
+        <Modal title="Send test emails?" onClose={() => { setConfirm(false); setFrozen(null); }}>
           <p>Send <strong>{targets.length}</strong> “{REMINDER_LABEL[kind]}” test email{targets.length === 1 ? '' : 's'} to {who === 'jz' ? 'jzsharpe' : 'nssharpe'}+…@gmail.com aliases? Nothing goes to the clubs. Keep this page open until it finishes.</p>
           <div className="adm-actions">
-            <button type="button" className="btn ghost" onClick={() => setConfirm(false)}>Cancel</button>
+            <button type="button" className="btn ghost" onClick={() => { setConfirm(false); setFrozen(null); }}>Cancel</button>
             <button type="button" className="btn primary" onClick={() => void send()}>Send {targets.length} test email{targets.length === 1 ? '' : 's'}</button>
           </div>
         </Modal>

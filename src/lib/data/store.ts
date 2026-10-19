@@ -1,26 +1,31 @@
-import { collection, doc, getDoc, getDocs, writeBatch, type Firestore } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, writeBatch, type DocumentData, type Firestore } from 'firebase/firestore';
 import type { StoredAthlete } from '../import/diff';
 import type { ImportModel, Session } from '../import/types';
 import { buildClubLinks } from '../club-links';
 import { meetPaths } from './meet-paths';
 import { chunk, planImport, type ImportPlan, type StoredClub } from './plan';
 
+// One document -> one record; shared by the one-time loaders below and the live listeners (email-store.ts).
+export const toStoredAthlete = (id: string, data: DocumentData): StoredAthlete => ({ ...(data as StoredAthlete), id });
+export const toStoredClub = (id: string, data: DocumentData): StoredClub => {
+  const x = data as Partial<StoredClub>;
+  return { id, name: x.name ?? '', emails: x.emails ?? [], token: x.token ?? '' };
+};
+export const toStoredSession = (id: string, data: DocumentData): Session => ({ ...(data as Session), id });
+
 export async function loadAthletes(db: Firestore, meetId: string): Promise<StoredAthlete[]> {
   const snap = await getDocs(collection(db, meetPaths(meetId).athletes));
-  return snap.docs.map((d) => ({ ...(d.data() as StoredAthlete), id: d.id }));
+  return snap.docs.map((d) => toStoredAthlete(d.id, d.data()));
 }
 
 export async function loadClubs(db: Firestore, meetId: string): Promise<StoredClub[]> {
   const snap = await getDocs(collection(db, meetPaths(meetId).clubs));
-  return snap.docs.map((d) => {
-    const x = d.data() as Partial<StoredClub>;
-    return { id: d.id, name: x.name ?? '', emails: x.emails ?? [], token: x.token ?? '' };
-  });
+  return snap.docs.map((d) => toStoredClub(d.id, d.data()));
 }
 
 export async function loadSessions(db: Firestore, meetId: string): Promise<Session[]> {
   const snap = await getDocs(collection(db, meetPaths(meetId).sessions));
-  return snap.docs.map((d) => ({ ...(d.data() as Session), id: d.id }));
+  return snap.docs.map((d) => toStoredSession(d.id, d.data()));
 }
 
 export async function hasMeetSettings(db: Firestore, meetId: string): Promise<boolean> {

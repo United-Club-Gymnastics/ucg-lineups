@@ -1,13 +1,14 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClubsScreenData } from '../../src/lib/data/email-store';
+import type { ClubsLive, ClubsScreenData } from '../../src/lib/data/email-store';
 import { DEFAULT_TEMPLATES } from '../../src/lib/email-templates';
 import { ATHLETES, CLUBS, SAVED, SESSIONS } from '../lib/clubs-fixtures';
 
 const fb = vi.hoisted(() => ({ db: {}, auth: { currentUser: { email: 'admin@unitedclubgymnastics.org' } }, connectGmail: vi.fn() }));
 vi.mock('../../src/lib/firebase', () => fb);
 const store = vi.hoisted(() => ({
+  watchClubsLive: vi.fn(),
   loadClubsScreenData: vi.fn(), saveClubEmails: vi.fn(), saveOrderDeadline: vi.fn(), saveEmailTemplates: vi.fn(), addEmailLog: vi.fn(), regenerateClubLink: vi.fn(),
 }));
 vi.mock('../../src/lib/data/email-store', () => store);
@@ -27,6 +28,7 @@ async function open(d = data()) {
   const user = userEvent.setup();
   render(<AdminClubs meetId="m1" pauseMs={0} />);
   await screen.findByRole('heading', { name: 'Clubs' });
+  await waitFor(() => expect(live.handlers).not.toBeNull());
   return user;
 }
 const decodeTo = (body: string) => {
@@ -34,8 +36,11 @@ const decodeTo = (body: string) => {
   return /^To: (.*)$/m.exec(Buffer.from(raw, 'base64').toString('utf8'))?.[1];
 };
 
+const live = { handlers: null as null | { onChange: (s: ClubsLive) => void; onError: (e: Error) => void }, stop: vi.fn() };
 beforeEach(() => {
   vi.clearAllMocks();
+  live.handlers = null;
+  store.watchClubsLive.mockImplementation((_db: unknown, _meet: string, h: NonNullable<typeof live.handlers>) => { live.handlers = h; return live.stop; });
   store.saveClubEmails.mockResolvedValue(undefined);
   store.saveOrderDeadline.mockResolvedValue(undefined);
   store.saveEmailTemplates.mockResolvedValue(undefined);
@@ -245,5 +250,86 @@ describe('Loading', () => {
     store.loadClubsScreenData.mockResolvedValue(data());
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('heading', { name: 'Clubs' })).toBeInTheDocument();
+  });
+});
+
+describe('Live updates', () => {
+  const snapshot = (over: Partial<ClubsLive> = {}): ClubsLive => ({ sessions: SESSIONS, athletes: ATHLETES, clubs: CLUBS.map((c) => ({ ...c })), saved: SAVED, ...over });
+  const alphaXs = ATHLETES.filter((a) => a.sessionId === 's1-orange' && a.clubId === 'alpha-gymnastics').map((a) => a.id);
+  const changed = (): ClubsLive['saved'] => ({
+    ...SAVED,
+    'alpha-gymnastics': {
+      ...SAVED['alpha-gymnastics'],
+      's1-orange__XS': { order: { groups: [alphaXs], sections: { VT: [[...alphaXs].reverse()], UB: [alphaXs], BB: [alphaXs], FX: [alphaXs] }, splitDecided: false }, updatedAt: Date.UTC(2026, 9, 18, 23, 5) },
+    },
+  });
+
+  it('starts listening for this meet once loaded, shows Live, and stops listening when the screen goes away', async () => {
+    store.loadClubsScreenData.mockResolvedValue(data());
+    const { unmount } = render(<AdminClubs meetId="m1" pauseMs={0} />);
+    await screen.findByRole('heading', { name: 'Clubs' });
+    await waitFor(() => expect(store.watchClubsLive).toHaveBeenCalledWith(fb.db, 'm1', expect.any(Object)));
+    expect(screen.getByText('Connecting to live updates…')).toBeInTheDocument();
+    act(() => live.handlers!.onChange(snapshot()));
+    expect(screen.getByText(/^Live: changes from clubs appear here/)).toBeInTheDocument();
+    unmount();
+    expect(live.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('a club changing its order updates the table and both reminder lists with no refresh', async () => {
+    await open();
+    act(() => live.handlers!.onChange(snapshot()));
+    const row = () => screen.getByRole('row', { name: /Alpha Gymnastics/ });
+    expect(within(row()).getByText('Still A–Z (default)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Still A–Z (1)' })).toBeInTheDocument();
+    act(() => live.handlers!.onChange(snapshot({ saved: changed() })));
+    expect(within(row()).queryByText('Still A–Z (default)')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Still A–Z (0)' })).toBeInTheDocument();
+    expect(store.loadClubsScreenData).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an error banner when a listener fails, keeps the last data, and Retry listens again', async () => {
+    const user = await open();
+    act(() => live.handlers!.onChange(snapshot()));
+    act(() => live.handlers!.onError(new Error('Missing or insufficient permissions.')));
+    const banner = screen.getByRole('alert');
+    expect(banner).toHaveTextContent(/Live updates stopped \(Missing or insufficient permissions\.\)/);
+    expect(screen.getByRole('row', { name: /Alpha Gymnastics/ })).toBeInTheDocument();
+    await user.click(within(banner).getByRole('button', { name: 'Retry' }));
+    expect(store.watchClubsLive).toHaveBeenCalledTimes(2);
+    expect(live.stop).toHaveBeenCalledTimes(1);
+    act(() => live.handlers!.onChange(snapshot()));
+    expect(screen.queryByText(/Live updates stopped/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Live:/)).toBeInTheDocument();
+  });
+
+  it('holds the recipient list steady from the moment Send is pressed until it finishes', async () => {
+    const user = await open();
+    act(() => live.handlers!.onChange(snapshot()));
+    await user.click(screen.getByRole('button', { name: 'Connect Gmail' }));
+    await screen.findByText('Connected as admin@unitedclubgymnastics.org.');
+    await user.click(screen.getByRole('button', { name: 'Send 1 test email' }));
+    // A club changes its order while the confirmation is open: the list and the count do not move.
+    act(() => live.handlers!.onChange(snapshot({ saved: changed() })));
+    expect(screen.getByText(/The list is held while you send/)).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: /Still A–Z reminder/ })).getByText('Alpha Gymnastics')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Send 1 test email' })).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Send 1 test email' }));
+    await screen.findByText('Sent 1 of 1 test email.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // Done: the held list is released and the change shows.
+    expect(screen.queryByText(/The list is held while you send/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Still A–Z (0)' })).toBeInTheDocument();
+  });
+
+  it('releases the list when the confirmation is cancelled', async () => {
+    const user = await open();
+    act(() => live.handlers!.onChange(snapshot()));
+    await user.click(screen.getByRole('button', { name: 'Connect Gmail' }));
+    await screen.findByText('Connected as admin@unitedclubgymnastics.org.');
+    await user.click(screen.getByRole('button', { name: 'Send 1 test email' }));
+    act(() => live.handlers!.onChange(snapshot({ saved: changed() })));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Still A–Z (0)' })).toBeInTheDocument();
   });
 });

@@ -81,3 +81,10 @@
   .cl-seg button { text-align: left; }
   .cl-seg button + button { border-left: 0; border-top: 1px solid var(--navy-600); }
 }
+
+/* Live indicator and the live-update error banner */
+.cl-live { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; color: var(--ink); justify-self: start; }
+.cl-live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ice-100); border: 2px solid var(--navy-800); flex: none; }
+.cl-live.live .cl-live-dot { background: var(--navy-800); }
+.cl-live-err { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.cl-frozen { margin: 4px 0 8px; }
