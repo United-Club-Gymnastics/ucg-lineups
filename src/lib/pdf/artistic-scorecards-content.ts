@@ -1,5 +1,6 @@
 // Pure: artistic (MAG/WAG) scorecards. Landscape, one page per squad per apparatus, apparatus in Olympic order, squads in the
 // order they arrive. Exactly 15 rows. Spec §6.
+import { locationLabel, sessionLocation, sessionTitle } from '../session-names';
 import { APPARATUS } from '../apparatus';
 import { arrivalOrder, columnCode, columnLabel, patternDef, rotationFor, slotOf } from '../rotation';
 import { HEAVY_KEY, type ArtisticScorecardPage, type Column, type ScoreRow, type Unnumbered } from './model';
@@ -53,8 +54,8 @@ export function artisticScorecardPages(input: ArtisticSessionInput): Unnumbered<
       pages.push({
         kind: 'artistic-scorecard',
         meet,
-        gym: `${session.gym} Gym`,
-        session: `Session ${session.number} – ${session.gym}`,
+        gym: locationLabel(sessionLocation(session)),
+        session: sessionTitle(session),
         band: {
           squad: squad.letter,
           apparatus: name,

@@ -5,6 +5,7 @@ import type { LevelOrder } from './club-order-model';
 import { levelStatus, sessionStatus } from './club-status';
 import type { StoredAthlete } from './import/diff';
 import { DEFAULT_GYM_ORDER, type Session } from './import/types';
+import { sessionTitle, sortByLocation, type SessionRef } from './session-names';
 import { readPattern, type ArtisticDiscipline, type RotationPattern } from './rotation';
 import { buildCards, type SquadCard, type SquadPlan } from './squad-balance';
 import type { GroupReg, SavedGroupsRow } from './squad-builder';
@@ -15,16 +16,12 @@ export interface ArtisticSession extends Session {
 
 export const isArtisticSession = (s: Session): s is ArtisticSession => s.discipline === 'MAG' || s.discipline === 'WAG';
 
-/** Gym order first (Green, Red, Yellow, Orange, Purple), then session number. Unknown gyms go last, A-Z. */
-export function sortSessionsByGym<T extends Pick<Session, 'number' | 'gym'>>(sessions: T[], gymOrder: string[] = DEFAULT_GYM_ORDER): T[] {
-  const rank = (g: string) => {
-    const i = gymOrder.findIndex((x) => x.toLowerCase() === g.toLowerCase());
-    return i < 0 ? gymOrder.length : i;
-  };
-  return [...sessions].sort((a, b) => rank(a.gym) - rank(b.gym) || a.gym.localeCompare(b.gym) || a.number - b.number);
+/** Location first (the meet's location order, then A–Z), then name in natural order (Session 2 before Session 10). */
+export function sortSessionsByGym<T extends SessionRef>(sessions: T[], order: string[] = DEFAULT_GYM_ORDER): T[] {
+  return sortByLocation(sessions, order);
 }
 
-export const sessionTitle = (s: Pick<Session, 'number' | 'gym'>): string => `Session ${s.number} – ${s.gym}`;
+export { sessionTitle };
 
 export interface SquadSessionData {
   regs: GroupReg[];

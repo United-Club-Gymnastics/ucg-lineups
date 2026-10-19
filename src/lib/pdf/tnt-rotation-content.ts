@@ -1,6 +1,7 @@
 // Pure: the T&T rotation sheet. Portrait: per squad `Squad A: Trampoline > Double Mini > Tumbling` with a row per athlete
 // (Athlete | Club | Squad | TR DM TU SY levels, club then first name), then "Synchro only", then the synchro flights.
 // A long list carries on to the next page with its heading repeated. Spec §6.
+import { locationLabel, sessionLocation, sessionTitle } from '../session-names';
 import { TNT_EVENT_NAME, TNT_LEVELS, rotationFor } from '../tnt-squads';
 import type { TntRotationPage, TntRotationTable, Unnumbered } from './model';
 import type { TntPerson, TntSessionInput } from './session-input';
@@ -64,9 +65,9 @@ export function tntRotationPages(input: TntSessionInput): Unnumbered<TntRotation
   }
 
   const time = input.competitionTime.trim();
-  const title = `T&T Session ${session.number} – ${session.gym}${time ? ` · ${time}` : ''}`;
+  const title = `T&T ${sessionTitle(session)}${time ? ` · ${time}` : ''}`;
   const levels = session.levelCodes.length > 0 ? session.levelCodes : [...TNT_LEVELS];
-  const subtitle = [meet.name, `${session.gym} Gym`, levels.join(', ')].filter(Boolean).join(' · ');
+  const subtitle = [meet.name, locationLabel(sessionLocation(session)), levels.join(', ')].filter(Boolean).join(' · ');
   return pages.map((p, i) => ({
     kind: 'tnt-rotation' as const,
     meet, title, subtitle, tables: p.tables, units: p.units,

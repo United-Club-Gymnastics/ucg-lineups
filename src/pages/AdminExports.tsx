@@ -5,6 +5,7 @@ import { PagePreview } from '../components/PdfPreview';
 import { loadExportsInput, runScheduleMigration, saveMeetNameDate, saveScheduleOverride, saveScheduleRow, type ExportsInput } from '../lib/data/export-store';
 import { sessionFileName, sessionPages, type ExportKind } from '../lib/pdf/collate';
 import { applySchedules, buildExportSessions } from '../lib/pdf/export-all';
+import { scheduleKey, scheduleRows, sessionLocation, sortByLocation } from '../lib/session-names';
 import { EMPTY_FIELDS, SCHEDULE_KEYS, collectLegacy, formatTime, parseFields, planMigration, resolveSchedule, type ScheduleFields, type ScheduleRows } from '../lib/schedule';
 import { allSessionsPdf, allSessionsZip, sessionPdf } from '../lib/pdf/files';
 import { jumpGroups } from '../lib/pdf/model';
@@ -59,17 +60,17 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
   const [savedMeet, setSavedMeet] = useState({ name: input.meet.meetName, date: input.meet.meetDate });
   const meetDirty = name.trim() !== savedMeet.name || date.trim() !== savedMeet.date;
 
-  // Session schedule: a row per session number + optional per-session overrides. Typed values show in the sheets at once; saved with the Save buttons.
-  const numbers = useMemo(() => [...new Set(input.sessions.map((s) => s.number))].sort((x, y) => x - y), [input.sessions]);
+  // Session schedule: a row per session name + optional per-session overrides. Typed values show in the sheets at once; saved with the Save buttons.
+  const rowDefs = useMemo(() => scheduleRows(input.sessions, input.meet.schedule), [input.sessions, input.meet.schedule]);
   const full = (f: Partial<ScheduleFields> | undefined): ScheduleFields => ({ ...EMPTY_FIELDS, ...f });
   const [savedRows, setSavedRows] = useState<ScheduleRows>(input.meet.schedule);
-  const [rows, setRows] = useState<Record<string, ScheduleFields>>(() => Object.fromEntries(numbers.map((n) => [String(n), full(input.meet.schedule[String(n)])])));
+  const [rows, setRows] = useState<Record<string, ScheduleFields>>(() => Object.fromEntries(rowDefs.map((d) => [d.key, full(input.meet.schedule[d.key])])));
   const [savedOver, setSavedOver] = useState<Record<string, ScheduleFields>>(() => Object.fromEntries(input.sessions.map((s) => [s.id, full(parseFields(s.scheduleOverride))])));
   const [over, setOver] = useState<Record<string, ScheduleFields>>(savedOver);
   const [schedState, setSchedState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [overState, setOverState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const same = (a: ScheduleFields, b: ScheduleFields) => SCHEDULE_KEYS.every((k) => a[k].trim() === b[k].trim());
-  const dirtyRows = numbers.filter((n) => !same(rows[String(n)], full(savedRows[String(n)])));
+  const dirtyRows = rowDefs.filter((d) => !same(rows[d.key], full(savedRows[d.key])));
   const dirtyOver = input.sessions.filter((s) => !same(over[s.id], savedOver[s.id]));
   const draftRows = useMemo<ScheduleRows>(() => Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, parseFields(v)])), [rows]);
   const draftOver = useMemo(() => Object.fromEntries(Object.entries(over).map(([k, v]) => [k, parseFields(v)])), [over]);
@@ -113,6 +114,11 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
 
   const all = sessions.map((s) => s.input);
   const gymOrder = input.gymOrder;
+  // The meet's location order, trimmed to the locations this meet actually has (the rest print A–Z after them).
+  const locationOrderText = useMemo(() => {
+    const here = [...new Set(input.sessions.map((s) => sessionLocation(s)).filter(Boolean))];
+    return sortByLocation(here.map((l) => ({ location: l })), gymOrder).map((x) => x.location).join(', ') || 'none';
+  }, [input.sessions, gymOrder]);
 
   async function saveMeet() {
     setMeetState('saving');
@@ -121,8 +127,8 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
   async function saveSchedule() {
     setSchedState('saving');
     try {
-      for (const n of dirtyRows) await saveScheduleRow(db, meetId, n, trimmed(rows[String(n)]));
-      setSavedRows(Object.fromEntries(numbers.map((n) => [String(n), parseFields(rows[String(n)])])));
+      for (const d of dirtyRows) await saveScheduleRow(db, meetId, d.key, trimmed(rows[d.key]));
+      setSavedRows(Object.fromEntries(rowDefs.map((d) => [d.key, parseFields(rows[d.key])])));
       setSchedState('saved');
     } catch { setSchedState('error'); }
   }
@@ -166,18 +172,18 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
       <section className="adm-card" aria-labelledby="ex-sched">
         <h2 id="ex-sched" className="display">Session schedule</h2>
         <p className="adm-muted">
-          One row per session number: it applies to every gym&rsquo;s session with that number (artistic and T&amp;T). The date prints in each sheet&rsquo;s header;
+          One row per session name: it applies to every location&rsquo;s session with that name (artistic and T&amp;T), so every &ldquo;Session 1&rdquo; shares a row. The date prints in each sheet&rsquo;s header;
           the times print on the rotation sheets. The sheets below already use what you type.
         </p>
         <div className="adm-tablewrap">
           <table className="adm-table ex-sched">
-            <caption className="sr-only">Session schedule by session number</caption>
+            <caption className="sr-only">Session schedule by session name</caption>
             <thead><tr><th scope="col">Session</th><th scope="col">Date</th><th scope="col">Open stretch</th><th scope="col">Timed warm-ups</th><th scope="col">Competition</th></tr></thead>
             <tbody>
-              {numbers.map((n) => (
-                <tr key={n}>
-                  <th scope="row">Session {n}</th>
-                  <FieldCells id={`row-${n}`} label={`Session ${n}`} value={rows[String(n)]} onChange={(v) => { setRows((r) => ({ ...r, [String(n)]: v })); setSchedState('idle'); }} />
+              {rowDefs.map((d) => (
+                <tr key={d.key}>
+                  <th scope="row">{d.label}</th>
+                  <FieldCells id={`row-${d.key}`} label={d.label} value={rows[d.key] ?? EMPTY_FIELDS} onChange={(v) => { setRows((r) => ({ ...r, [d.key]: v })); setSchedState('idle'); }} />
                 </tr>
               ))}
             </tbody>
@@ -192,7 +198,7 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
 
         <details className="ex-over">
           <summary>Session overrides ({input.sessions.filter((s) => Object.keys(parseFields(over[s.id])).length > 0).length} set)</summary>
-          <p className="adm-muted">Leave a field empty to use the session number&rsquo;s value (shown faintly). Only fill in what differs for that one session.</p>
+          <p className="adm-muted">Leave a field empty to use the session name&rsquo;s value (shown faintly). Only fill in what differs for that one session.</p>
           <div className="adm-tablewrap">
             <table className="adm-table ex-sched">
               <caption className="sr-only">Per-session overrides</caption>
@@ -203,7 +209,7 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
                     <th scope="row">{s.title}</th>
                     <FieldCells
                       id={`over-${s.id}`} label={s.title} value={over[s.id] ?? EMPTY_FIELDS}
-                      placeholders={resolveSchedule(s.session.number, draftRows, undefined, '')}
+                      placeholders={resolveSchedule(scheduleKey(s.session), draftRows, undefined, '')}
                       onChange={(v) => { setOver((o) => ({ ...o, [s.id]: v })); setOverState('idle'); }}
                     />
                   </tr>
@@ -271,8 +277,8 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
         <p className="adm-muted">
           {selected && <>This session saves as <b>{sessionFileName(kind, selected.session)}</b>. </>}
           {kind === 'scorecards'
-            ? 'One PDF for printing is collated by gym (Green, Red, Yellow, Orange, Purple), then session number. '
-            : 'One PDF for printing is collated by session number: every gym’s Session 1, then Session 2, and so on. '}
+            ? `One PDF for printing is collated by location (${locationOrderText}), then session name. `
+            : 'One PDF for printing is collated by session name: every location’s Session 1, then Session 2, and so on. '}
           &ldquo;Separate PDFs&rdquo; is a zip with one file per session, for posting on the web.
         </p>
         <div role="status" className="ex-state">{note}</div>

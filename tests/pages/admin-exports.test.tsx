@@ -150,9 +150,9 @@ describe('Exports screen', () => {
     expect(screen.getByRole('button', { name: 'Download this session' })).toBeEnabled();
   });
 
-  it('the schedule table has a row per session number; typing shows in the sheets at once and Save writes just the changed rows', async () => {
+  it('the schedule table has a row per session name; typing shows in the sheets at once and Save writes just the changed rows', async () => {
     const user = await open();
-    const table = screen.getByRole('table', { name: 'Session schedule by session number' });
+    const table = screen.getByRole('table', { name: 'Session schedule by session name' });
     expect(within(table).getAllByRole('row').slice(1).map((r) => within(r).getByRole('rowheader').textContent)).toEqual(['Session 1', 'Session 2', 'Session 3']);
     await user.type(screen.getByLabelText('Session 1 date'), '2026-10-22');
     await user.type(screen.getByLabelText('Session 1 competition'), '7:30 AM');
@@ -172,7 +172,7 @@ describe('Exports screen', () => {
     expect(within(screen.getAllByRole('region', { name: /^Page 1 of/ })[0]).getByText(MEET.date)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save schedule' }));
     await waitFor(() => expect(store.saveScheduleRow).toHaveBeenCalledTimes(1));
-    expect(store.saveScheduleRow).toHaveBeenCalledWith({}, 'm1', 1, { date: '2026-10-22', stretch: '6:45 AM', warmups: '', competition: '7:30 AM' });
+    expect(store.saveScheduleRow).toHaveBeenCalledWith({}, 'm1', '1', { date: '2026-10-22', stretch: '6:45 AM', warmups: '', competition: '7:30 AM' });
   });
 
   it('a session override wins per field over its number\'s row, and saves on the session', async () => {

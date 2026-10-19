@@ -10,7 +10,7 @@ const all = (n: number, level = 'IF', prefix = 'P'): TntPerson[] => Array.from({
 
 function input(squads: TntPerson[][], extra: Partial<TntSessionInput> = {}): TntSessionInput {
   return {
-    meet: MEET, session: { number: 1, gym: 'Purple', levelCodes: ['NF', 'IF', 'HF'] }, competitionTime: '', synchroOnly: [], flights: [], unplaced: 0, noSquads: false, pairsMissing: false,
+    meet: MEET, session: { name: 'Session 1', location: 'Purple', levelCodes: ['NF', 'IF', 'HF'] }, competitionTime: '', synchroOnly: [], flights: [], unplaced: 0, noSquads: false, pairsMissing: false,
     squads: [0, 1, 2].map((i) => ({
       index: i, letter: 'ABC'[i], athletes: squads[i] ?? [],
       order: { TR: (squads[i] ?? []).filter((p) => p.levels.TR), DM: (squads[i] ?? []).filter((p) => p.levels.DM), TU: (squads[i] ?? []).filter((p) => p.levels.TU) },

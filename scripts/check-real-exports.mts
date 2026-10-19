@@ -34,6 +34,8 @@ console.log('independents:', m.athletes.filter((a) => a.independent).length);
 console.log('Infinity athletes:', m.athletes.filter((a) => a.levelCode === 'Inf').length);
 console.log('no session id:', m.athletes.filter((a) => !a.sessionId).length);
 console.log('sessions:', m.sessions.length, 'by discipline:', count(m.sessions, (s) => s.discipline));
+console.log('distinct session names:', new Set(m.sessions.map((s) => s.name.toLowerCase())).size, '| locations:', new Set(m.sessions.map((s) => s.location.toLowerCase())).size,
+  '| named "Session N":', m.sessions.filter((s) => s.number !== undefined).length, '| other names:', m.sessions.filter((s) => s.number === undefined).length);
 console.log('clubs:', m.clubs.length, '| with emails:', m.clubs.filter((c) => c.emails.length).length,
   '| max emails on one club:', Math.max(0, ...m.clubs.map((c) => c.emails.length)));
 console.log('warnings:', m.warnings.length, count(m.warnings, (w) => w.code));

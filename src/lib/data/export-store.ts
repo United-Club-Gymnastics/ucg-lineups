@@ -13,7 +13,7 @@ export interface MeetSettings {
   meetName: string;
   meetDate: string;
   gymOrder: string[];
-  /** Per session number: date and times (`meets/{id}/settings/meet.schedule`). */
+  /** Per session name (key: `N` or the name): date and times (`meets/{id}/settings/meet.schedule`). */
   schedule: ScheduleRows;
 }
 
@@ -38,9 +38,9 @@ export async function saveMeetNameDate(db: Firestore, meetId: string, value: { m
   await batch.commit();
 }
 
-/** Merge one session number's row into `meets/{id}/settings/meet.schedule` (other numbers are untouched, so two admins don't overwrite each other). */
-export async function saveScheduleRow(db: Firestore, meetId: string, number: number, row: ScheduleFields): Promise<void> {
-  await setDoc(doc(db, meetPaths(meetId).settings), { schedule: { [String(number)]: row } }, { merge: true });
+/** Merge one session name's row into `meets/{id}/settings/meet.schedule` (other rows are untouched, so two admins don't overwrite each other). */
+export async function saveScheduleRow(db: Firestore, meetId: string, key: string, row: ScheduleFields): Promise<void> {
+  await setDoc(doc(db, meetPaths(meetId).settings), { schedule: { [key]: row } }, { merge: true });
 }
 
 /** Merge a session's override (empty strings = no override for that field; an import keeps it). */

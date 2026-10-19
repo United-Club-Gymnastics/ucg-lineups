@@ -21,7 +21,7 @@ function group(club: string, level: string, names: string[], o: Partial<Artistic
 function input(discipline: 'MAG' | 'WAG', pattern: RotationPattern, groups: ArtisticGroupInput[][], extra: Partial<ArtisticSessionInput> = {}): ArtisticSessionInput {
   const n = squadCountFor(pattern, discipline);
   return {
-    meet: MEET, session: { number: 1, gym: 'Orange', discipline, levelCodes: ['Dev', 'Int', 'Adv', 'XS', 'Inf'] }, pattern,
+    meet: MEET, session: { name: 'Session 1', location: 'Orange', discipline, levelCodes: ['Dev', 'Int', 'Adv', 'XS', 'Inf'] }, pattern,
     schedule: { stretch: '7:30 AM', warmups: '7:50 AM', competition: '8:00 AM' }, athleteCount: 10,
     squads: Array.from({ length: n }, (_, i) => ({ index: i, letter: String.fromCharCode(65 + i), groups: groups[i] ?? [] })),
     unplaced: 0, noSquads: false, ...extra,

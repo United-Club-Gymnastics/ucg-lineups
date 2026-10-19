@@ -1,6 +1,7 @@
 // Pure: the artistic rotation sheet. Portrait, one page per session (a very large session continues on a second page at a
 // squad boundary). Per squad: header row with the apparatus in rotation order, then one row per club group with its routine
 // counts. Spec §6.
+import { locationLabel, sessionLocation, sessionTitle } from '../session-names';
 import { APPARATUS } from '../apparatus';
 import { BYE, columnCode, columnLabel, patternDef, rotationFor } from '../rotation';
 import { TIMELINE_ROW_UNITS, type ArtisticRotationPage, type RotationRow, type RotationSquad, type RotationTimeline, type Unnumbered } from './model';
@@ -103,8 +104,8 @@ export function artisticRotationPages(input: ArtisticSessionInput): Unnumbered<A
 
   const base = {
     meet,
-    title: `${meet.name} – Session ${session.number} – ${session.gym}`.replace(/^ – /, ''),
-    subtitle: `${session.discipline} – ${session.gym} Gym – ${sessionLevelLine(input)}`,
+    title: `${meet.name} – ${sessionTitle(session)}`.replace(/^ – /, ''),
+    subtitle: [session.discipline, locationLabel(sessionLocation(session)), sessionLevelLine(input)].filter(Boolean).join(' – '),
     schedule: [
       { label: 'Open Stretch', time: input.schedule.stretch },
       { label: 'Timed Warm-ups', time: input.schedule.warmups },

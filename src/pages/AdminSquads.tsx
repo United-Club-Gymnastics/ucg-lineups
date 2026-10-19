@@ -1,3 +1,4 @@
+import { locationLabel, sessionLocation } from '../lib/session-names';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Select from '../components/Select';
 import { db } from '../lib/firebase';
@@ -210,7 +211,7 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave, onOpenS
   const stats = useMemo(() => planStats(plan, byKey, discipline, data.levelRank), [plan, byKey, discipline, data]);
   const guide = capacityGuide(data.athleteCount, pattern, discipline);
   const summary = routinesPerRotation(pattern, discipline, stats.map((s) => s.routines), cap);
-  const gymDisc = `${discipline} · ${session.gym} Gym · ${session.levelCodes.map(levelName).join(', ')}`;
+  const gymDisc = [discipline, locationLabel(sessionLocation(session)), session.levelCodes.map(levelName).join(', ')].filter(Boolean).join(' · ');
 
   return (
     <div className="sq-stack">
@@ -249,7 +250,7 @@ function SessionSquads({ session, input, stored, schedule: scheduleSave, onOpenS
         {patternDef(pattern, discipline).blurb && <p className="adm-muted sq-blurb">{patternDef(pattern, discipline).blurb}</p>}
 
         <p className="adm-muted sq-sched-link">
-          Dates and times are set per session number in the <b>Session schedule</b> on the Exports tab.
+          Dates and times are set per session name in the <b>Session schedule</b> on the Exports tab.
           {onOpenSchedule && <>{' '}<button type="button" className="btn ghost small" onClick={onOpenSchedule}>Open the session schedule</button></>}
         </p>
 

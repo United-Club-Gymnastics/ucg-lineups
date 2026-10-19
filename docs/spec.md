@@ -33,7 +33,7 @@ comes from SF Events and goes stale).
 
 | File | Gives |
 |---|---|
-| `Athletes_Export.xlsx` | every entry: Bib, FirstName, LastName, Type (WAG/MAG/T&T), Club (**full name — always print this, never Team/short name**), Level, Session (`Session 1 - Orange` = session number + gym colour) |
+| `Athletes_Export.xlsx` | every entry: Bib, FirstName, LastName, Type (WAG/MAG/T&T), Club (**full name — always print this, never Team/short name**), Level, Session (`<session name> - <location>`: `Session 1 - Orange`, `MAG Finals - Orange`, `MAG Session 1 - Dupont`) |
 | `WAG_Export.xlsx`, `MAG_Export.xlsx` | per-apparatus `*_Event_Status` (Included / Scratched) → the athlete's apparatus list |
 | `TnT_Export.xlsx` | per-event level and status: Tumbling, Trampoline, Synch_Trampoline, DMT |
 | `League_Communications_Export.xlsx` (preferred) or `Club_Emails.xlsx` | club contact emails: League export = Club, Contact, Role (only email roles used); Club_Emails = Club, Email (a cell may hold several, `;`-separated). Clubs in the list with no athletes are summarised in one warning. Editable in the app |
@@ -57,8 +57,21 @@ comes from SF Events and goes stale).
   names and first names with an inner capital after a lowercase letter (not Mc, Mac, De, Di, Da, Du, La, Le, Lo, Van, Von, O'),
   with the number of athletes; nothing applies until the host accepts one. Saving republishes the affected clubs' links. Fixes
   survive re-imports (the import compares and stores the export's spelling).
-- Sessions: id from number + gym (`s1-orange`). Gym order for collation: **Green, Red, Yellow,
-  Orange, Purple** (a setting).
+- **Sessions (`src/lib/session-names.ts`).** The export's session is `<session name> - <location>`: the name is anything, the
+  location is a gym colour or a venue. It is split at the **last** ` - ` (` – ` and ` — ` too, spaces required), so names may
+  hold hyphens ("Xcel Platinum - Day 2 - Green" = name "Xcel Platinum - Day 2", location "Green"). No separator = the whole
+  string is the name, the location is empty, and the import warns once per such string. A session is `{ id, name, location,
+  number?, discipline, levelCodes }` (`gym` is kept as an alias of `location` in stored documents and link documents).
+  - **Back-compat (live data):** when the name is exactly `Session N`, the id stays `s<N>-<location lowercased>` (`s1-orange`),
+    `number` is set, and the schedule key stays `"<N>"`. Sessions stored before names existed (`number` + `gym` only) read as
+    `Session N` at that gym. Any other name: id `<slug(name)>--<slug(location)>`, schedule key = the name (matched ignoring case).
+    The older loose forms ("Session 1-Orange", "Session 1: Orange", "Session 1 Orange") still read as `Session 1` / Orange.
+  - **Location order** (`settings/meet.gymOrder`, default Green, Red, Yellow, Orange, Purple) takes any location names; locations
+    not in it sort after, A–Z. Sessions sort by location, then name in natural numeric order (Session 2 before Session 10);
+    club-facing lists (club page, Clubs & Emails, emails) sort by name, then location (the old number-then-gym order).
+  - **Labels:** a session prints as `<name> – <location>`. A location that is a single colour word (Green, Red, Yellow, Orange,
+    Purple, Blue, Teal, Pink, White, Black, Gray/Grey, Brown, Gold, Silver) prints as `<Colour> Gym` where the gym line showed
+    ("Orange Gym"); a venue prints as written ("Dupont").
 
 ## 3. Club page (private link)
 
@@ -159,13 +172,13 @@ are placed into squads; independents are cards of one.
 ## 6. Exports (print-ready PDF, black & white)
 
 **Session schedule (Exports screen).** The meet date depends on the session and times repeat by session
-number, so there is ONE table with a row per **session number** (date, open stretch, timed warm-ups,
-competition) that applies to every gym's session with that number, artistic and T&T. A session can
+number, so there is ONE table with a row per distinct session **name** (date, open stretch, timed warm-ups,
+competition) that applies to every location's session with that name (every "Session 1", every "MAG Finals"), artistic and T&T. A session can
 carry an optional **override** (empty by default) for any of the four fields; an override wins per
 field. The resolved date prints in every sheet's header (the single meet date is only a fallback for a
 session with no date); the artistic rotation sheet prints the three times; the T&T rotation sheet title
-is weekday + competition (`T&T Session 1 – Purple · Thursday 7:30 AM`). Stored in `settings/meet.schedule`
-(map by session number; public-read like the meet name) and `sessions/{id}.scheduleOverride`. Times
+is weekday + competition (`T&T Session 1 – Purple · Thursday 7:30 AM` (`T&T <name> – <location> · …`)). Stored in `settings/meet.schedule`
+(map by schedule key: `"<N>"` for `Session N`, else the session name as typed, matched ignoring case; public-read like the meet name) and `sessions/{id}.scheduleOverride`. Times
 saved the older way (Squads screen, T&T competition time) move into the schedule only through the
 explicit "Move existing times into the schedule" action.
 
@@ -173,19 +186,19 @@ General: **black and white only** (no colour fills, no solid ink bands), UCG log
 NAIGC), full club names. Layout lives in pure `*-pdf-content.ts` modules; jsPDF only draws.
 Heavy-bordered boxes = **values entered in ScoreFlippers**, with a key on the page.
 
-Downloads: **this session** (`Session 1 - Green - Scorecards.pdf` /
-`Session 1 - Green - Rotation Sheet.pdf`), **all sessions as one PDF** (printing), **all sessions
+Downloads: **this session** (`<name> - <location> - Scorecards.pdf` /
+`<name> - <location> - Rotation Sheet.pdf`, e.g. `Session 1 - Green - Scorecards.pdf`, `MAG Finals - Orange - Rotation Sheet.pdf`; characters a file name cannot hold are stripped; zip entries are the same), **all sessions as one PDF** (printing), **all sessions
 as separate PDFs** in a zip (web posting). No single-page download. Preview shows every page of
 the session, scrollable, with a sticky jump bar.
 
-Collation for all sessions: **scorecards by gym** (Green, Red, Yellow, Orange, Purple) then session
-1–6; **rotation sheets by session number** (every gym's Session 1, then Session 2…).
+Collation for all sessions: **scorecards by location** (the meet's location order) then session name (natural order);
+**rotation sheets by session name** (natural order; every location's Session 1, then Session 2…) then location order.
 
 ### Artistic scorecards (landscape, one page per squad per apparatus)
 - Pages per apparatus in Olympic order; within an apparatus, squads **in the order they compete on
   it** (one flight MAG floor: A, F, E, D, C, B; WAG 7 squads vault: A, B, F, G, D, E, C, by
   timeline slot, VT-Platform and VT-Ground pages mixed in that order).
-- Header: meet + date, UCG logo, gym, session; band with squad letter, apparatus, rotation and the
+- Header: meet + date, UCG logo, location (`Orange Gym` / `Dupont`), session (`<name> – <location>`); band with squad letter, apparatus, rotation and the
   equipment name when the pattern names it (`VT-A`, `VT-Platform`, `BB-B`).
 - Columns: Level, Athlete, Club, **SV**, ND, J1 Score *(incl. ND)*, J2 Score *(incl. ND)*,
   **Final Score**, Scratch?. Heavy = SV, Final Score.
@@ -195,7 +208,7 @@ Collation for all sessions: **scorecards by gym** (Green, Red, Yellow, Orange, P
 - Heavy double rule where the level changes (never in Infinity).
 
 ### Artistic rotation sheet (portrait, one page per session)
-- Title `<meet> – Session 1 – Orange`; subtitle `MAG – Orange Gym – Dev, Int, Adv`; schedule;
+- Title `<meet> – <name> – <location>` (`… – Session 1 – Orange`); subtitle `MAG – Orange Gym – Dev, Int, Adv` (`MAG – Dupont – …` for a venue); schedule;
   session athlete count. (No "Session Rotation Report" line.)
 - Per squad: header row `Squad A` (no "(MAG)") + apparatus in rotation order (A-B equipment
   as the pattern says), grey band + heavy frame; rows `Club – Level` (+ `· Group B`) with routine
@@ -266,8 +279,8 @@ Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[
 | Path | Who | Contents |
 |---|---|---|
 | `meets/{meetId}` | admin | `{ name, createdAt, archived? }` |
-| `meets/{meetId}/settings/meet` | admin write, **public read** | meet name/date (fallback), order deadline, gym order, capacity settings, `schedule` (date and times by session number) |
-| `meets/{meetId}/sessions/{id}` | admin | number, gym, discipline, levels, `scheduleOverride` (optional date/times) |
+| `meets/{meetId}/settings/meet` | admin write, **public read** | meet name/date (fallback), order deadline, gym order, capacity settings, `schedule` (date and times by schedule key: session number or name) |
+| `meets/{meetId}/sessions/{id}` | admin | name, location, gym (= location), number (only `Session N`), discipline, levels, `scheduleOverride` (optional date/times) |
 | `meets/{meetId}/athletes/{id}` | admin | names, club id + full name, level, session, apparatus / T&T levels, removed flag (id `<DISC>_<club>_<first-last>`; see notes) |
 | `meets/{meetId}/clubs/{clubId}` | admin | full name, contact emails, token |
 | `meets/{meetId}/squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |

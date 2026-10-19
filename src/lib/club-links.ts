@@ -1,5 +1,6 @@
 // Pure: build the public `clubLinks/{token}` documents the club page reads. No emails, birth dates or bibs.
 import { DEFAULT_GYM_ORDER, type Athlete, type Discipline, type Session } from './import/types';
+import { sessionLocation, sessionName, sessionShortLabel, sortByName, type SessionRef } from './session-names';
 
 export interface LinkAthlete {
   id: string;
@@ -20,8 +21,11 @@ export interface LinkSession {
   sessionId: string;
   label: string;
   discipline: Discipline;
+  name: string;
+  location: string;
+  /** Alias of `location` (links published before session names have `gym` and `number` only). */
   gym: string;
-  number: number;
+  number?: number;
   /** Empty for T&T: clubs never order T&T (shown as "Set by UCG"). */
   levels: LinkLevel[];
 }
@@ -47,19 +51,17 @@ export function levelKeyFor(sessionId: string, levelCode: string): string {
   return `${sessionId}__${levelCode.replace(/\//g, '-')}`;
 }
 
-export const sessionLabel = (s: Pick<Session, 'number' | 'gym'>): string => `Session ${s.number} · ${s.gym}`;
+/** The club-facing label: `Session 1 · Orange`, `MAG Finals · Orange`, `MAG Session 1 · Dupont`. */
+export const sessionLabel = (s: SessionRef): string => sessionShortLabel(s);
 
 /** Default A–Z order: first name, then last name. */
 export function compareByName(a: { first: string; last: string }, b: { first: string; last: string }): number {
   return a.first.localeCompare(b.first, 'en', { sensitivity: 'base' }) || a.last.localeCompare(b.last, 'en', { sensitivity: 'base' });
 }
 
-export function sortSessions<T extends Pick<Session, 'number' | 'gym'>>(sessions: T[], gymOrder: string[] = DEFAULT_GYM_ORDER): T[] {
-  const rank = (g: string) => {
-    const i = gymOrder.findIndex((x) => x.toLowerCase() === g.toLowerCase());
-    return i < 0 ? gymOrder.length : i;
-  };
-  return [...sessions].sort((a, b) => a.number - b.number || rank(a.gym) - rank(b.gym) || a.gym.localeCompare(b.gym));
+/** What a club sees: session name (natural order), then location (the meet's order). */
+export function sortSessions<T extends SessionRef>(sessions: T[], gymOrder: string[] = DEFAULT_GYM_ORDER): T[] {
+  return sortByName(sessions, gymOrder);
 }
 
 /**
@@ -85,7 +87,11 @@ export function buildClubLinks(
     const mine = byClub.get(club.id) ?? [];
     const sessionIds = [...new Set(mine.map((a) => a.sessionId))];
     const linkSessions: LinkSession[] = sortSessions(sessionIds.map((id) => sessionById.get(id)!), gymOrder).map((s) => {
-      const base = { sessionId: s.id, label: sessionLabel(s), discipline: s.discipline, gym: s.gym, number: s.number };
+      const base = {
+        sessionId: s.id, label: sessionLabel(s), discipline: s.discipline,
+        name: sessionName(s), location: sessionLocation(s), gym: sessionLocation(s),
+        ...(s.number !== undefined ? { number: s.number } : {}),
+      };
       if (s.discipline === 'TNT') return { ...base, levels: [] };
       const inSession = mine.filter((a) => a.sessionId === s.id);
       const codes = [...new Set(inSession.map((a) => a.levelCode))];

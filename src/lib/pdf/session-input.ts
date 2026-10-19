@@ -4,6 +4,7 @@ import type { LinkAthlete } from '../club-links';
 import { resolveLevel, type LevelOrder } from '../club-order-model';
 import type { StoredAthlete } from '../import/diff';
 import type { Session } from '../import/types';
+import { sessionLocation, sessionName } from '../session-names';
 import { type FlightPair, type Flight, defaultFlights, mergeFlights, pairClubs, pairNames } from '../synchro-flights';
 import { planFromCards } from '../squad-balance';
 import { restoreSquads } from '../squad-restore';
@@ -15,8 +16,8 @@ import { restoreTntSquads } from '../tnt-squads';
 import type { Meet } from './model';
 
 export interface SessionMeta {
-  number: number;
-  gym: string;
+  name: string;
+  location: string;
   levelCodes: string[];
 }
 
@@ -74,7 +75,7 @@ export function buildArtisticSessionInput(input: {
   // An id that is not a pattern of this discipline prints as the discipline's default (the Squads screen says so).
   const pattern: RotationPattern = readPattern(stored?.pattern, session.discipline)?.pattern ?? defaultPattern(session.discipline);
   const count = squadCountFor(pattern, session.discipline);
-  const meta = { number: session.number, gym: session.gym, levelCodes: session.levelCodes, discipline: session.discipline };
+  const meta = { name: sessionName(session), location: sessionLocation(session), levelCodes: session.levelCodes, discipline: session.discipline };
   const empty: ArtisticSquadInput[] = Array.from({ length: count }, (_, i) => ({ index: i, letter: artisticLetter(i), groups: [] }));
   if (!stored) {
     return { meet, session: meta, pattern, schedule: EMPTY_SCHEDULE, athleteCount: d.athleteCount, squads: empty, unplaced: d.athleteCount, noSquads: true };
@@ -216,7 +217,7 @@ export function buildTntSessionInput(input: {
   }
   return {
     meet,
-    session: { number: session.number, gym: session.gym, levelCodes: session.levelCodes },
+    session: { name: sessionName(session), location: sessionLocation(session), levelCodes: session.levelCodes },
     competitionTime: session.competitionTime ?? '',
     squads,
     synchroOnly: data.synchroOnly.map((a) => person(a.id)),

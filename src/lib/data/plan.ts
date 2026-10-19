@@ -54,7 +54,7 @@ export function planImport(
   for (const id of diff.removed) ops.push({ path: p.athlete(id), data: { removed: true }, merge: true });
 
   for (const s of model.sessions) {
-    ops.push({ path: p.session(s.id), data: { number: s.number, gym: s.gym, discipline: s.discipline, levelCodes: s.levelCodes }, merge: true });
+    ops.push({ path: p.session(s.id), data: { name: s.name, location: s.location, gym: s.location, ...(s.number !== undefined ? { number: s.number } : {}), discipline: s.discipline, levelCodes: s.levelCodes }, merge: true });
   }
 
   const prev = new Map(existing.clubs.map((c) => [c.id, c]));

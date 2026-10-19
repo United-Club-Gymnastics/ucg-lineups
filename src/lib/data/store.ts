@@ -13,7 +13,13 @@ export const toStoredClub = (id: string, data: DocumentData): StoredClub => {
   const x = data as Partial<StoredClub>;
   return { id, name: x.name ?? '', emails: x.emails ?? [], token: x.token ?? '' };
 };
-export const toStoredSession = (id: string, data: DocumentData): Session => ({ ...(data as Session), id });
+/** Sessions stored before names existed have `number` + `gym` only: they read as `Session <number>` at `<gym>`. */
+export const toStoredSession = (id: string, data: DocumentData): Session => {
+  const raw = data as Partial<Session>;
+  const location = typeof raw.location === 'string' ? raw.location : (raw.gym ?? '');
+  const name = typeof raw.name === 'string' && raw.name ? raw.name : raw.number !== undefined ? `Session ${raw.number}` : '';
+  return { ...(raw as Session), id, name, location, gym: location };
+};
 
 export async function loadAthletes(db: Firestore, meetId: string): Promise<StoredAthlete[]> {
   const snap = await getDocs(collection(db, meetPaths(meetId).athletes));

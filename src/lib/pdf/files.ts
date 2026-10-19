@@ -12,7 +12,7 @@ export async function sessionPdf(kind: ExportKind, session: SessionExportInput, 
   return { name: sessionFileName(kind, session), bytes: pdfBytes(sessionPages(kind, session, printedOn), sessionFileName(kind, session)) };
 }
 
-/** Every session in one PDF, collated for printing (scorecards by gym, rotation sheets by session number). */
+/** Every session in one PDF, collated for printing (scorecards by location, rotation sheets by session name). */
 export async function allSessionsPdf(kind: ExportKind, sessions: SessionExportInput[], gymOrder: string[] | undefined, printedOn: string): Promise<PdfFile> {
   const { pdfBytes } = await import('./render');
   const name = allSessionsFileName(kind, 'pdf');

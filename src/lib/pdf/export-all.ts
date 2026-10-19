@@ -5,6 +5,7 @@ import type { StoredAthlete } from '../import/diff';
 import type { Session } from '../import/types';
 import { mergeFlights, pairNames, pairsInSession, pairsNeedingSession, placePairs, type PlacedPair, type SynchroAssignments, type SynchroScratched } from '../synchro-flights';
 import type { SynchroPair } from '../synchro-source';
+import { scheduleKey, sessionLocation, sessionName } from '../session-names';
 import { isArtisticSession, parseSquadDoc, sessionTitle, sortSessionsByGym } from '../squad-data';
 import { buildTntRoster, isTntSession, parseTntDoc } from '../tnt-data';
 import { formatDate, resolveSchedule, whenText, type ScheduleOverride, type ScheduleRows } from '../schedule';
@@ -21,7 +22,7 @@ export interface ExportWarning {
 export interface ExportSession {
   id: string;
   session: Session;
-  /** `Session 1 – Orange`. */
+  /** `Session 1 – Orange`, `MAG Finals – Orange`. */
   title: string;
   input: SessionExportInput;
 }
@@ -41,7 +42,7 @@ export function buildExportSessions(input: {
   /** Raw `squads/{sessionId}` documents by session id. */
   squadDocs: Record<string, unknown>;
   meet: Meet;
-  /** The session schedule: a row per session number (with `meet.date` as the date fallback); sessions may override fields. */
+  /** The session schedule: a row per session name (with `meet.date` as the date fallback); sessions may override fields. */
   schedule?: ScheduleRows;
   /** Pairs read from the Synchro tool; null when it could not be read. */
   synchroPairs: SynchroPair[] | null;
@@ -61,7 +62,7 @@ export function buildExportSessions(input: {
 
   for (const session of sessionsSorted) {
     const raw = input.squadDocs[session.id];
-    const base = { id: session.id, number: session.number, gym: session.gym };
+    const base = { id: session.id, name: sessionName(session), location: sessionLocation(session) };
     if (isArtisticSession(session)) {
       const stored = parseSquadDoc(raw);
       const built = buildArtisticSessionInput({ session, athletes: input.athletes, ordersByClub: input.ordersByClub, stored, meet: input.meet });
@@ -103,7 +104,7 @@ export function applySchedules(
   o: { meet: Meet; rows: ScheduleRows; overrides?: Record<string, ScheduleOverride> },
 ): ExportSession[] {
   return sessions.map((s) => {
-    const r = resolveSchedule(s.session.number, o.rows, o.overrides?.[s.id] ?? s.session.scheduleOverride, o.meet.date);
+    const r = resolveSchedule(scheduleKey(s.session), o.rows, o.overrides?.[s.id] ?? s.session.scheduleOverride, o.meet.date);
     const meet: Meet = { name: o.meet.name, date: formatDate(r.date) };
     const inner = s.input;
     if (inner.type === 'artistic') {

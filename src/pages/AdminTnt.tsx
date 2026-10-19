@@ -1,3 +1,4 @@
+import { locationLabel, sessionLocation } from '../lib/session-names';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Select from '../components/Select';
 import { db } from '../lib/firebase';
@@ -367,7 +368,7 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
           <div className="sq-head-text">
             <h2 className="display">{sessionTitle(session)}</h2>
             <p className="adm-muted">
-              T&amp;T · {session.gym} Gym · {data.squadAthletes.length} athlete{data.squadAthletes.length === 1 ? '' : 's'} in squads · {data.synchroOnly.length} synchro only · {pairCount}
+              T&amp;T · {locationLabel(sessionLocation(session))}{sessionLocation(session) ? ' · ' : ''}{data.squadAthletes.length} athlete{data.squadAthletes.length === 1 ? '' : 's'} in squads · {data.synchroOnly.length} synchro only · {pairCount}
             </p>
           </div>
         </div>

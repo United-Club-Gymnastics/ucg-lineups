@@ -18,7 +18,7 @@ export interface Athlete {
   independent: boolean;
   levelCode: string;
   levelName: string;
-  /** `s1-orange`, or '' when the export's session string could not be read. */
+  /** `s1-orange` / `mag-finals--orange`, or '' when the export had no session. */
   sessionId: string;
   /** WAG/MAG: Included apparatus codes. T&T: Included event codes (same keys as `tnt`). */
   apparatus: string[];
@@ -29,14 +29,21 @@ export interface Athlete {
 }
 
 export interface Session {
+  /** `s<N>-<location>` for a session named `Session <N>` (unchanged since the first meet); else `<name slug>--<location slug>`. */
   id: string;
-  number: number;
-  gym: string;
+  /** The session name from the export ("Session 1", "MAG Finals"). Stored sessions from before names existed have only `number`; read them with `sessionName()`. */
+  name: string;
+  /** Gym colour or venue ("Orange", "Dupont"); '' when the export had no separator. */
+  location: string;
+  /** Alias of `location`, kept so older stored sessions and callers still work; new code reads `location`. */
+  gym?: string;
+  /** Only when the name is exactly `Session N` (ordering; the schedule key). */
+  number?: number;
   discipline: Discipline;
   levelCodes: string[];
   /** Older T&T competition time (before the session schedule); moved into `scheduleOverride` by the Exports screen's one-time action. */
   competitionTime?: string;
-  /** Optional per-session overrides of its session number's schedule row (date, stretch, warmups, competition). */
+  /** Optional per-session overrides of its session name's schedule row (date, stretch, warmups, competition). */
   scheduleOverride?: Partial<Record<'date' | 'stretch' | 'warmups' | 'competition', string>>;
 }
 
@@ -63,4 +70,5 @@ export type Row = Record<string, string>;
 
 export type ExportKind = 'athletes' | 'wag' | 'mag' | 'tnt' | 'clubEmails';
 
+/** The default location order (today's gym order). A meet's own order is `settings/meet.gymOrder` and may hold any location names. */
 export const DEFAULT_GYM_ORDER = ['Green', 'Red', 'Yellow', 'Orange', 'Purple'];

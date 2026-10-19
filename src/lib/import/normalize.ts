@@ -1,4 +1,5 @@
 import { APPARATUS } from '../apparatus';
+import { parseSessionString, sessionIdFor, sessionTitle, slug, sortByName, type ParsedSession } from '../session-names';
 import {
   DEFAULT_GYM_ORDER,
   type Athlete,
@@ -21,15 +22,7 @@ export interface ImportInput {
   gymOrder?: string[];
 }
 
-export function slug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+export { slug };
 
 const g = (r: Row, k: string) => (r[k] ?? '').trim();
 
@@ -39,17 +32,6 @@ export function parseDiscipline(type: string): Discipline | null {
   if (t === 'MAG') return 'MAG';
   if (t === 'TNT' || t === 'TT') return 'TNT';
   return null;
-}
-
-export function parseSession(raw: string): { number: number; gym: string } | null {
-  const m = /session\s*(\d+)\s*[-–—:]?\s*([A-Za-z]+)/i.exec(raw);
-  if (!m) return null;
-  const gym = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
-  return { number: Number(m[1]), gym };
-}
-
-export function sessionId(number: number, gym: string): string {
-  return `s${number}-${gym.toLowerCase()}`;
 }
 
 const NAMED_LEVELS: { test: RegExp; code: string; name: string }[] = [
@@ -125,6 +107,8 @@ function tntOf(row: Row): TnTLevels {
 export function normalizeImport(input: ImportInput): ImportModel {
   const warnings: ImportWarning[] = [];
   const warn = (code: string, message: string) => warnings.push({ code, message });
+  const noLocation = new Map<string, number>();
+  const parsedSessions = new Map<string, ParsedSession>();
   const gymOrder = input.gymOrder ?? DEFAULT_GYM_ORDER;
 
   // UCG doesn't use bibs (Julia 2026-10-18): an athlete is identified by discipline + club +
@@ -197,8 +181,11 @@ export function normalizeImport(input: ImportInput): ImportModel {
     const independent = isIndependent(clubName);
     if (!clubName) warn('missing-club', `${who}: no club.`);
     const lvl = mapLevel(g(r, 'level'), g(r, 'levelshortname'));
-    const sess = parseSession(g(r, 'session'));
-    if (!sess) warn('bad-session', `${who}: session "${g(r, 'session')}" not understood.`);
+    const sess = parseSessionString(g(r, 'session'));
+    if (!sess) warn('bad-session', `${who}: no session.`);
+    else if (!sess.hasLocation) noLocation.set(sess.name, (noLocation.get(sess.name) ?? 0) + 1);
+    const sessId = sess ? sessionIdFor(sess) : '';
+    if (sess && sessId) parsedSessions.set(sessId, parsedSessions.get(sessId) ?? sess);
 
     let apparatus: string[] = [];
     let tnt: TnTLevels | undefined;
@@ -236,7 +223,7 @@ export function normalizeImport(input: ImportInput): ImportModel {
       independent,
       levelCode: lvl.code,
       levelName: lvl.name,
-      sessionId: sess ? sessionId(sess.number, sess.gym) : '',
+      sessionId: sessId,
       apparatus,
       ...(disc === 'TNT' ? { tnt } : {}),
       competes: apparatus.length > 0,
@@ -255,37 +242,34 @@ export function normalizeImport(input: ImportInput): ImportModel {
     }
   }
 
-  // Sessions
+  // Sessions: one per distinct id; the name and location come from the first athlete that carried it.
+  for (const [text, n] of noLocation) {
+    warn('bad-session', `Session "${text}" has no location (expected "<session name> - <location>"): ${n} athlete${n === 1 ? '' : 's'}.`);
+  }
   const sessMap = new Map<string, { s: Session; counts: Record<Discipline, number>; levels: Set<string> }>();
   for (const a of athletes) {
     if (!a.sessionId) continue;
-    const parsed = /^s(\d+)-(.+)$/.exec(a.sessionId)!;
     let e = sessMap.get(a.sessionId);
     if (!e) {
-      const gymRaw = parsed[2];
-      e = {
-        s: { id: a.sessionId, number: Number(parsed[1]), gym: gymRaw.charAt(0).toUpperCase() + gymRaw.slice(1), discipline: a.discipline, levelCodes: [] },
-        counts: { WAG: 0, MAG: 0, TNT: 0 },
-        levels: new Set(),
-      };
+      const p = parsedSessions.get(a.sessionId)!;
+      const s: Session = { id: a.sessionId, name: p.name, location: p.location, discipline: a.discipline, levelCodes: [] };
+      if (p.number !== undefined) s.number = p.number;
+      e = { s, counts: { WAG: 0, MAG: 0, TNT: 0 }, levels: new Set() };
       sessMap.set(a.sessionId, e);
     }
     e.counts[a.discipline]++;
     e.levels.add(a.levelCode);
   }
-  const gymIdx = (gym: string) => {
-    const i = gymOrder.findIndex((x) => x.toLowerCase() === gym.toLowerCase());
-    return i < 0 ? gymOrder.length : i;
-  };
-  const sessions = [...sessMap.values()]
-    .map(({ s, counts, levels }) => {
+  const sessions = sortByName(
+    [...sessMap.values()].map(({ s, counts, levels }) => {
       const discs = (['WAG', 'MAG', 'TNT'] as Discipline[]).filter((d) => counts[d] > 0);
       s.discipline = discs.sort((a, b) => counts[b] - counts[a])[0];
-      if (discs.length > 1) warn('mixed-session', `Session ${s.number} ${s.gym} has more than one discipline (${discs.map((d) => names[d]).join(', ')}).`);
+      if (discs.length > 1) warn('mixed-session', `${sessionTitle(s)} has more than one discipline (${discs.map((d) => names[d]).join(', ')}).`);
       s.levelCodes = [...levels].sort();
       return s;
-    })
-    .sort((a, b) => a.number - b.number || gymIdx(a.gym) - gymIdx(b.gym));
+    }),
+    gymOrder,
+  );
 
   // Clubs (independents are not clubs)
   const clubs = new Map<string, Club>();

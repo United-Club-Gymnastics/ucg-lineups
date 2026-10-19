@@ -1,5 +1,6 @@
 // Pure: T&T scorecards. Landscape, 10 athletes a page, per event TR, DM, TU with squads in the order they arrive (TR: A, C, B).
 // Five blank rows end each squad's list, kept together on its last page with at least one athlete above them. Spec §6.
+import { sessionTitle } from '../session-names';
 import { TNT_EVENT_NAME, TNT_EVENTS, rotationFor, squadLetter, type TntEvent } from '../tnt-squads';
 import { HEAVY_KEY, type Column, type TntRow, type TntScorecardPage, type Unnumbered } from './model';
 import type { TntPerson, TntSessionInput } from './session-input';
@@ -39,7 +40,7 @@ export function paginate<T>(list: T[], perPage = TNT_PAGE_ROWS, blanks = TNT_BLA
 
 export function tntScorecardPages(input: TntSessionInput): Unnumbered<TntScorecardPage>[] {
   const { meet, session } = input;
-  const sessionText = `Session ${session.number} – ${session.gym}`;
+  const sessionText = sessionTitle(session);
   const pages: Unnumbered<TntScorecardPage>[] = [];
   for (const event of TNT_EVENTS) {
     for (const s of arrivalAt(event)) {

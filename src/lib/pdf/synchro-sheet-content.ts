@@ -1,5 +1,6 @@
 // Pure: the synchro score sheet. Portrait, 7 pairs a page, by flight. Row 1: A1-E1 A1-E2 A1-HD SJ ND; row 2: A2-E1 A2-E2 A2-HD
 // Sync Final. Heavy = everything but Final. Heavy double rule where the level changes. Spec §6.
+import { sessionTitle } from '../session-names';
 import { HEAVY_KEY, type Column, type SynchroPage, type Unnumbered } from './model';
 import type { TntSessionInput } from './session-input';
 
@@ -20,7 +21,7 @@ export function synchroPages(input: TntSessionInput): Unnumbered<SynchroPage>[] 
         kind: 'synchro',
         meet,
         title: 'Synchro Score Sheet',
-        subtitle: `Session ${session.number} – ${session.gym} · Flight ${flight.name} · page ${p + 1} of ${n}`,
+        subtitle: `${sessionTitle(session)} · Flight ${flight.name} · page ${p + 1} of ${n}`,
         flight: flight.name,
         row1: ROW1,
         row2: ROW2,

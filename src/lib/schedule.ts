@@ -1,5 +1,7 @@
-// Pure: the session schedule. One row per session NUMBER (every gym's Session 1 shares it) holds the date and the times;
-// a session may override any field. `settings/meet.schedule` = { "<number>": row }, `sessions/{id}.scheduleOverride` = fields.
+import { findRowKey, scheduleKey, type SessionRef } from './session-names';
+// Pure: the session schedule. One row per session NAME (every location's "Session 1" shares it, every "MAG Finals" too) holds the
+// date and the times; a session may override any field. `settings/meet.schedule` = { "<key>": row } where the key is "<N>" for a
+// session named `Session N` (as it always was) and the name as typed otherwise (matched ignoring case); `sessions/{id}.scheduleOverride` = fields.
 export interface ScheduleFields {
   /** ISO `yyyy-mm-dd` (a free-text date is kept as typed). */
   date: string;
@@ -12,7 +14,7 @@ export interface ScheduleFields {
 export const SCHEDULE_KEYS: (keyof ScheduleFields)[] = ['date', 'stretch', 'warmups', 'competition'];
 export const EMPTY_FIELDS: ScheduleFields = { date: '', stretch: '', warmups: '', competition: '' };
 
-/** Rows keyed by session number (as a string). A row may be missing or partial. */
+/** Rows keyed by schedule key (`"1"` for Session 1, else the session name). A row may be missing or partial. */
 export type ScheduleRows = Record<string, Partial<ScheduleFields>>;
 export type ScheduleOverride = Partial<ScheduleFields>;
 
@@ -41,11 +43,12 @@ export function parseRows(raw: unknown): ScheduleRows {
 }
 
 /**
- * The schedule a session prints: per field, the session's override if it has one, else its number's row. The date falls
+ * The schedule a session prints: per field, the session's override if it has one, else its name's row (`key` = `scheduleKey(session)`). The date falls
  * back to the meet's single date (`fallbackDate`) when neither has one. Anything missing is ''.
  */
-export function resolveSchedule(number: number, rows: ScheduleRows, override: ScheduleOverride | undefined, fallbackDate = ''): ScheduleFields {
-  const row = rows[String(number)] ?? {};
+export function resolveSchedule(key: string | number, rows: ScheduleRows, override: ScheduleOverride | undefined, fallbackDate = ''): ScheduleFields {
+  const k = findRowKey(rows, String(key));
+  const row = (k === undefined ? undefined : rows[k]) ?? {};
   const pick = (k: keyof ScheduleFields) => clean(override?.[k]) || clean(row[k]);
   return {
     date: pick('date') || clean(fallbackDate),
@@ -92,7 +95,8 @@ export function whenText(s: Pick<ScheduleFields, 'date' | 'competition'>): strin
 
 export interface LegacySchedule {
   sessionId: string;
-  number: number;
+  /** The session's schedule key (`scheduleKey()`). */
+  number: string | number;
   /** From `squads/{id}.schedule` (stretch, warmups, competition) and `sessions/{id}.competitionTime`. */
   stretch: string;
   warmups: string;
@@ -103,7 +107,7 @@ export interface LegacySchedule {
 }
 
 export interface MigrationPlan {
-  /** Fields that differ from the session number's row become that session's override (merged over any existing one). */
+  /** Fields that differ from the session name's row become that session's override (merged over any existing one). */
   overrides: Record<string, ScheduleOverride>;
   /** Sessions whose old `squads/{id}.schedule` is cleared, and whose `sessions/{id}.competitionTime` is removed. */
   clearSquadSchedule: string[];
@@ -123,7 +127,8 @@ export function planMigration(legacy: LegacySchedule[], rows: ScheduleRows, exis
   for (const l of legacy) {
     if (l.hadSquadSchedule) plan.clearSquadSchedule.push(l.sessionId);
     if (l.hadCompetitionTime) plan.clearCompetitionTime.push(l.sessionId);
-    const row = rows[String(l.number)] ?? {};
+    const lk = findRowKey(rows, String(l.number));
+    const row = (lk === undefined ? undefined : rows[lk]) ?? {};
     const have = existing[l.sessionId] ?? {};
     const next: ScheduleOverride = {};
     for (const k of ['stretch', 'warmups', 'competition'] as const) {
@@ -139,7 +144,7 @@ export function planMigration(legacy: LegacySchedule[], rows: ScheduleRows, exis
 
 /** Find the old per-session times in the raw `squads/{id}` documents and the sessions' `competitionTime`. */
 export function collectLegacy(
-  sessions: { id: string; number: number; competitionTime?: string }[],
+  sessions: ({ id: string; competitionTime?: string } & SessionRef)[],
   squadDocs: Record<string, unknown>,
 ): LegacySchedule[] {
   const out: LegacySchedule[] = [];
@@ -149,7 +154,7 @@ export function collectLegacy(
     const sq = sch && typeof sch === 'object' ? (sch as Record<string, unknown>) : null;
     const time = clean(s.competitionTime);
     const l: LegacySchedule = {
-      sessionId: s.id, number: s.number,
+      sessionId: s.id, number: scheduleKey(s),
       stretch: clean(sq?.stretch), warmups: clean(sq?.warmups), competition: time || clean(sq?.competition),
       hadCompetitionTime: s.competitionTime !== undefined,
       hadSquadSchedule: !!sq && ['stretch', 'warmups', 'competition'].some((k) => clean(sq[k]) !== ''),

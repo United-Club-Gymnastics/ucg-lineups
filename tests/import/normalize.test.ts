@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assembleInput } from '../../src/lib/import/assemble';
 import { detectWorkbook, type Detected } from '../../src/lib/import/detect';
-import { mapLevel, normalizeImport, parseSession, slug, splitEmails, tntLevelCode } from '../../src/lib/import/normalize';
+import { mapLevel, normalizeImport, slug, splitEmails, tntLevelCode } from '../../src/lib/import/normalize';
 import { readWorkbook } from '../../src/lib/import/read-workbook';
 import { ATH_HEADERS, MAG_HEADERS, TNT_HEADERS, WAG_HEADERS, athRow, makeWorkbook } from './helpers';
 
@@ -27,11 +27,13 @@ async function run(sheets: {
 
 const noNoise = (m: { warnings: { code: string }[] }) => m.warnings.filter((w) => w.code !== 'no-export');
 
+import { parseSessionString } from '../../src/lib/session-names';
+
 describe('helpers', () => {
   it('parses sessions', () => {
-    expect(parseSession('Session 1 - Orange')).toEqual({ number: 1, gym: 'Orange' });
-    expect(parseSession('session 12 – purple')).toEqual({ number: 12, gym: 'Purple' });
-    expect(parseSession('Brunch')).toBeNull();
+    expect(parseSessionString('Session 1 - Orange')).toMatchObject({ name: 'Session 1', location: 'Orange', number: 1 });
+    expect(parseSessionString('session 12 – purple')).toMatchObject({ name: 'Session 12', location: 'Purple', number: 12 });
+    expect(parseSessionString('Brunch')).toMatchObject({ name: 'Brunch', location: '', hasLocation: false });
   });
   it('slugs club names', () => {
     expect(slug("Arizona State Men's Gymnastics")).toBe('arizona-state-men-s-gymnastics');
@@ -83,7 +85,7 @@ describe('normalizeImport', () => {
     expect(mag.apparatus).toEqual(['FX', 'PH', 'VT', 'PB', 'HB']);
     expect(mag.levelName).toBe('Developmental');
     expect(m.sessions.map((s) => s.id)).toEqual(['s1-orange', 's2-green']);
-    expect(m.sessions[0]).toEqual({ id: 's1-orange', number: 1, gym: 'Orange', discipline: 'WAG', levelCodes: ['XP'] });
+    expect(m.sessions[0]).toEqual({ id: 's1-orange', name: 'Session 1', location: 'Orange', number: 1, discipline: 'WAG', levelCodes: ['XP'] });
     expect(m.clubs).toEqual([
       { id: 'alpha-gymnastics', name: 'Alpha Gymnastics', emails: ['a@alpha.org', 'b@alpha.org'] },
       { id: 'beta-club', name: 'Beta Club', emails: ['c@beta.org'] },
@@ -237,8 +239,10 @@ describe('normalizeImport', () => {
         a({ first: 'Six', type: 'Rhythmic' }),
       ],
     });
-    expect(m.sessions.map((s) => s.id)).toEqual(['s1-purple', 's2-green', 's2-red']);
-    expect(m.athletes.find((x) => x.first === 'Four')!.sessionId).toBe('');
+    // "TBD" has no " - <location>": the whole string is the session name, the location is empty, and it warns.
+    expect(m.sessions.map((s) => s.id)).toEqual(['s1-purple', 's2-green', 's2-red', 'tbd--']);
+    expect(m.sessions[3]).toMatchObject({ name: 'TBD', location: '' });
+    expect(m.athletes.find((x) => x.first === 'Four')!.sessionId).toBe('tbd--');
     expect(m.warnings.map((w) => w.code).filter((c) => c !== 'no-export').sort()).toEqual(['bad-session', 'missing-name', 'unknown-type']);
   });
 });
