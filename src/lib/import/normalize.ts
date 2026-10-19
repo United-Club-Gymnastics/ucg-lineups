@@ -89,7 +89,9 @@ const TNT_COLS: [TnTCode, string, string][] = [
   ['SY', 'synch_trampoline_level', 'synch_event_status'],
 ];
 
-const included = (v: string) => v.trim().toLowerCase() === 'included';
+// An event is competed when its status is Included or Excluded (Excluded = competes but doesn't count toward team or
+// placings, Julia 2026-10-19). Scratched or blank = not competing that event.
+const included = (v: string) => ['included', 'excluded'].includes(v.trim().toLowerCase());
 
 function apparatusOf(row: Row, cols: [string, string][], disc: 'WAG' | 'MAG'): string[] {
   const got = new Set(cols.filter(([c]) => included(g(row, c))).map(([, code]) => code));

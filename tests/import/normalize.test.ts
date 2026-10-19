@@ -163,6 +163,18 @@ describe('normalizeImport', () => {
     expect(noNoise(m)).toEqual([]);
   });
 
+  it('counts Excluded as competing that event, like Included (Julia 2026-10-19); Scratched and blank do not', async () => {
+    const m = await run({
+      ath: [a({ bib: '1' }), a({ first: 'Bea', type: 'MAG', level: 'NAIGC Intermediate', short: 'Int' }), a({ first: 'Cy', type: 'T&T', level: 'New Flyers', short: 'NF' })],
+      wag: [['Ada', 'Test', '1', 'Platinum', 'Excluded', 'Included', 'Scratched', '']],
+      mag: [['Bea', 'Test', '', 'Excluded', 'EXCLUDED', 'Scratched', 'Included', 'excluded', '']],
+      tnt: [['Cy', 'Test', '', 'Alpha Gymnastics', 'New Flyers', 'Excluded', 'New Flyers', 'Scratched', '', '', 'New Flyers', 'Included']],
+    });
+    expect(m.athletes[0]).toMatchObject({ apparatus: ['VT', 'UB'], competes: true });
+    expect(m.athletes[1]).toMatchObject({ apparatus: ['FX', 'PH', 'VT', 'PB'], competes: true });
+    expect(m.athletes[2].tnt).toEqual({ TU: 'NF', DM: 'NF' });
+  });
+
   it('treats Scratched/blank as not competing; no Included apparatus => competes false', async () => {
     const m = await run({
       ath: [a({ bib: '1' })],

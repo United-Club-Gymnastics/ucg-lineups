@@ -34,7 +34,7 @@ comes from SF Events and goes stale).
 | File | Gives |
 |---|---|
 | `Athletes_Export.xlsx` | every entry: Bib, FirstName, LastName, Type (WAG/MAG/T&T), Club (**full name — always print this, never Team/short name**), Level, Session (`<session name> - <location>`: `Session 1 - Orange`, `MAG Finals - Orange`, `MAG Session 1 - Dupont`) |
-| `WAG_Export.xlsx`, `MAG_Export.xlsx` | per-apparatus `*_Event_Status` (Included / Scratched) → the athlete's apparatus list |
+| `WAG_Export.xlsx`, `MAG_Export.xlsx` | per-apparatus `*_Event_Status`: **Included or Excluded = competing that event**, Scratched or blank = not → the athlete's apparatus list |
 | `TnT_Export.xlsx` | per-event level and status: Tumbling, Trampoline, Synch_Trampoline, DMT |
 | `League_Communications_Export.xlsx` (preferred) or `Club_Emails.xlsx` | club contact emails: League export = Club, Contact, Role (only email roles used); Club_Emails = Club, Email (a cell may hold several, `;`-separated). Clubs in the list with no athletes are summarised in one warning. Editable in the app |
 
