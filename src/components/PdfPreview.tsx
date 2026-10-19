@@ -64,7 +64,7 @@ function ArtisticScorecard({ pg }: { pg: ArtisticScorecardPage }) {
       <div className="pv-band">
         <span className="pv-squad"><b>Squad</b> <b className="pv-squad-letter">{pg.band.squad}</b></span>
         <span className="pv-apparatus">{pg.band.apparatus}</span>
-        <span className="pv-rot">{pg.band.discipline} · Rotation {pg.band.rotation}{pg.band.equipment ? ` · ${pg.band.equipment}` : ''}</span>
+        <span className="pv-rot">{pg.band.discipline}{pg.band.rotation != null ? ` · Rotation ${pg.band.rotation}` : ''}{pg.band.equipment ? ` · ${pg.band.equipment}` : ''}</span>
       </div>
       <div className="pv-grid pv-headrow" style={{ gridTemplateColumns: grid, height: pt(26) }} role="presentation">
         {pg.columns.map((c) => (

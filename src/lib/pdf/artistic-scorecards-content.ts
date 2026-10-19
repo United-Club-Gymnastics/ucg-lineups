@@ -1,7 +1,7 @@
 // Pure: artistic (MAG/WAG) scorecards. Landscape, one page per squad per apparatus, apparatus in Olympic order, squads in the
 // order they arrive. Exactly 15 rows. Spec §6.
 import { APPARATUS } from '../apparatus';
-import { arrivalOrder, columnCode, columnLabel, rotationFor, slotOf } from '../rotation';
+import { arrivalOrder, columnCode, columnLabel, patternDef, rotationFor, slotOf } from '../rotation';
 import { HEAVY_KEY, type ArtisticScorecardPage, type Column, type ScoreRow, type Unnumbered } from './model';
 import type { ArtisticSessionInput } from './session-input';
 
@@ -60,7 +60,8 @@ export function artisticScorecardPages(input: ArtisticSessionInput): Unnumbered<
           apparatus: name,
           code,
           discipline: session.discipline,
-          rotation: r + 1,
+          // Timeline patterns (WAG 7 squads) print no rotation number (Julia 2026-10-18).
+          rotation: patternDef(pattern, session.discipline).timeline ? null : r + 1,
           equipment: column !== code ? columnLabel(column, pattern, session.discipline) : '',
         },
         infinity,

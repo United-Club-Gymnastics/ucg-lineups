@@ -68,7 +68,8 @@ export interface ArtisticScorecardPage extends BasePage {
     apparatus: string;
     code: string;
     discipline: 'MAG' | 'WAG';
-    rotation: number;
+    /** null = not printed (timeline patterns such as WAG 7 squads). */
+    rotation: number | null;
     /** `VT-A` / `VT-Platform` when the pattern names its equipment, else ''. */
     equipment: string;
   };

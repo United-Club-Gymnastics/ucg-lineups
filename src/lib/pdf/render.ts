@@ -161,7 +161,7 @@ function drawArtisticScorecard(p: Pen, pg: ArtisticScorecardPage, W: number, H: 
   p.rect(sx, bandY + 6, sw, bandH - 12, 1.6);
   p.text(pg.band.squad, sx + sw / 2, bandY + bandH / 2, { size: 16, style: 'bold', align: 'center' });
   p.text(pg.band.apparatus.toUpperCase(), W / 2, bandY + bandH / 2, { size: 24, style: 'bold', align: 'center' });
-  p.text(`${pg.band.discipline} · Rotation ${pg.band.rotation}${pg.band.equipment ? ` · ${pg.band.equipment}` : ''}`, R - 12, bandY + bandH / 2, { size: 11, align: 'right' });
+  p.text(`${pg.band.discipline}${pg.band.rotation != null ? ` · Rotation ${pg.band.rotation}` : ''}${pg.band.equipment ? ` · ${pg.band.equipment}` : ''}`, R - 12, bandY + bandH / 2, { size: 11, align: 'right' });
 
   // table
   const top = bandY + bandH + 6;

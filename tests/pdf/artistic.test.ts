@@ -266,13 +266,14 @@ describe('alternative patterns: rotation sheet and scorecards', () => {
     expect(out).toMatch(/\(PB\) Tj/);
   });
 
-  it('WAG 7 squads: scorecard pages in compete order, with the equipment name in the band', () => {
+  it('WAG 7 squads: scorecard pages in compete order, with the equipment name and no rotation number in the band', () => {
     const pages = artisticScorecardPages(input('WAG', 'wag-7', everySquad('WAG', 'wag-7')));
     expect(pages).toHaveLength(28);
     const vault = pages.filter((p) => p.band.code === 'VT');
     expect(vault.map((p) => p.band.squad).join('')).toBe('ABFGDEC');
     expect(vault.map((p) => p.band.equipment)).toEqual(['VT-Platform', 'VT-Ground', 'VT-Platform', 'VT-Ground', 'VT-Platform', 'VT-Ground', 'VT-Platform']);
-    expect(vault.map((p) => p.band.rotation)).toEqual([2, 3, 4, 5, 6, 7, 8]);
+    // Julia 2026-10-18: no rotation number on scorecards for timeline patterns.
+    expect(pages.every((p) => p.band.rotation === null)).toBe(true);
     expect(pages.filter((p) => p.band.code === 'BB').map((p) => p.band.equipment)).toEqual(['BB-A', 'BB-B', 'BB-A', 'BB-B', 'BB-A', 'BB-B', 'BB-A']);
     expect(pages.filter((p) => p.band.code === 'UB').every((p) => p.band.equipment === '')).toBe(true);
     for (const code of WAG) {
