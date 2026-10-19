@@ -53,7 +53,7 @@ comes from SF Events and goes stale).
 
 ## 3. Club page (private link)
 
-- One unguessable link per club: `/#/c/<token>`. It covers **all of the club's sessions** across
+- One unguessable link per club **per meet**: `/#/c/<token>` (see §7a). It covers **all of the club's sessions** across
   MAG and WAG; each session shows its own status. T&T sessions show "Set by UCG" (clubs never order T&T).
 - Order model = the platform's competition **groups** (`competition-order.ts`): a level's groups are
   the same athletes on every apparatus; only the order differs per apparatus. Per-apparatus cap
@@ -222,21 +222,49 @@ Collation for all sessions: **scorecards by gym** (Green, Red, Yellow, Orange, P
   separate, explicit switch that ships via PR + review, and each real send needs Julia's go-ahead.
 - Send log (who got which reminder when); never uses the platform's Resend account.
 
+## 7a. Meets (several meets, one app)
+
+Julia runs this for more than one meet (Nationals, NE Regionals, …) without losing one meet's imports
+and work when she switches to another.
+
+- **Everything meet-specific lives under `meets/{meetId}/…`**: settings, athletes, clubs (with tokens),
+  sessions, squads, synchro choices, email log and templates. Switching meets never touches another
+  meet's data, and nothing is shared between meets.
+- **Admin header:** a meet dropdown (newest first; the current meet is remembered per browser in
+  `localStorage`, with a safe fallback to the newest), **New meet** (name → `meets/{slug}-{4 random
+  chars}` plus default settings), **Rename**, **Archive** (hides it from the list, never deletes).
+  With no meets the admin sees "Create your first meet". Import, Squads, T&T, Exports (and Clubs &
+  email later) all work on the selected meet. Archived meets can only be un-hidden in the Firebase
+  console (`archived: false` on `meets/{id}`); there is no UI for it yet.
+- **Club links stay top-level** (`clubLinks/{token}`, `clubOrders/{token}/levels/{levelKey}`): the club
+  page has only a token. Each link document carries its `meetId`. Tokens are per club **per meet**, so a
+  club gets a different link for each meet. The club page reads the meet's public settings (name,
+  order deadline) from `meets/{link.meetId}/settings/meet`, and works from the link alone as before.
+  A link without a `meetId` (made before meets existed) shows "This link isn't valid".
+- **Rules:** everything under `meets/**` is admin-only except `meets/{meetId}/settings/meet`, which is
+  public read (name, dates, deadline are public facts) and admin write. The `clubOrders` write check
+  reads the deadline from the meet named in the club's link: a club in meet X is locked by X's
+  deadline, never Y's. A link with no `meetId`, or whose meet has no settings, cannot write.
+- **Old data:** the top-level test import from 2026 (`athletes`, `clubs`, `sessions`, `squads`,
+  `settings`, …) is **not migrated** and is no longer readable by the app or the public. Julia creates a
+  meet and re-imports once. Nothing deletes the old documents; they can be removed in the console.
+
 ## 8. Data model (Firestore)
 
 Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[]`.
 
 | Path | Who | Contents |
 |---|---|---|
-| `settings/meet` | admin write, public read | meet name/date (fallback), order deadline, gym order, capacity settings, `schedule` (date and times by session number) |
-| `sessions/{id}` | admin | number, gym, discipline, levels, `scheduleOverride` (optional date/times) |
-| `athletes/{disc}_{bib}` | admin | names, club id + full name, level, session, apparatus / T&T levels, removed flag |
-| `clubs/{clubId}` | admin | full name, contact emails, token |
-| `clubLinks/{token}` | public **get** only (no list) | clubId, club name, the club's roster per session (names, levels, apparatus — no emails/DOB) |
-| `clubOrders/{token}/levels/{sessionId_level}` | club with token (until deadline), admin | groups, per-apparatus sections, splitDecided, updatedAt |
-| `squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |
-| `synchroSessions/main` | admin | `{ assignments: { <pairId>: <sessionId> } }`: the host's session choice per synchro pair |
-| `emailLog/{id}`, `emailSettings/main` | admin | reminders sent; templates |
+| `meets/{meetId}` | admin | `{ name, createdAt, archived? }` |
+| `meets/{meetId}/settings/meet` | admin write, **public read** | meet name/date (fallback), order deadline, gym order, capacity settings, `schedule` (date and times by session number) |
+| `meets/{meetId}/sessions/{id}` | admin | number, gym, discipline, levels, `scheduleOverride` (optional date/times) |
+| `meets/{meetId}/athletes/{id}` | admin | names, club id + full name, level, session, apparatus / T&T levels, removed flag (id `<DISC>_<club>_<first-last>`; see notes) |
+| `meets/{meetId}/clubs/{clubId}` | admin | full name, contact emails, token |
+| `meets/{meetId}/squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |
+| `meets/{meetId}/synchroSessions/main` | admin | `{ assignments: { <pairId>: <sessionId> } }`: the host's session choice per synchro pair |
+| `meets/{meetId}/emailLog/{id}`, `…/emailSettings/main` | admin | reminders sent; templates |
+| `clubLinks/{token}` | public **get** only (no list) | **meetId**, clubId, club name, the club's roster per session (names, levels, apparatus — no emails/DOB) |
+| `clubOrders/{token}/levels/{sessionId_level}` | club with token (until its meet's deadline), admin | groups, per-apparatus sections, splitDecided, updatedAt |
 | `admins/{email}` | console only | extra admins |
 
 Token = 128-bit random (base64url). Knowing it is the only club credential.

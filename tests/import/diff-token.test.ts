@@ -66,9 +66,9 @@ describe('planImport', () => {
   });
 
   it('first import writes everything, mints tokens, seeds settings', () => {
-    const p = planImport(model([ath('1')]), { athletes: [], clubs: [], hasSettings: false }, () => 'TOK');
-    expect(p.ops.map((o) => o.path)).toEqual(['athletes/WAG_1', 'sessions/s1-orange', 'clubs/alpha', 'settings/meet']);
-    expect(p.ops.find((o) => o.path === 'clubs/alpha')!.data).toEqual({ name: 'Alpha', emails: ['n@a.org'], token: 'TOK' });
+    const p = planImport(model([ath('1')]), { athletes: [], clubs: [], hasSettings: false }, 'm1', () => 'TOK');
+    expect(p.ops.map((o) => o.path)).toEqual(['meets/m1/athletes/WAG_1', 'meets/m1/sessions/s1-orange', 'meets/m1/clubs/alpha', 'meets/m1/settings/meet']);
+    expect(p.ops.find((o) => o.path === 'meets/m1/clubs/alpha')!.data).toEqual({ name: 'Alpha', emails: ['n@a.org'], token: 'TOK' });
     expect(p.ops[0]).toMatchObject({ merge: false, data: { removed: false } });
     expect(p.newClubs).toBe(1);
   });
@@ -79,9 +79,9 @@ describe('planImport', () => {
       clubs: [{ id: 'alpha', name: 'Alpha', emails: ['kept@a.org'], token: 'OLD' }],
       hasSettings: true,
     };
-    const p = planImport(model([ath('1')], [{ id: 'alpha', name: 'Alpha', emails: [] }]), existing, () => 'NEW');
-    expect(p.ops.map((o) => o.path)).toEqual(['athletes/WAG_2', 'sessions/s1-orange', 'clubs/alpha']);
-    expect(p.ops[0]).toEqual({ path: 'athletes/WAG_2', data: { removed: true }, merge: true });
+    const p = planImport(model([ath('1')], [{ id: 'alpha', name: 'Alpha', emails: [] }]), existing, 'm1', () => 'NEW');
+    expect(p.ops.map((o) => o.path)).toEqual(['meets/m1/athletes/WAG_2', 'meets/m1/sessions/s1-orange', 'meets/m1/clubs/alpha']);
+    expect(p.ops[0]).toEqual({ path: 'meets/m1/athletes/WAG_2', data: { removed: true }, merge: true });
     expect(p.ops[2].data).toEqual({ name: 'Alpha', emails: ['kept@a.org'], token: 'OLD' });
     expect(p.newClubs).toBe(0);
   });

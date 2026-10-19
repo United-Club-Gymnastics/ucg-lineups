@@ -56,7 +56,7 @@ async function open(input = fixture(), doc: unknown = null) {
   store.loadSquadDoc.mockResolvedValue(doc);
   store.saveSquadDoc.mockResolvedValue(undefined);
   const user = userEvent.setup();
-  render(<AdminSquads />);
+  render(<AdminSquads meetId="m1" />);
   await screen.findByRole('heading', { name: /Session 1 – Green/ });
   return user;
 }
@@ -68,7 +68,7 @@ async function openOne(input = fixture(), doc: unknown = null) {
   return user;
 }
 
-const lastSaved = () => store.saveSquadDoc.mock.calls.at(-1)?.[2];
+const lastSaved = () => store.saveSquadDoc.mock.calls.at(-1)?.[3];
 const squad = (letter: string) => screen.getByRole('region', { name: `Squad ${letter}` });
 const savedBy = async (n = 1) => waitFor(() => expect(store.saveSquadDoc.mock.calls.length).toBeGreaterThanOrEqual(n), { timeout: 3000 });
 
@@ -283,7 +283,7 @@ describe('Squads screen', () => {
 
   it('shows a load error with a way to retry', async () => {
     store.loadSquadsInput.mockRejectedValueOnce(new Error('offline'));
-    render(<AdminSquads />);
+    render(<AdminSquads meetId="m1" />);
     expect(await screen.findByRole('alert')).toHaveTextContent('offline');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });

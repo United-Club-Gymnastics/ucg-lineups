@@ -17,15 +17,17 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Meet settings: anyone may read (the club page needs the order deadline); only admins write.
-    match /settings/meet {
+    // Everything meet-specific lives under meets/{meetId}/ and is admin-only by the catch-all below,
+    // except the meet's settings document: its name, dates and order deadline are public facts, and
+    // the club page reads them. Admins write.
+    match /meets/{meetId}/settings/meet {
       allow read: if true;
       allow write: if isAdmin();
     }
 
     // One document per club, named by the club's secret token. The token is the only credential:
     // `get` is open, `list` is not, so links cannot be enumerated. Written by admins only.
-    // Holds names and roster per session (no emails, birth dates or bibs).
+    // Holds names and roster per session (no emails, birth dates or bibs) and the meetId it belongs to.
     match /clubLinks/{token} {
       allow get: if true;
       allow list: if isAdmin();
@@ -36,10 +38,12 @@ service cloud.firestore {
       return /databases/$(database)/documents/clubLinks/$(token);
     }
 
-    // The deadline is a timestamp in settings/meet.orderDeadline; null, missing or any
-    // non-timestamp value means "no deadline".
-    function orderingOpen() {
-      let s = get(/databases/$(database)/documents/settings/meet).data;
+    // The deadline is a timestamp in meets/{link.meetId}/settings/meet.orderDeadline: the meet the
+    // link belongs to, never another one. Null, missing or any non-timestamp value means "no deadline".
+    // A link with no meetId, or a meet with no settings document, makes the get() fail, so writes are refused.
+    function orderingOpen(token) {
+      let meetId = get(linkPath(token)).data.meetId;
+      let s = get(/databases/$(database)/documents/meets/$(meetId)/settings/meet).data;
       return !('orderDeadline' in s) || !(s.orderDeadline is timestamp) || request.time < s.orderDeadline;
     }
 
@@ -61,12 +65,13 @@ service cloud.firestore {
       allow create, update: if isAdmin()
         || (exists(linkPath(token))
             && levelKey in get(linkPath(token)).data.levelKeys
-            && orderingOpen()
+            && orderingOpen(token)
             && validOrder());
       allow delete: if isAdmin();
     }
 
-    // athletes, clubs, sessions, squads, emailLog, emailSettings and everything else: admins only.
+    // meets/** (athletes, clubs, sessions, squads, synchroSessions, emailLog, emailSettings) and everything
+    // else, including the old top-level paths: admins only.
     match /{document=**} {
       allow read, write: if isAdmin();
     }

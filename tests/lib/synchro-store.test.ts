@@ -9,11 +9,11 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('saveSynchroAssignment', () => {
   it('merges just this pair into the map (creating the doc if missing), leaving other pairs alone', async () => {
-    await saveSynchroAssignment({} as never, 'pair-1', 's2-green');
-    expect(fs.setDoc).toHaveBeenCalledWith('synchroSessions/main', { assignments: { 'pair-1': 's2-green' }, updatedAt: 'NOW' }, { merge: true });
+    await saveSynchroAssignment({} as never, 'm1', 'pair-1', 's2-green');
+    expect(fs.setDoc).toHaveBeenCalledWith('meets/m1/synchroSessions/main', { assignments: { 'pair-1': 's2-green' }, updatedAt: 'NOW' }, { merge: true });
   });
   it('clears one pair with deleteField, and an id with dots or slashes stays a plain map key', async () => {
-    await saveSynchroAssignment({} as never, 'a.b/c', null);
-    expect(fs.setDoc).toHaveBeenCalledWith('synchroSessions/main', { assignments: { 'a.b/c': 'DELETE' }, updatedAt: 'NOW' }, { merge: true });
+    await saveSynchroAssignment({} as never, 'm1', 'a.b/c', null);
+    expect(fs.setDoc).toHaveBeenCalledWith('meets/m1/synchroSessions/main', { assignments: { 'a.b/c': 'DELETE' }, updatedAt: 'NOW' }, { merge: true });
   });
 });

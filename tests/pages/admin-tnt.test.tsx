@@ -69,12 +69,12 @@ async function open(input = fixture(), doc: unknown = null, pairs: SynchroPair[]
   assignStore.saveSynchroAssignment.mockResolvedValue(undefined);
   if (pairs instanceof Error) synchro.fetchSynchroPairs.mockRejectedValue(pairs); else synchro.fetchSynchroPairs.mockResolvedValue(pairs);
   const user = userEvent.setup();
-  render(<AdminTnt />);
+  render(<AdminTnt meetId="m1" />);
   await screen.findByRole('heading', { name: /Session 3 – Purple/ });
   return user;
 }
 
-const lastSaved = () => store.saveTntDoc.mock.calls.at(-1)?.[2];
+const lastSaved = () => store.saveTntDoc.mock.calls.at(-1)?.[3];
 const squad = (letter: string) => screen.getByRole('region', { name: `Squad ${letter}` });
 const savedBy = async (n = 1) => waitFor(() => expect(store.saveTntDoc.mock.calls.length).toBeGreaterThanOrEqual(n), { timeout: 3000 });
 /** The drag context that belongs to the squads board (it has no row instructions) or to a reorder list. */
@@ -231,7 +231,7 @@ describe('T&T screen', () => {
       expect(within(needs).getByText('Dot Invented is in Session 3 – Purple; Fay Invented is in Session 4 – Purple.')).toBeInTheDocument();
       expect(screen.queryByRole('list', { name: 'Flight A' })!.textContent).not.toContain('Fay Invented');
       await user.selectOptions(within(needs).getByRole('combobox', { name: 'Move to session for Dot Invented & Fay Invented' }), 's3-purple');
-      expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'pcross', 's3-purple');
+      expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'm1', 'pcross', 's3-purple');
       const all = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
       expect(all).toContain('Dot Invented & Fay Invented');
       expect(within(screen.getByTestId('needs-session')).queryByText('Dot Invented & Fay Invented')).toBeNull();
@@ -249,7 +249,7 @@ describe('T&T screen', () => {
       const user = await open();
       await screen.findByRole('list', { name: 'Flight A' });
       await user.selectOptions(screen.getByRole('combobox', { name: 'Move to session for Bob Invented & Bea Invented' }), 's4-purple');
-      expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'pb', 's4-purple');
+      expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'm1', 'pb', 's4-purple');
       const left = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
       expect(left).not.toContain('Bob Invented & Bea Invented');
       expect(screen.getByText('Bob Invented & Bea Invented moved to Session 4 – Purple.')).toBeInTheDocument();

@@ -8,5 +8,7 @@ export default defineConfig({
     include: ['tests/**/*.test.{ts,tsx}'],
     exclude: ['tests/rules/**', 'node_modules/**'],
     setupFiles: ['tests/setup.ts'],
+    // Page tests drive whole screens; GitHub's runners are slower than a laptop (one timed out at 5 s).
+    testTimeout: 20000,
   },
 })

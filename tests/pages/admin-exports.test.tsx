@@ -31,7 +31,7 @@ function input(over: Partial<ExportsInput> = {}): ExportsInput {
 async function open(inp = input()) {
   store.loadExportsInput.mockResolvedValue(inp);
   const user = userEvent.setup();
-  render(<AdminExports />);
+  render(<AdminExports meetId="m1" />);
   await screen.findByRole('heading', { name: 'Meet' });
   return user;
 }
@@ -72,7 +72,7 @@ describe('Exports screen', () => {
     expect(within(screen.getAllByRole('region', { name: /^Page 1 of/ })[0]).getByText('Nationals X')).toBeInTheDocument();
     expect(screen.getByText(/Not saved yet/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(store.saveMeetNameDate).toHaveBeenCalledWith({}, { meetName: 'Nationals X', meetDate: MEET.date }));
+    await waitFor(() => expect(store.saveMeetNameDate).toHaveBeenCalledWith({}, 'm1', { meetName: 'Nationals X', meetDate: MEET.date }));
     expect(await screen.findByText('Saved.')).toBeInTheDocument();
   });
 
@@ -171,7 +171,7 @@ describe('Exports screen', () => {
     expect(within(screen.getAllByRole('region', { name: /^Page 1 of/ })[0]).getByText(MEET.date)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save schedule' }));
     await waitFor(() => expect(store.saveScheduleRow).toHaveBeenCalledTimes(1));
-    expect(store.saveScheduleRow).toHaveBeenCalledWith({}, 1, { date: '2026-10-22', stretch: '6:45 AM', warmups: '', competition: '7:30 AM' });
+    expect(store.saveScheduleRow).toHaveBeenCalledWith({}, 'm1', 1, { date: '2026-10-22', stretch: '6:45 AM', warmups: '', competition: '7:30 AM' });
   });
 
   it('a session override wins per field over its number\'s row, and saves on the session', async () => {
@@ -183,7 +183,7 @@ describe('Exports screen', () => {
     await user.type(screen.getByLabelText('Session 1 – Purple competition'), '9:00 AM');
     expect(screen.getAllByText('T&T Session 1 – Purple · Thursday 9:00 AM').length).toBeGreaterThan(0);
     await user.click(screen.getByRole('button', { name: 'Save overrides' }));
-    await waitFor(() => expect(store.saveScheduleOverride).toHaveBeenCalledWith({}, 's1-purple', { date: '', stretch: '', warmups: '', competition: '9:00 AM' }));
+    await waitFor(() => expect(store.saveScheduleOverride).toHaveBeenCalledWith({}, 'm1', 's1-purple', { date: '', stretch: '', warmups: '', competition: '9:00 AM' }));
     // Orange is Session 1 too and keeps the row
     await user.selectOptions(screen.getByLabelText('Session'), 's1-orange');
     expect(screen.getByText('6:45 AM')).toBeInTheDocument();
@@ -203,7 +203,7 @@ describe('Exports screen', () => {
     expect(store.runScheduleMigration).not.toHaveBeenCalled();
     await user.click(within(note).getByRole('button', { name: 'Move existing times into the schedule' }));
     await waitFor(() => expect(store.runScheduleMigration).toHaveBeenCalledTimes(1));
-    const plan = store.runScheduleMigration.mock.calls[0][1];
+    const plan = store.runScheduleMigration.mock.calls[0][2];
     expect(plan.overrides).toEqual({ 's1-purple': { competition: 'Thursday 9:00 AM' }, 's1-orange': { stretch: '6:45 AM' } });
   });
 
@@ -217,7 +217,7 @@ describe('Exports screen', () => {
   it('shows an error with Try again when the data cannot be read', async () => {
     store.loadExportsInput.mockRejectedValueOnce(new Error('offline'));
     const user = userEvent.setup();
-    render(<AdminExports />);
+    render(<AdminExports meetId="m1" />);
     expect(await screen.findByRole('alert')).toHaveTextContent('offline');
     store.loadExportsInput.mockResolvedValue(input());
     await user.click(screen.getByRole('button', { name: 'Try again' }));

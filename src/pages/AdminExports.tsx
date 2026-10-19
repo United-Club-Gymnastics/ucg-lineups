@@ -26,13 +26,13 @@ function save(name: string, bytes: Blob | ArrayBuffer) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export default function AdminExports() {
+export default function AdminExports({ meetId }: { meetId: string }) {
   const [load, setLoad] = useState<Loaded>({ kind: 'loading' });
   const fetchInput = useCallback(() => {
-    loadExportsInput(db)
+    loadExportsInput(db, meetId)
       .then((input) => setLoad({ kind: 'ready', input }))
       .catch((e) => setLoad({ kind: 'error', message: e instanceof Error ? e.message : 'Could not load the data to export.' }));
-  }, []);
+  }, [meetId]);
   useEffect(() => { fetchInput(); }, [fetchInput]);
   const refresh = () => { setLoad({ kind: 'loading' }); fetchInput(); };
 
@@ -45,10 +45,10 @@ export default function AdminExports() {
       </section>
     );
   }
-  return <ExportsScreen input={load.input} onReload={refresh} />;
+  return <ExportsScreen meetId={meetId} input={load.input} onReload={refresh} />;
 }
 
-export function ExportsScreen({ input, onReload }: { input: ExportsInput; onReload: () => void }) {
+export function ExportsScreen({ meetId, input, onReload }: { meetId: string; input: ExportsInput; onReload: () => void }) {
   const built = useMemo(() => buildExportSessions({ ...input, meet: { name: input.meet.meetName, date: input.meet.meetDate }, schedule: input.meet.schedule }), [input]);
 
   // Meet name/date and a T&T competition time: typed here, shown in the sheets at once, saved with the Save buttons.
@@ -115,12 +115,12 @@ export function ExportsScreen({ input, onReload }: { input: ExportsInput; onRelo
 
   async function saveMeet() {
     setMeetState('saving');
-    try { await saveMeetNameDate(db, { meetName: name, meetDate: date }); setSavedMeet({ name: name.trim(), date: date.trim() }); setMeetState('saved'); } catch { setMeetState('error'); }
+    try { await saveMeetNameDate(db, meetId, { meetName: name, meetDate: date }); setSavedMeet({ name: name.trim(), date: date.trim() }); setMeetState('saved'); } catch { setMeetState('error'); }
   }
   async function saveSchedule() {
     setSchedState('saving');
     try {
-      for (const n of dirtyRows) await saveScheduleRow(db, n, trimmed(rows[String(n)]));
+      for (const n of dirtyRows) await saveScheduleRow(db, meetId, n, trimmed(rows[String(n)]));
       setSavedRows(Object.fromEntries(numbers.map((n) => [String(n), parseFields(rows[String(n)])])));
       setSchedState('saved');
     } catch { setSchedState('error'); }
@@ -128,14 +128,14 @@ export function ExportsScreen({ input, onReload }: { input: ExportsInput; onRelo
   async function saveOverrides() {
     setOverState('saving');
     try {
-      for (const s of dirtyOver) await saveScheduleOverride(db, s.id, trimmed(over[s.id]));
+      for (const s of dirtyOver) await saveScheduleOverride(db, meetId, s.id, trimmed(over[s.id]));
       setSavedOver({ ...over });
       setOverState('saved');
     } catch { setOverState('error'); }
   }
   async function migrate() {
     setMigState('running');
-    try { await runScheduleMigration(db, migration); onReload(); } catch { setMigState('error'); }
+    try { await runScheduleMigration(db, meetId, migration); onReload(); } catch { setMigState('error'); }
   }
 
   const goTo = (index: number) => {

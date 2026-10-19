@@ -21,17 +21,17 @@ import './squads.css';
 type Loaded = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; input: SquadsInput };
 type StoredDoc = StoredSquadDoc | null;
 
-export default function AdminSquads({ onOpenSchedule }: { onOpenSchedule?: () => void } = {}) {
+export default function AdminSquads({ meetId, onOpenSchedule }: { meetId: string; onOpenSchedule?: () => void }) {
   const [load, setLoad] = useState<Loaded>({ kind: 'loading' });
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
   const saver = useRef<Autosaver<StoredSquadDoc> | null>(null);
-  if (saver.current === null) saver.current = new Autosaver<StoredSquadDoc>((sessionId, value) => saveSquadDoc(db, sessionId, value), setSave);
+  if (saver.current === null) saver.current = new Autosaver<StoredSquadDoc>((sessionId, value) => saveSquadDoc(db, meetId, sessionId, value), setSave);
 
   const fetchInput = useCallback(() => {
-    loadSquadsInput(db)
+    loadSquadsInput(db, meetId)
       .then((input) => setLoad({ kind: 'ready', input }))
       .catch((e) => setLoad({ kind: 'error', message: e instanceof Error ? e.message : 'Could not load squads data.' }));
-  }, []);
+  }, [meetId]);
   useEffect(() => { fetchInput(); }, [fetchInput]);
   const refresh = () => {
     setLoad({ kind: 'loading' });
@@ -61,10 +61,11 @@ export default function AdminSquads({ onOpenSchedule }: { onOpenSchedule?: () =>
       </section>
     );
   }
-  return <SquadsScreen onOpenSchedule={onOpenSchedule} input={load.input} save={save} onRetry={() => void saver.current!.flush()} onReload={refresh} schedule={(id, doc) => saver.current!.schedule(id, doc)} />;
+  return <SquadsScreen meetId={meetId} onOpenSchedule={onOpenSchedule} input={load.input} save={save} onRetry={() => void saver.current!.flush()} onReload={refresh} schedule={(id, doc) => saver.current!.schedule(id, doc)} />;
 }
 
-function SquadsScreen({ input, save, onRetry, onReload, schedule, onOpenSchedule }: {
+function SquadsScreen({ meetId, input, save, onRetry, onReload, schedule, onOpenSchedule }: {
+  meetId: string;
   onOpenSchedule?: () => void;
   input: SquadsInput;
   save: SaveState;
@@ -82,11 +83,11 @@ function SquadsScreen({ input, save, onRetry, onReload, schedule, onOpenSchedule
   useEffect(() => {
     if (!sessionId || hasDoc) return;
     let cancelled = false;
-    loadSquadDoc(db, sessionId)
+    loadSquadDoc(db, meetId, sessionId)
       .then((d) => { if (!cancelled) setDocs((prev) => ({ ...prev, [sessionId]: d })); })
       .catch((e) => { if (!cancelled) setDocError(e instanceof Error ? e.message : 'Could not load the saved squads.'); });
     return () => { cancelled = true; };
-  }, [sessionId, hasDoc]);
+  }, [meetId, sessionId, hasDoc]);
 
   // Keep the loaded copy current so switching sessions and back never shows an older plan.
   const remember = (id: string, doc: StoredSquadDoc) => {

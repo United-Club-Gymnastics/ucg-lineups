@@ -11,6 +11,10 @@ vi.mock('../../src/lib/firebase', () => ({
   signInAdmin: vi.fn(),
   signOutAdmin: vi.fn(),
 }));
+vi.mock('../../src/lib/data/meet-store', () => ({
+  listMeets: vi.fn(async () => [{ id: 'm1', name: 'Test Meet', createdAt: 1, archived: false }]),
+  createMeet: vi.fn(), renameMeet: vi.fn(), setMeetArchived: vi.fn(),
+}));
 vi.mock('../../src/lib/data/store', () => ({
   loadStored: vi.fn(async () => ({ athletes: [], clubs: [], hasSettings: false })),
   applyImport: vi.fn(),

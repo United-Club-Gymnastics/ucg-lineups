@@ -18,7 +18,7 @@ interface LoadedFile {
 
 const DISC_LABEL: Record<Discipline, string> = { WAG: 'WAG', MAG: 'MAG', TNT: 'T&T' };
 
-export default function AdminImport() {
+export default function AdminImport({ meetId }: { meetId: string }) {
   const [files, setFiles] = useState<LoadedFile[]>([]);
   const [over, setOver] = useState(false);
   const [stored, setStored] = useState<StoredState | null>(null);
@@ -53,14 +53,14 @@ export default function AdminImport() {
     setLoadingStored(true);
     setStoredError('');
     try {
-      setStored(await loadStored(db));
+      setStored(await loadStored(db, meetId));
     } catch (e) {
       setStored(null);
       setStoredError(e instanceof Error ? e.message : 'Could not read stored data.');
     } finally {
       setLoadingStored(false);
     }
-  }, []);
+  }, [meetId]);
 
   // Latest file of each kind wins.
   const usable = useMemo(() => {
@@ -75,8 +75,8 @@ export default function AdminImport() {
   }, [usable]);
 
   const plan = useMemo(
-    () => (model && stored ? planImport(model, stored) : null),
-    [model, stored],
+    () => (model && stored ? planImport(model, stored, meetId) : null),
+    [model, stored, meetId],
   );
 
   const perDiscipline = useMemo(() => {
@@ -91,10 +91,10 @@ export default function AdminImport() {
     if (!model || !stored) return;
     setApplying(true);
     try {
-      const done = await applyImport(db, model, stored);
+      const done = await applyImport(db, meetId, model, stored);
       const summary = `Import applied: ${done.diff.added.length} added, ${done.diff.changed.length} changed, ${done.diff.removed.length} marked removed, ${done.newClubs} new club links.`;
       try {
-        const n = await publishClubLinks(db);
+        const n = await publishClubLinks(db, meetId);
         setResult({ ok: true, text: `${summary} Published ${n} club pages.` });
       } catch (e) {
         setResult({ ok: false, text: `${summary} But publishing the club pages failed: ${e instanceof Error ? e.message : 'unknown error'}. Apply the import again to retry.` });

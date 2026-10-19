@@ -27,6 +27,8 @@ export interface LinkSession {
 }
 
 export interface ClubLinkDoc {
+  /** The meet this link belongs to: the club page reads that meet's public settings (deadline, name). */
+  meetId: string;
   clubId: string;
   clubName: string;
   sessions: LinkSession[];
@@ -70,6 +72,7 @@ export function buildClubLinks(
   sessions: Session[],
   clubs: ClubRef[],
   gymOrder: string[] = DEFAULT_GYM_ORDER,
+  meetId = '',
 ): { token: string; doc: ClubLinkDoc }[] {
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
   const live = athletes.filter((a) => a.competes && !a.removed && !a.independent && sessionById.has(a.sessionId));
@@ -104,6 +107,7 @@ export function buildClubLinks(
     out.push({
       token: club.token,
       doc: {
+        meetId,
         clubId: club.id,
         clubName: club.name,
         sessions: linkSessions,

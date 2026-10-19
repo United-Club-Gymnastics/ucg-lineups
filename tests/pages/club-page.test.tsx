@@ -8,7 +8,7 @@ import type { LevelOrder } from '../../src/lib/club-order-model';
 vi.mock('../../src/lib/firebase', () => ({ db: {} }));
 const store = vi.hoisted(() => ({
   loadClubLink: vi.fn(),
-  loadOrderDeadline: vi.fn(),
+  loadPublicMeet: vi.fn(),
   loadLevelOrders: vi.fn(),
   saveLevelOrder: vi.fn(),
 }));
@@ -24,6 +24,7 @@ const ath = (n: number, shuffle = false) => {
 
 function link(n: number): ClubLinkDoc {
   return {
+    meetId: 'meet-x',
     clubId: 'club-a',
     clubName: 'Invented Gymnastics',
     sessions: [
@@ -37,9 +38,9 @@ function link(n: number): ClubLinkDoc {
   };
 }
 
-function setup(n: number, opts: { deadline?: Date | null; orders?: Record<string, LevelOrder>; invalid?: boolean } = {}) {
-  store.loadClubLink.mockResolvedValue(opts.invalid ? null : link(n));
-  store.loadOrderDeadline.mockResolvedValue(opts.deadline ?? null);
+function setup(n: number, opts: { deadline?: Date | null; orders?: Record<string, LevelOrder>; invalid?: boolean; meetName?: string; noMeetId?: boolean } = {}) {
+  store.loadClubLink.mockResolvedValue(opts.invalid ? null : opts.noMeetId ? { ...link(n), meetId: undefined } : link(n));
+  store.loadPublicMeet.mockResolvedValue({ deadline: opts.deadline ?? null, name: opts.meetName ?? 'NE Regionals' });
   store.loadLevelOrders.mockResolvedValue(opts.orders ?? {});
   store.saveLevelOrder.mockResolvedValue(undefined);
   return render(
@@ -56,6 +57,19 @@ describe('club page', () => {
     setup(3, { invalid: true });
     expect(await screen.findByRole('heading', { name: /link isn.t valid/i })).toBeInTheDocument();
     expect(store.loadClubLink).toHaveBeenCalledWith({}, 'tok123');
+  });
+
+  it("reads the deadline and name from the link's own meet (link.meetId), and shows the meet name", async () => {
+    setup(3, { deadline: new Date(Date.now() - 3600e3), meetName: 'NE Regionals 2027' });
+    expect(await screen.findByTestId('club-locked')).toBeInTheDocument();
+    expect(store.loadPublicMeet).toHaveBeenCalledWith({}, 'meet-x');
+    expect(screen.getByText('NE Regionals 2027')).toBeInTheDocument();
+  });
+
+  it('treats a link from before meets (no meetId) as not valid, without reading any meet', async () => {
+    setup(3, { noMeetId: true });
+    expect(await screen.findByRole('heading', { name: /link isn.t valid/i })).toBeInTheDocument();
+    expect(store.loadPublicMeet).not.toHaveBeenCalled();
   });
 
   it('lists sessions with status pills; T&T is "Set by UCG" and not a button', async () => {
