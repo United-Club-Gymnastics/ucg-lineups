@@ -142,6 +142,8 @@ export interface ScheduleItem {
 
 export interface RotationRow {
   label: string;
+  /** Athlete names under the label: rows of 1–2 athletes and every independent row (Julia 2026-10-19); '' for none. */
+  names: string;
   /** Routines per column; null for an unused column. */
   counts: (number | null)[];
   levelBreak: boolean;

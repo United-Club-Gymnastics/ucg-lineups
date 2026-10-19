@@ -213,7 +213,7 @@ Collation for all sessions: **scorecards by location** (the meet's location orde
 - Title `<meet> – <name> – <location>` (`… – Session 1 – Orange`); subtitle `MAG – Orange Gym – Dev, Int, Adv` (`MAG – Dupont – …` for a venue); schedule;
   session athlete count. (No "Session Rotation Report" line.)
 - Per squad: header row `Squad A` (no "(MAG)") + apparatus in rotation order (A-B equipment
-  as the pattern says), grey band + heavy frame; rows `Club – Level` (+ `· Group B`) with routine
+  as the pattern says), grey band + heavy frame; rows `Level – Club` (+ `· Group B`; level code first, Julia 2026-10-19) with routine
   counts; **light dashed rule** between levels; clear space between squads.
 - Patterns with BYEs (WAG 7 squads): a leading **BYE** column (squads without one start a column
   later), equipment printed by name (`VT-Platform`, `VT-Ground`, `BB-A`, `BB-B`), the pattern's

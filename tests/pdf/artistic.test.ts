@@ -14,7 +14,7 @@ function group(club: string, level: string, names: string[], o: Partial<Artistic
   return {
     key: `${club}::${level}::0`, independent: false, clubName: club, levelCode: level, groupIndex: 0, groupCount: 1,
     order: Object.fromEntries(codes.map((c) => [c, names.map((n) => ({ id: `${club}-${n}`, name: n }))])),
-    routines: Object.fromEntries(codes.map((c) => [c, names.length])), ...o,
+    routines: Object.fromEntries(codes.map((c) => [c, names.length])), athletes: [...names].sort(), ...o,
   };
 }
 
@@ -135,6 +135,27 @@ describe('artistic scorecards', () => {
 });
 
 describe('artistic rotation sheet', () => {
+  it('names the athletes of 1–2-athlete rows and of every independent row, but not bigger groups (Julia 2026-10-19)', () => {
+    const indep = (names: string[]) => group('Independent Community Athlete', 'Int', names, { independent: true, key: `ind-${names[0]}` });
+    const [p] = artisticRotationPages(input('MAG', 'one', [[
+      group('Alpha', 'Dev', ['Zoe Z']),
+      group('Beta', 'Dev', ['Bo B', 'Al A']),
+      group('Gamma', 'Dev', ['Cy C', 'Di D', 'Ed E']),
+      indep(['Ira I', 'Hal H', 'Gus G']),
+      indep(['Fay F']),
+    ]]));
+    const rows = p.squads[0].rows;
+    expect(rows.map((r) => [r.label, r.names])).toEqual([
+      ['Dev – Alpha', 'Zoe Z'],
+      ['Dev – Beta', 'Al A, Bo B'],
+      ['Dev – Gamma', ''],
+      // consecutive independents of one level merge into one row, named in full whatever the count
+      ['Int – Independent Community Athlete', 'Fay F, Gus G, Hal H, Ira I'],
+    ]);
+    // rows with names are taller, and the page height accounts for them
+    expect(p.units).toBeGreaterThan(1.5 + 4 + 0.8);
+  });
+
   it('titles, schedule and athlete count; no "Session Rotation Report" or "(MAG)"', () => {
     const [p] = artisticRotationPages(input('MAG', 'one', [[group('Alpha', 'Dev', ['x']), group('Beta', 'Int', ['y'])], [group('Gamma', 'Adv', ['z'])]]));
     expect(p.title).toBe('Test Nationals – Session 1 – Orange');
@@ -164,9 +185,9 @@ describe('artistic rotation sheet', () => {
   it('rows are Club – Level (+ · Group B), with routine counts per apparatus', () => {
     const a = group('Alpha Gymnastics', 'Dev', ['x', 'y', 'z'], { routines: { FX: 3, PH: 2, SR: 0, VT: 3, PB: 1, HB: 3 }, groupCount: 2, groupIndex: 1 });
     const b = group('Beta', 'Dev', ['q']);
-    expect(groupLabel(a)).toBe('Alpha Gymnastics – Dev · Group B');
+    expect(groupLabel(a)).toBe('Dev – Alpha Gymnastics · Group B');
     const [p] = artisticRotationPages(input('MAG', 'one', [[a, b]]));
-    expect(p.squads[0].rows.map((r) => r.label)).toEqual(['Alpha Gymnastics – Dev · Group B', 'Beta – Dev']);
+    expect(p.squads[0].rows.map((r) => r.label)).toEqual(['Dev – Alpha Gymnastics · Group B', 'Dev – Beta']);
     expect(p.squads[0].rows[0].counts).toEqual([3, 2, 0, 3, 1, 3]);
   });
 
@@ -180,7 +201,7 @@ describe('artistic rotation sheet', () => {
     const i1 = group('Independent Community Athlete', 'Int', ['a'], { independent: true, routines: { FX: 1, HB: 1 } });
     const i2 = group('Independent Community Athlete', 'Int', ['b'], { independent: true, routines: { FX: 1, VT: 1 } });
     const [p] = artisticRotationPages(input('MAG', 'one', [[group('Club', 'Int', ['c']), i1, i2]]));
-    expect(p.squads[0].rows.map((r) => r.label)).toEqual(['Club – Int', 'Independent Community Athlete – Int']);
+    expect(p.squads[0].rows.map((r) => r.label)).toEqual(['Int – Club', 'Int – Independent Community Athlete']);
     expect(p.squads[0].rows[1].counts).toEqual([2, 0, 0, 1, 0, 1]);
   });
 

@@ -1,5 +1,6 @@
 // HTML preview of the SAME page models the PDF is drawn from (src/lib/pdf/model.ts), at paper size (points), black and white.
 // A paper scrolls inside its own box on a narrow screen; the page itself never scrolls sideways.
+import { rowUnits } from '../lib/pdf/artistic-rotation-content';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { MARK_PATHS, MARK_SIZE } from '../lib/pdf/logo-mark';
 import {
@@ -202,8 +203,10 @@ function ArtisticRotation({ pg }: { pg: ArtisticRotationPage }) {
           </div>
           {s.empty && <div className="pv-rgrid pv-rrow" style={{ gridTemplateColumns: '1fr', height: pt(u) }}><i className="pv-grey" style={{ paddingLeft: pt(5) }}>No club groups placed</i></div>}
           {s.rows.map((r, i) => (
-            <div key={i} className={`pv-rgrid pv-rrow${r.alt ? ' pv-alt' : ''}${r.levelBreak ? ' pv-dash' : ''}`} style={{ gridTemplateColumns: grid, height: pt(u) }}>
-              <b className="pv-rlabel">{r.label}</b>
+            <div key={i} className={`pv-rgrid pv-rrow${r.alt ? ' pv-alt' : ''}${r.levelBreak ? ' pv-dash' : ''}`} style={{ gridTemplateColumns: grid, height: pt(u * rowUnits(r)) }}>
+              {r.names
+                ? <span className="pv-rlabel pv-rlabel2"><b>{r.label}</b><span className="pv-rnames">{r.names}</span></span>
+                : <b className="pv-rlabel">{r.label}</b>}
               {r.counts.map((v, k) => <span key={k} className={v ? 'pv-n' : 'pv-n pv-zero'}>{v === null ? '' : v}</span>)}
             </div>
           ))}
