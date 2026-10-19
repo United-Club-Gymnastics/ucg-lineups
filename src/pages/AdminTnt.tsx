@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Select from '../components/Select';
 import { db } from '../lib/firebase';
-import { Badge, Modal } from '../components/ui';
+import { Badge, Modal, Tabs } from '../components/ui';
 import { ReorderLists } from '../components/ReorderLists';
 import { SaveIndicator } from '../components/SaveIndicator';
 import { TntSquadBoard } from '../components/TntSquadBoard';
@@ -159,6 +159,7 @@ function TntScreen({ meetId, input, save, onRetry, onReload, schedule }: {
   );
 }
 
+type Pill = 'squads' | 'order' | 'fix' | 'flights';
 type Confirm = { title: string; body: string; action: string; run: () => void } | null;
 type PairsState = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; raw: SynchroPair[]; at: Date };
 
@@ -200,6 +201,7 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
   const [showChanges, setShowChanges] = useState(true);
   const [sq, setSq] = useState(0);
   const [ev, setEv] = useState<TntEvent>('TR');
+  const [pill, setPill] = useState<Pill>('squads');
 
   const trayOf = (squads: string[][]) => { const placed = new Set(squads.flat()); return eligibleIds.filter((id) => !placed.has(id)); };
   const commit = (patch: Partial<Snapshot>) => {
@@ -340,6 +342,14 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
   const nPairs = shown.reduce((t, f) => t + f.pairIds.length, 0);
   const pairCount = pairsState.kind === 'ready' ? `${nPairs} synchro pair${nPairs === 1 ? '' : 's'}` : pairsState.kind === 'error' ? 'synchro pairs not read' : 'reading synchro pairs…';
   const checkCount = pairs.filter((p) => p.check).length;
+  /** Pairs that need attention: waiting for a session, or flagged Check pair (each counted once). */
+  const attention = new Set([...needing.map((p) => p.id), ...pairs.filter((p) => p.check).map((p) => p.id)]).size;
+  const pillTabs: { id: Pill; label: string }[] = [
+    { id: 'squads', label: 'Squads' },
+    { id: 'order', label: 'Competing order' },
+    { id: 'fix', label: pairsState.kind === 'ready' && attention > 0 ? `Fix synchro pairs (${attention})` : 'Fix synchro pairs' },
+    { id: 'flights', label: 'Synchro flights' },
+  ];
   const sessionSelect = (p: PlacedPair, blank: boolean) => (
     <label className="sq-place">
       <span className="sr-only">Move to session for {pairNames(p)}</span>
@@ -360,6 +370,14 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
               T&amp;T · {session.gym} Gym · {data.squadAthletes.length} athlete{data.squadAthletes.length === 1 ? '' : 's'} in squads · {data.synchroOnly.length} synchro only · {pairCount}
             </p>
           </div>
+        </div>
+        {notice && <p className="sq-notice" role="status" aria-live="polite">{notice}</p>}
+      </section>
+
+      <Tabs pill tabs={pillTabs} active={pill} onChange={setPill} />
+      <div hidden={pill !== 'squads'} className="tnt-pane" data-testid="pane-squads">
+      <section className="adm-card" aria-label="Squad actions">
+        <div className="sq-head"><div className="sq-head-text" />
           <div className="sq-actions">
             <button
               type="button" className="btn primary" disabled={data.squadAthletes.length === 0}
@@ -379,7 +397,6 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
           Clubs do not set T&amp;T order. UCG builds the squads and the order. Squads usually hold {TNT_USUAL[0]}–{TNT_USUAL[1]} athletes, at most {TNT_CAP}.
         </div>
         {start.movedCount > 0 && showChanges && <ChangesNotice restored={start} onDismiss={() => setShowChanges(false)} />}
-        {notice && <p className="sq-notice" role="status" aria-live="polite">{notice}</p>}
         <details className="sq-how">
           <summary>How auto-balance places athletes</summary>
           <ol>
@@ -391,7 +408,6 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
           </ol>
         </details>
       </section>
-
       {data.squadAthletes.length === 0 ? (
         <section className="adm-card"><p className="adm-muted">No athletes are entered on Trampoline, Double Mini or Tumbling in this session.</p></section>
       ) : (
@@ -404,7 +420,8 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
           <p className="adm-muted">{data.synchroOnly.map((a) => `${fullName(a)} (${a.clubName})`).join(', ')}</p>
         </section>
       )}
-
+      </div>
+      <div hidden={pill !== 'order'} className="tnt-pane" data-testid="pane-order">
       <section className="adm-card" aria-label="Competing order">
         <div className="tnt-h">
           <h2 className="display">Competing order</h2>
@@ -447,18 +464,13 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
         />
       </section>
 
-      <section className="adm-card" aria-label="Synchro flights">
+      </div>
+      <div hidden={pill !== 'fix'} className="tnt-pane" data-testid="pane-fix">
+      <section className="adm-card" aria-label="Fix synchro pairs">
         <div className="tnt-h">
-          <h2 className="display">Synchro flights</h2>
+          <h2 className="display">Fix synchro pairs</h2>
           <div className="sq-actions">
             <button type="button" className="btn" disabled={refreshing} onClick={() => void doRefresh()}>{refreshing ? 'Reading…' : 'Refresh pairs'}</button>
-            <button type="button" className="btn ghost" disabled={pairsState.kind !== 'ready'} onClick={() => setFlights([...shown, { name: flightName(shown.length), pairIds: [] }])}>Add a flight</button>
-            <button
-              type="button" className="btn ghost" disabled={pairsState.kind !== 'ready' || pairs.length === 0}
-              onClick={() => ask({ title: 'Reset flights?', body: 'Pairs go back to the default: High Flyers, Intermediate, New, then club, split evenly into two flights. Your order and moves are lost.', action: 'Reset flights', run: () => { commit({ flights: defaultFlights(pairs) }); setNotice('Flights reset to the default.'); } }, false)}
-            >
-              Reset flights
-            </button>
           </div>
         </div>
         <p className="adm-muted">
@@ -531,6 +543,29 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
             {checkCount} pair{checkCount === 1 ? '' : 's'} flagged &ldquo;Check pair&rdquo;: an athlete could not be matched to this import, or is on the roster but not entered in synchro. They are still shown, with the import's spelling of a name when it is unambiguous, otherwise the Synchro tool's.
           </div>
         )}
+      </section>
+      </div>
+      <div hidden={pill !== 'flights'} className="tnt-pane" data-testid="pane-flights">
+      <section className="adm-card" aria-label="Synchro flights">
+        <div className="tnt-h">
+          <h2 className="display">Synchro flights</h2>
+          <div className="sq-actions">
+            <button type="button" className="btn ghost" disabled={pairsState.kind !== 'ready'} onClick={() => setFlights([...shown, { name: flightName(shown.length), pairIds: [] }])}>Add a flight</button>
+            <button
+              type="button" className="btn ghost" disabled={pairsState.kind !== 'ready' || pairs.length === 0}
+              onClick={() => ask({ title: 'Reset flights?', body: 'Pairs go back to the default: High Flyers, Intermediate, New, then club, split evenly into two flights. Your order and moves are lost.', action: 'Reset flights', run: () => { commit({ flights: defaultFlights(pairs) }); setNotice('Flights reset to the default.'); } }, false)}
+            >
+              Reset flights
+            </button>
+          </div>
+        </div>
+        {pairsState.kind !== 'ready' && <p className="adm-muted">The synchro pairs have not been read yet. Use Refresh pairs under Fix synchro pairs.</p>}
+        {stale && (stale.added.length > 0 || stale.removed.length > 0) && (
+          <p className="adm-muted">
+            The Synchro tool has changed since these flights were refreshed.{' '}
+            <button type="button" className="btn small" onClick={() => setPill('fix')}>Go to Fix synchro pairs</button>
+          </p>
+        )}
         {pairsState.kind === 'ready' && pairs.length === 0 && <p className="adm-muted">No synchro pairs for this session yet.</p>}
         {pairsState.kind === 'ready' && pairs.length > 0 && (
           <ReorderLists
@@ -580,6 +615,7 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
           />
         )}
       </section>
+      </div>
 
       {confirm && (
         <Modal title={confirm.title} onClose={() => setConfirm(null)}>

@@ -48,3 +48,7 @@
 .tnt-scratched summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
 .tnt-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 4px 0 8px; }
 .tnt-check .tnt-links { margin: 4px 0 0; }
+/* Pills: every pane stays mounted and is only hidden, so drags, edits and selections survive switching. */
+.tnt-pane { display: grid; gap: 16px; }
+.tnt-pane[hidden] { display: none; }
+.tnt .tabs.tabs-pill { display: flex; flex-wrap: wrap; border-radius: 18px; width: fit-content;  margin-bottom: 12px; }

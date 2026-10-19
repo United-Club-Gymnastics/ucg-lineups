@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -64,7 +64,7 @@ const PAIRS = () => [
   pair('Fay Invented', 'Far Club', 'Flo Invented', 'Far Club', 'IF', 'pf'), // the other T&T session
 ];
 
-async function open(input = fixture(), doc: unknown = null, pairs: SynchroPair[] | Error = PAIRS()) {
+async function open(input = fixture(), doc: unknown = null, pairs: SynchroPair[] | Error = PAIRS(), view?: string) {
   store.loadTntInput.mockResolvedValue(input);
   store.loadTntDoc.mockResolvedValue(doc);
   store.saveTntDoc.mockResolvedValue(undefined);
@@ -74,8 +74,12 @@ async function open(input = fixture(), doc: unknown = null, pairs: SynchroPair[]
   const user = userEvent.setup();
   render(<AdminTnt meetId="m1" />);
   await screen.findByRole('heading', { name: /Session 3 – Purple/ });
+  if (view) await tab(user, view);
   return user;
 }
+/** Click a pill by its label (the pill labels carry a count when something needs attention). */
+const tab = async (user: ReturnType<typeof userEvent.setup>, name: string) => { await user.click(await screen.findByRole('button', { name: new RegExp(`^${name}( \\(\\d+\\))?$`) })); };
+const openF = (input?: ReturnType<typeof fixture>, doc?: unknown, pairs?: SynchroPair[] | Error) => open(input, doc, pairs, 'Synchro flights');
 
 const lastSaved = () => store.saveTntDoc.mock.calls.at(-1)?.[3];
 const squad = (letter: string) => screen.getByRole('region', { name: `Squad ${letter}` });
@@ -83,7 +87,7 @@ const savedBy = async (n = 1) => waitFor(() => expect(store.saveTntDoc.mock.call
 /** The drag context that belongs to the squads board (it has no row instructions) or to a reorder list. */
 const board = () => [...captured.all].reverse().find((p) => !p.accessibility?.screenReaderInstructions)!;
 const rows = (label: string) => [...captured.all].reverse().find((p) => p.accessibility?.screenReaderInstructions?.draggable.includes(`in ${label},`))!;
-const names = (list: HTMLElement) => within(list).getAllByRole('listitem').map((li) => li.querySelector('b')?.textContent ?? '');
+const names = (list: HTMLElement) => within(list).getAllByRole('listitem', { hidden: true }).map((li) => li.querySelector('b')?.textContent ?? '');
 
 beforeEach(() => { vi.clearAllMocks(); captured.all.length = 0; pairSeq = 0; });
 
@@ -165,19 +169,116 @@ describe('T&T screen', () => {
     expect(cy.textContent).toContain('DM HF');
   });
 
+  describe('pills', () => {
+    const pane = (id: string) => screen.getByTestId(`pane-${id}`);
+    const pills = () => [...document.querySelectorAll('.tabs-pill .tab')].map((b) => b.textContent);
+
+    it('has the four pills in order, opens on Squads, and keeps the session picker, counts and save indicator above them', async () => {
+      await open();
+      await screen.findByText(/3 synchro pairs/);
+      expect(pills()).toEqual(['Squads', 'Competing order', 'Fix synchro pairs (1)', 'Synchro flights']);
+      expect(pane('squads')).toBeVisible();
+      for (const id of ['order', 'fix', 'flights']) expect(pane(id)).not.toBeVisible();
+      expect(screen.getByRole('combobox', { name: 'Session' })).toBeVisible();
+      expect(screen.getByText(/T&T · Purple Gym · 7 athletes in squads/)).toBeVisible();
+      expect(screen.getByTestId('squads-save')).toBeVisible();
+      // the pills sit after the header, before every pane
+      const bar = document.querySelector('.tabs-pill')!;
+      expect(screen.getByText(/T&T · Purple Gym/).compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(bar.compareDocumentPosition(pane('squads')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('each pill shows only its own section', async () => {
+      const user = await open();
+      for (const [label, id] of [['Competing order', 'order'], ['Fix synchro pairs', 'fix'], ['Synchro flights', 'flights'], ['Squads', 'squads']] as const) {
+        await tab(user, label);
+        for (const x of ['squads', 'order', 'fix', 'flights']) expect(pane(x).hidden).toBe(x !== id);
+      }
+      await tab(user, 'Fix synchro pairs');
+      expect(within(pane('fix')).getByTestId('needs-session')).toBeVisible();
+      expect(within(pane('fix')).getByRole('button', { name: 'Refresh pairs' })).toBeVisible();
+      await tab(user, 'Synchro flights');
+      expect(within(pane('flights')).getByRole('button', { name: 'Add a flight' })).toBeVisible();
+      expect(within(pane('flights')).queryByRole('button', { name: 'Refresh pairs' })).toBeNull();
+      await tab(user, 'Competing order');
+      expect(within(pane('order')).getByRole('button', { name: 'Reset to default' })).toBeVisible();
+    });
+
+    it('state survives switching: placed squads, the chosen squad and event, an opened scratched list and the flights', async () => {
+      const user = await open();
+      await choose(user, screen.getByRole('combobox', { name: 'Move to squad: Ann Invented' }), '1');
+      await tab(user, 'Competing order');
+      await user.click(screen.getByRole('button', { name: 'Squad B' }));
+      await user.click(screen.getByRole('button', { name: 'Tumbling' }));
+      await tab(user, 'Synchro flights');
+      await user.click(screen.getByRole('button', { name: 'Add a flight' }));
+      expect(screen.getByRole('list', { name: 'Flight C' })).toBeInTheDocument();
+      await tab(user, 'Fix synchro pairs');
+      await user.click(within(screen.getByTestId('needs-session')).getByRole('button', { name: 'Scratch pair Dot Invented & Nobody Known' }));
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Scratch pair' }));
+      const det = screen.getByTestId('scratched-pairs') as HTMLDetailsElement;
+      await user.click(within(det).getByText(/Scratched pairs/));
+      expect(det.open).toBe(true);
+      // away and back again
+      await tab(user, 'Squads');
+      expect(within(squad('B')).getByText('Ann Invented')).toBeInTheDocument();
+      await tab(user, 'Competing order');
+      expect(screen.getByRole('button', { name: 'Squad B' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Tumbling' })).toHaveAttribute('aria-pressed', 'true');
+      await tab(user, 'Synchro flights');
+      expect(screen.getByRole('list', { name: 'Flight C' })).toBeInTheDocument();
+      await tab(user, 'Fix synchro pairs');
+      expect((screen.getByTestId('scratched-pairs') as HTMLDetailsElement).open).toBe(true);
+    });
+
+    it('the pill count is the pairs needing a session plus Check pairs (each once), and the label is plain when nothing needs attention', async () => {
+      // 'pc' needs a session and is a Check pair (counted once); 'pnoSY' is a Check pair in a flight
+      await open(fixture(), null, [...PAIRS(), pair('Cat Invented', 'Charlie Club', 'Cy Invented', 'Charlie Club', 'HF', 'pnoSY')]);
+      await screen.findByText(/4 synchro pairs/);
+      expect(pills()[2]).toBe('Fix synchro pairs (2)');
+      cleanup();
+      await open(fixture(), null, PAIRS().filter((x) => x.id !== 'pc'));
+      await screen.findByText(/3 synchro pairs/);
+      expect(pills()[2]).toBe('Fix synchro pairs');
+      cleanup();
+      await open(fixture(), null, new Error('offline'));
+      await screen.findByText(/Could not read the Synchro tool/);
+      expect(pills()[2]).toBe('Fix synchro pairs');
+    });
+
+    it('the count drops when a pair is scratched', async () => {
+      const user = await open();
+      await screen.findByText(/3 synchro pairs/);
+      await tab(user, 'Fix synchro pairs');
+      await user.click(within(screen.getByTestId('needs-session')).getByRole('button', { name: 'Scratch pair Dot Invented & Nobody Known' }));
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Scratch pair' }));
+      expect(pills()[2]).toBe('Fix synchro pairs');
+    });
+
+    it('a jump from the flights to Fix synchro pairs switches pills first', async () => {
+      const user = await openF(fixture(), {
+        kind: 'tnt', squads: [], trayAthleteIds: [], orders: {}, pairsReadAt: new Date('2026-10-01T12:00:00Z'),
+        flights: [{ name: 'A', pairIds: ['pd', 'pc'] }, { name: 'B', pairIds: ['pb'] }],
+      });
+      await user.click(await screen.findByRole('button', { name: 'Go to Fix synchro pairs' }));
+      expect(pane('fix').hidden).toBe(false);
+      expect(pane('flights').hidden).toBe(true);
+    });
+  });
+
   describe('competing order', () => {
     async function placed() {
       const user = await open();
       for (const a of ['Ann', 'Abe', 'Al', 'Cat', 'Cy']) await choose(user, screen.getByRole('combobox', { name: `Move to squad: ${a} Invented` }), '0');
+      await tab(user, 'Competing order');
       return user;
     }
     const orderList = () => screen.getByRole('list', { name: /Trampoline, Squad A/ });
 
     it('defaults to HF > IF > NF, then club, then first name, and only shows athletes on the event', async () => {
-      await placed();
+      const user = await placed();
       // TR: Cat HF, Cy IF, then NF: Alpha Club Abe, Al, Ann
       expect(names(orderList())).toEqual(['Cat Invented', 'Cy Invented', 'Abe Invented', 'Al Invented', 'Ann Invented']);
-      const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: 'Tumbling' }));
       expect(names(screen.getByRole('list', { name: /Tumbling, Squad A/ }))).toEqual(['Cat Invented', 'Cy Invented', 'Abe Invented', 'Ann Invented']);
     });
@@ -196,20 +297,23 @@ describe('T&T screen', () => {
 
     it('moving an athlete out of the squad drops them from its order', async () => {
       const user = await placed();
+      await tab(user, 'Squads');
       await choose(user, screen.getByRole('combobox', { name: 'Move to squad: Cat Invented' }), '1');
+      await tab(user, 'Competing order');
       expect(names(orderList())).toEqual(['Cy Invented', 'Abe Invented', 'Al Invented', 'Ann Invented']);
     });
   });
 
   describe('synchro flights', () => {
     it('reads pairs, matches them, and splits HF > IF > NF into two flights; pairs that cannot be placed wait under Needs a session', async () => {
-      await open();
-      await screen.findByRole('list', { name: 'Flight A' });
-      const a = screen.getByRole('list', { name: 'Flight A' });
-      const b = screen.getByRole('list', { name: 'Flight B' });
+      const user = await openF();
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
+      const a = screen.getByRole('list', { name: 'Flight A', hidden: true });
+      const b = screen.getByRole('list', { name: 'Flight B', hidden: true });
       // 3 pairs of this session (HF Delta, IF Bravo, NF Alpha); the other session's pair is left out
       expect(names(a)).toEqual(['Dot Invented & Dan Invented', 'Bob Invented & Bea Invented']);
       expect(names(b)).toEqual(['Abe Invented & Ann Invented']);
+      await tab(user, 'Fix synchro pairs');
       const needs = screen.getByTestId('needs-session');
       expect(within(needs).getByRole('heading', { name: 'Needs a session' })).toBeInTheDocument();
       expect(within(needs).getAllByRole('listitem')).toHaveLength(1);
@@ -221,27 +325,29 @@ describe('T&T screen', () => {
     });
 
     it('the Needs a session list sits above the flights and is absent when empty', async () => {
-      await open(fixture(), null, PAIRS().filter((p) => p.id !== 'pc'));
-      await screen.findByRole('list', { name: 'Flight A' });
+      await openF(fixture(), null, PAIRS().filter((p) => p.id !== 'pc'));
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
       expect(screen.queryByTestId('needs-session')).toBeNull();
     });
 
     it('a pair whose athletes are in different sessions waits for the host; choosing a session stores it and Refresh pairs keeps it', async () => {
       const cross = pair('Dot Invented', 'Delta Club', 'Fay Invented', 'Far Club', 'HF', 'pcross');
-      const user = await open(fixture(), null, [...PAIRS(), cross]);
-      await screen.findByRole('list', { name: 'Flight A' });
+      const user = await openF(fixture(), null, [...PAIRS(), cross]);
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
       const needs = screen.getByTestId('needs-session');
       expect(within(needs).getByText('Dot Invented is in Session 3 – Purple; Fay Invented is in Session 4 – Purple.')).toBeInTheDocument();
-      expect(screen.queryByRole('list', { name: 'Flight A' })!.textContent).not.toContain('Fay Invented');
+      expect(screen.queryByRole('list', { name: 'Flight A', hidden: true })!.textContent).not.toContain('Fay Invented');
+      await tab(user, 'Fix synchro pairs');
       await choose(user, within(needs).getByRole('combobox', { name: 'Move to session for Dot Invented & Fay Invented' }), 's3-purple');
       expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'm1', 'pcross', 's3-purple');
-      const all = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
+      const all = [...names(screen.getByRole('list', { name: 'Flight A', hidden: true })), ...names(screen.getByRole('list', { name: 'Flight B', hidden: true }))];
       expect(all).toContain('Dot Invented & Fay Invented');
       expect(within(screen.getByTestId('needs-session')).queryByText('Dot Invented & Fay Invented')).toBeNull();
       // Refresh pairs re-reads the Synchro tool and keeps the choice
+      await tab(user, 'Fix synchro pairs');
       await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
       await screen.findByText(/Pairs refreshed|Read \d+ pairs?/);
-      const after = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
+      const after = [...names(screen.getByRole('list', { name: 'Flight A', hidden: true })), ...names(screen.getByRole('list', { name: 'Flight B', hidden: true }))];
       expect(after).toContain('Dot Invented & Fay Invented');
       await savedBy();
       expect(lastSaved().flights.flatMap((f: { pairIds: string[] }) => f.pairIds)).toContain('pcross');
@@ -249,33 +355,34 @@ describe('T&T screen', () => {
     });
 
     it('Move to session sends a pair to another T&T session and takes it out of this session\'s flights', async () => {
-      const user = await open();
-      await screen.findByRole('list', { name: 'Flight A' });
+      const user = await openF();
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
       await choose(user, screen.getByRole('combobox', { name: 'Move to session for Bob Invented & Bea Invented' }), 's4-purple');
       expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'm1', 'pb', 's4-purple');
-      const left = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
+      const left = [...names(screen.getByRole('list', { name: 'Flight A', hidden: true })), ...names(screen.getByRole('list', { name: 'Flight B', hidden: true }))];
       expect(left).not.toContain('Bob Invented & Bea Invented');
       expect(screen.getByText('Bob Invented & Bea Invented moved to Session 4 – Purple.')).toBeInTheDocument();
     });
 
     it('a stored choice already in synchroSessions/main places the pair there', async () => {
       const input = { ...fixture(), assignments: { pa: 's4-purple' } };
-      await open(input);
-      await screen.findByRole('list', { name: 'Flight A' });
-      const shown = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
+      await openF(input);
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
+      const shown = [...names(screen.getByRole('list', { name: 'Flight A', hidden: true })), ...names(screen.getByRole('list', { name: 'Flight B', hidden: true }))];
       expect(shown).not.toContain('Abe Invented & Ann Invented');
     });
 
     it('flags a pair when an athlete is on the roster but not entered in synchro', async () => {
-      await open(fixture(), null, [...PAIRS(), pair('Cat Invented', 'Charlie Club', 'Cy Invented', 'Charlie Club', 'HF', 'pnoSY')]);
-      await screen.findByRole('list', { name: 'Flight A' });
+      await openF(fixture(), null, [...PAIRS(), pair('Cat Invented', 'Charlie Club', 'Cy Invented', 'Charlie Club', 'HF', 'pnoSY')]);
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
       expect(screen.getByText(/1 pair flagged .Check pair./)).toBeInTheDocument();
       expect(screen.getByText('Cat Invented is on the roster but not entered in synchro; Cy Invented is on the roster but not entered in synchro')).toBeInTheDocument();
     });
 
     it('links to the Synchro tool (admin and sign-up) in a new tab, near Refresh pairs and by each Check pair', async () => {
-      await open();
-      await screen.findByRole('list', { name: 'Flight A' });
+      const user = await openF();
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
+      await tab(user, 'Fix synchro pairs');
       const links = screen.getAllByRole('link', { name: 'Remove or fix pairs (Synchro admin)' });
       expect(links.length).toBeGreaterThanOrEqual(2); // section + the one Check pair
       for (const a of links) {
@@ -292,7 +399,7 @@ describe('T&T screen', () => {
     });
 
     describe('scratching a pair', () => {
-      const flightsText = () => [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
+      const flightsText = () => [...names(screen.getByRole('list', { name: 'Flight A', hidden: true })), ...names(screen.getByRole('list', { name: 'Flight B', hidden: true }))];
       const confirmScratch = async (user: ReturnType<typeof userEvent.setup>) => {
         const dlg = screen.getByRole('dialog');
         expect(dlg).toHaveTextContent('Scratch this pair?');
@@ -300,8 +407,8 @@ describe('T&T screen', () => {
       };
 
       it('scratches from a flight after a confirm: the pair leaves the flights, is stored, and shows in a collapsed Scratched pairs list', async () => {
-        const user = await open();
-        await screen.findByRole('list', { name: 'Flight A' });
+        const user = await openF();
+        await screen.findByRole('list', { name: 'Flight A', hidden: true });
         expect(screen.queryByTestId('scratched-pairs')).toBeNull();
         await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
         await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
@@ -312,6 +419,7 @@ describe('T&T screen', () => {
         expect(assignStore.saveSynchroScratch).toHaveBeenCalledWith({}, 'm1', 'pb', true);
         expect(flightsText()).not.toContain('Bob Invented & Bea Invented');
         expect(screen.getByText(/2 synchro pairs/)).toBeInTheDocument();
+        await tab(user, 'Fix synchro pairs');
         const box = screen.getByTestId('scratched-pairs');
         expect(box.tagName).toBe('DETAILS');
         expect(box).not.toHaveAttribute('open');
@@ -320,15 +428,16 @@ describe('T&T screen', () => {
       });
 
       it('with saved flights, scratching takes the pair out of them', async () => {
-        const user = await open(fixture(), {
+        const user = await openF(fixture(), {
           kind: 'tnt', squads: [], trayAthleteIds: [], orders: {}, pairsReadAt: new Date('2026-10-01T12:00:00Z'),
           flights: [{ name: 'A', pairIds: ['pd', 'pb'] }, { name: 'B', pairIds: ['pa'] }],
         });
-        await screen.findByRole('list', { name: 'Flight A' });
+        await screen.findByRole('list', { name: 'Flight A', hidden: true });
         await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
         await confirmScratch(user);
         await savedBy();
         expect(lastSaved().flights).toEqual([{ name: 'A', pairIds: ['pd'] }, { name: 'B', pairIds: ['pa'] }]);
+        await tab(user, 'Fix synchro pairs');
         const box = screen.getByTestId('scratched-pairs');
         await user.click(within(box).getByText(/Scratched pairs/));
         await user.click(within(box).getByRole('button', { name: 'Restore Bob Invented & Bea Invented' }));
@@ -336,10 +445,11 @@ describe('T&T screen', () => {
       });
 
       it('Restore puts a pair back by the usual rules (the default session, at the end of its level in the flights)', async () => {
-        const user = await open();
-        await screen.findByRole('list', { name: 'Flight A' });
+        const user = await openF();
+        await screen.findByRole('list', { name: 'Flight A', hidden: true });
         await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
         await confirmScratch(user);
+        await tab(user, 'Fix synchro pairs');
         const box = screen.getByTestId('scratched-pairs');
         await user.click(within(box).getByText(/Scratched pairs/));
         await user.click(within(box).getByRole('button', { name: 'Restore Bob Invented & Bea Invented' }));
@@ -350,13 +460,15 @@ describe('T&T screen', () => {
       });
 
       it('scratching from Needs a session removes it there, and Restore returns it there when it still has no session', async () => {
-        const user = await open();
-        await screen.findByRole('list', { name: 'Flight A' });
+        const user = await openF();
+        await screen.findByRole('list', { name: 'Flight A', hidden: true });
+        await tab(user, 'Fix synchro pairs');
         const needs = screen.getByTestId('needs-session');
         await user.click(within(needs).getByRole('button', { name: 'Scratch pair Dot Invented & Nobody Known' }));
         await confirmScratch(user);
         expect(screen.queryByTestId('needs-session')).toBeNull();
         expect(screen.queryByText("Nobody Known isn't in this import")).toBeNull();
+        await tab(user, 'Fix synchro pairs');
         const box = screen.getByTestId('scratched-pairs');
         await user.click(within(box).getByText(/Scratched pairs \(1\)/));
         await user.click(within(box).getByRole('button', { name: 'Restore Dot Invented & Nobody Known' }));
@@ -365,8 +477,9 @@ describe('T&T screen', () => {
 
       it('Restore keeps a stored session choice: a pair chosen for another session goes there, not to Needs a session', async () => {
         const input = { ...fixture(), assignments: { pa: 's4-purple' }, scratched: { pa: true as const } };
-        const user = await open(input);
-        await screen.findByRole('list', { name: 'Flight A' });
+        const user = await openF(input);
+        await screen.findByRole('list', { name: 'Flight A', hidden: true });
+        await tab(user, 'Fix synchro pairs');
         const box = screen.getByTestId('scratched-pairs');
         await user.click(within(box).getByText(/Scratched pairs/));
         await user.click(within(box).getByRole('button', { name: 'Restore Abe Invented & Ann Invented' }));
@@ -377,12 +490,13 @@ describe('T&T screen', () => {
 
       it('a pair scratched earlier is already off the flights and Needs a session on load, and Refresh pairs keeps it scratched', async () => {
         const input = { ...fixture(), scratched: { pa: true as const, pc: true as const } };
-        const user = await open(input);
-        await screen.findByRole('list', { name: 'Flight A' });
+        const user = await openF(input);
+        await screen.findByRole('list', { name: 'Flight A', hidden: true });
         expect(flightsText()).not.toContain('Abe Invented & Ann Invented');
         expect(screen.queryByTestId('needs-session')).toBeNull();
         expect(within(screen.getByTestId('scratched-pairs')).getByText('Scratched pairs (2)')).toBeInTheDocument();
-        await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
+        await tab(user, 'Fix synchro pairs');
+      await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
         await screen.findByText(/Read \d+ pairs?/);
         expect(flightsText()).not.toContain('Abe Invented & Ann Invented');
         expect(screen.queryByTestId('needs-session')).toBeNull();
@@ -391,23 +505,25 @@ describe('T&T screen', () => {
       });
 
       it('Refresh pairs keeps a scratch made on this screen, and a scratched pair deleted in the Synchro tool just disappears', async () => {
-        const user = await open();
-        await screen.findByRole('list', { name: 'Flight A' });
+        const user = await openF();
+        await screen.findByRole('list', { name: 'Flight A', hidden: true });
         await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
         await confirmScratch(user);
-        await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
+        await tab(user, 'Fix synchro pairs');
+      await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
         await screen.findByText(/Pairs refreshed|Read \d+ pairs?/);
         expect(flightsText()).not.toContain('Bob Invented & Bea Invented');
         expect(screen.getByText('Scratched pairs (1)')).toBeInTheDocument();
         synchro.fetchSynchroPairs.mockResolvedValue(PAIRS().filter((p) => p.id !== 'pb'));
-        await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
+        await tab(user, 'Fix synchro pairs');
+      await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
         await waitFor(() => expect(screen.queryByTestId('scratched-pairs')).toBeNull());
       });
 
       it('a scratched pair is not counted as "Check pair"', async () => {
         const input = { ...fixture(), scratched: { pc: true as const } };
-        await open(input, null, [...PAIRS(), pair('Cat Invented', 'Charlie Club', 'Cy Invented', 'Charlie Club', 'HF', 'pnoSY')]);
-        await screen.findByRole('list', { name: 'Flight A' });
+        await openF(input, null, [...PAIRS(), pair('Cat Invented', 'Charlie Club', 'Cy Invented', 'Charlie Club', 'HF', 'pnoSY')]);
+        await screen.findByRole('list', { name: 'Flight A', hidden: true });
         expect(screen.getByText(/1 pair flagged .Check pair./)).toBeInTheDocument(); // pnoSY only
       });
     });
@@ -419,24 +535,24 @@ describe('T&T screen', () => {
         { ...tntAth('Echo Club', 'Eve', { SY: 'IF' }), id: 'TNT_echo_eve' },
         { ...tntAth('Echo Club', 'Sue Lee', { SY: 'IF' }, 's4-purple'), id: 'TNT_echo_sue', last: 'Invented' },
       );
-      await open(input, null, [
+      await openF(input, null, [
         pair('MaryAnn Invented', 'Echo Club', 'Eve Invented', 'Echo Club', 'IF', 'pm'),
         pair('MaryAnn Invented', 'Echo Club', 'SueLee Invented', 'Echo Club', 'IF', 'pcross2'),
         pair('Mary Ann Invented', 'Echo Club', 'Eve Invented', 'Echo Club', 'IF', 'unused'),
       ]);
-      await screen.findByRole('list', { name: 'Flight A' });
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
       expect(flightsText2()).toContain('Mary Ann Invented & Eve Invented');
       expect(flightsText2().join('|')).not.toContain('MaryAnn');
       const needs = screen.getByTestId('needs-session');
       expect(within(needs).getByText('Mary Ann Invented & Sue Lee Invented')).toBeInTheDocument();
       expect(within(needs).getByText('Mary Ann Invented is in Session 3 – Purple; Sue Lee Invented is in Session 4 – Purple.')).toBeInTheDocument();
-      function flightsText2() { return [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))]; }
+      function flightsText2() { return [...names(screen.getByRole('list', { name: 'Flight A', hidden: true })), ...names(screen.getByRole('list', { name: 'Flight B', hidden: true }))]; }
     });
 
     it('shows the import\'s spelling for a roster athlete scratched from every event and for an unmatched name that one roster athlete has', async () => {
       const input = fixture();
       input.athletes.push({ ...tntAth('Echo Club', 'Ul Tot', { TR: 'NF' }), id: 'TNT_ultot', competes: false, apparatus: [] });
-      await open(input, null, [
+      await openF(input, null, [
         pair('UlTot Invented', 'Echo Club', 'Dan Invented', 'Delta Club', 'IF', 'px'),
         pair('UlTot Invented', 'Renamed Club', 'Nobody Known', 'Delta Club', 'IF', 'py'),
       ]);
@@ -449,52 +565,53 @@ describe('T&T screen', () => {
     });
 
     it('moves a pair with the menu or a drag, and saves the flights', async () => {
-      const user = await open();
-      await screen.findByRole('list', { name: 'Flight A' });
+      const user = await openF();
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
       await choose(user, screen.getByRole('combobox', { name: 'Flight for Dot Invented & Dan Invented' }), '1');
-      expect(names(screen.getByRole('list', { name: 'Flight B' }))).toEqual(['Abe Invented & Ann Invented', 'Dot Invented & Dan Invented']);
+      expect(names(screen.getByRole('list', { name: 'Flight B', hidden: true }))).toEqual(['Abe Invented & Ann Invented', 'Dot Invented & Dan Invented']);
       act(() => { rows('Synchro flights').onDragEnd!({ active: { id: 'pa' }, over: { id: 'rl-list-flight-0' } } as never); });
-      expect(names(screen.getByRole('list', { name: 'Flight A' }))).toEqual(['Bob Invented & Bea Invented', 'Abe Invented & Ann Invented']);
+      expect(names(screen.getByRole('list', { name: 'Flight A', hidden: true }))).toEqual(['Bob Invented & Bea Invented', 'Abe Invented & Ann Invented']);
       await savedBy();
       expect(lastSaved().flights).toEqual([{ name: 'A', pairIds: ['pb', 'pa'] }, { name: 'B', pairIds: ['pd'] }]);
       expect(lastSaved().pairsReadAt).toBeInstanceOf(Date);
     });
 
     it('adds a flight and removes an empty one', async () => {
-      const user = await open();
-      await screen.findByRole('list', { name: 'Flight A' });
+      const user = await openF();
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
       await user.click(screen.getByRole('button', { name: 'Add a flight' }));
-      expect(screen.getByRole('list', { name: 'Flight C' })).toBeInTheDocument();
+      expect(screen.getByRole('list', { name: 'Flight C', hidden: true })).toBeInTheDocument();
       await savedBy();
       expect(lastSaved().flights.map((f: { name: string }) => f.name)).toEqual(['A', 'B', 'C']);
       await user.click(screen.getByRole('button', { name: 'Remove flight C' }));
-      expect(screen.queryByRole('list', { name: 'Flight C' })).toBeNull();
+      expect(screen.queryByRole('list', { name: 'Flight C', hidden: true })).toBeNull();
     });
 
     it('Refresh pairs adds new pairs at the end of their level, drops pairs that left the session, keeps the order', async () => {
-      const user = await open(fixture(), {
+      const user = await openF(fixture(), {
         kind: 'tnt', squads: [], trayAthleteIds: [], orders: {}, pairsReadAt: null,
         flights: [{ name: 'A', pairIds: ['pc', 'pd'] }, { name: 'B', pairIds: ['pb', 'pa', 'pgone'] }],
       });
-      await screen.findByRole('list', { name: 'Flight A' });
+      await screen.findByRole('list', { name: 'Flight A', hidden: true });
       // 'pc' needs a session and 'pgone' was deleted from the Synchro tool; nothing is silent: a notice says what a refresh would do
-      expect(names(screen.getByRole('list', { name: 'Flight B' }))).toEqual(['Bob Invented & Bea Invented', 'Abe Invented & Ann Invented']);
+      expect(names(screen.getByRole('list', { name: 'Flight B', hidden: true }))).toEqual(['Bob Invented & Bea Invented', 'Abe Invented & Ann Invented']);
       synchro.fetchSynchroPairs.mockResolvedValue([...PAIRS(), pair('Cat Invented', 'Charlie Club', 'Cy Invented', 'Charlie Club', 'HF', 'pnew')]);
+      await tab(user, 'Fix synchro pairs');
       await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
       expect(await screen.findByText(/Pairs refreshed: 1 added, 2 removed/)).toBeInTheDocument();
-      expect(names(screen.getByRole('list', { name: 'Flight A' }))).toEqual(['Dot Invented & Dan Invented', 'Cat Invented & Cy Invented']);
-      expect(names(screen.getByRole('list', { name: 'Flight B' }))).toEqual(['Bob Invented & Bea Invented', 'Abe Invented & Ann Invented']);
+      expect(names(screen.getByRole('list', { name: 'Flight A', hidden: true }))).toEqual(['Dot Invented & Dan Invented', 'Cat Invented & Cy Invented']);
+      expect(names(screen.getByRole('list', { name: 'Flight B', hidden: true }))).toEqual(['Bob Invented & Bea Invented', 'Abe Invented & Ann Invented']);
       await savedBy();
       expect(lastSaved().flights).toEqual([{ name: 'A', pairIds: ['pd', 'pnew'] }, { name: 'B', pairIds: ['pb', 'pa'] }]);
     });
 
     it('tells the host when the Synchro tool changed since flights were saved, and keeps showing what was saved', async () => {
-      await open(fixture(), {
+      await openF(fixture(), {
         kind: 'tnt', squads: [], trayAthleteIds: [], orders: {}, pairsReadAt: new Date('2026-10-01T12:00:00Z'),
         flights: [{ name: 'A', pairIds: ['pd', 'pc'] }, { name: 'B', pairIds: ['pb'] }],
       });
       expect(await screen.findByTestId('synchro-stale')).toHaveTextContent('1 new pair, 1 deleted');
-      expect(names(screen.getByRole('list', { name: 'Flight A' }))).toEqual(['Dot Invented & Dan Invented']);
+      expect(names(screen.getByRole('list', { name: 'Flight A', hidden: true }))).toEqual(['Dot Invented & Dan Invented']);
     });
 
     it('shows an error and leaves the rest of the screen working when the Synchro tool cannot be read', async () => {
