@@ -16,12 +16,14 @@ vi.mock('../../src/lib/data/meet-store', () => ({
   createMeet: vi.fn(), renameMeet: vi.fn(), setMeetArchived: vi.fn(),
 }));
 vi.mock('../../src/lib/data/email-store', () => ({ loadClubsScreenData: vi.fn(() => new Promise(() => {})) }));
+const h = vi.hoisted(() => ({ hasTnt: true }));
 vi.mock('../../src/lib/data/store', () => ({
   loadStored: vi.fn(async () => ({ athletes: [], clubs: [], hasSettings: false })),
   loadAthletes: vi.fn(async () => []),
   saveNameFixesAndRepublish: vi.fn(),
   applyImport: vi.fn(),
   publishClubLinks: vi.fn(),
+  hasTntSessions: vi.fn(async () => h.hasTnt),
 }));
 
 vi.mock('../../src/lib/data/name-fixes-store', () => ({ loadNameFixes: vi.fn(async () => []) }));
@@ -58,5 +60,17 @@ describe('admin shell', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Apply import' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: 'Clubs & Emails' }));
     expect(await screen.findByText(/Loading clubs, orders and the send log/)).toBeInTheDocument();
+  });
+
+  it('hides the T&T Squads tab when the meet has no T&T sessions (Julia 2026-10-19), and shows it when it does', async () => {
+    currentUser = { email: 'julia@unitedclubgymnastics.org', emailVerified: true };
+    h.hasTnt = false;
+    const { unmount } = render(<AdminLanding />);
+    expect(await screen.findByRole('button', { name: 'Artistic Squads' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'T&T Squads' })).toBeNull());
+    unmount();
+    h.hasTnt = true;
+    render(<AdminLanding />);
+    expect(await screen.findByRole('button', { name: 'T&T Squads' })).toBeInTheDocument();
   });
 });

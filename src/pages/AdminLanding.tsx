@@ -7,6 +7,7 @@ import { db } from '../lib/firebase';
 import LegacyCopyDialog from '../components/LegacyCopyDialog';
 import { applyLegacyOps, hasLegacyData, loadLegacy, loadMeetState } from '../lib/data/legacy-store';
 import { createMeet, listMeets, renameMeet, setMeetArchived, type MeetInfo } from '../lib/data/meet-store';
+import { hasTntSessions } from '../lib/data/store';
 import { pickMeet, readSelectedMeet, visibleMeets, writeSelectedMeet } from '../lib/selected-meet';
 // Lazy: pulls in ExcelJS, which is large and only admins need.
 const AdminImport = lazy(() => import('./AdminImport'));
@@ -36,6 +37,17 @@ export default function AdminLanding() {
   const [meetId, setMeetId] = useState<string | null>(null);
   const [legacy, setLegacy] = useState(false);
   const [legacyOpen, setLegacyOpen] = useState(false);
+  // null = not known yet (the tab shows until we know). Re-checked on each tab change so a T&T import shows it straight away.
+  const [hasTnt, setHasTnt] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!meetId) return;
+    let live = true;
+    hasTntSessions(db, meetId).then((v) => { if (live) setHasTnt(v); }, () => { if (live) setHasTnt(null); });
+    return () => { live = false; };
+  }, [meetId, tab]);
+  const tabs = hasTnt === false ? TABS.filter((t) => t.id !== 'tnt') : TABS;
+  // With no T&T sessions the T&T tab is gone: show Artistic Squads instead of a missing tab.
+  const shown: Tab = hasTnt === false && tab === 'tnt' ? 'squads' : tab;
 
   useEffect(() => onUser(setUser), []);
 
@@ -143,14 +155,14 @@ export default function AdminLanding() {
             onBringInData={legacy ? () => setLegacyOpen(true) : undefined}
           />
           <nav aria-label="Admin sections" className="adm-tabs">
-            <Tabs tabs={TABS} active={tab} onChange={setTab} />
+            <Tabs tabs={tabs} active={shown} onChange={setTab} />
           </nav>
           {/* key={meetId}: switching meets remounts the screen, so nothing from the other meet is shown or saved into this one. */}
-          {tab === 'import' && <Suspense fallback={<p>Loading…</p>}><AdminImport key={meetId} meetId={meetId} /></Suspense>}
-          {tab === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads key={meetId} meetId={meetId} onOpenSchedule={() => setTab('exports')} /></Suspense>}
-          {tab === 'tnt' && <Suspense fallback={<p>Loading…</p>}><AdminTnt key={meetId} meetId={meetId} /></Suspense>}
-          {tab === 'exports' && <Suspense fallback={<p>Loading…</p>}><AdminExports key={meetId} meetId={meetId} /></Suspense>}
-          {tab === 'clubs' && <Suspense fallback={<p>Loading…</p>}><AdminClubs key={meetId} meetId={meetId} /></Suspense>}
+          {shown === 'import' && <Suspense fallback={<p>Loading…</p>}><AdminImport key={meetId} meetId={meetId} /></Suspense>}
+          {shown === 'squads' && <Suspense fallback={<p>Loading…</p>}><AdminSquads key={meetId} meetId={meetId} onOpenSchedule={() => setTab('exports')} /></Suspense>}
+          {shown === 'tnt' && <Suspense fallback={<p>Loading…</p>}><AdminTnt key={meetId} meetId={meetId} /></Suspense>}
+          {shown === 'exports' && <Suspense fallback={<p>Loading…</p>}><AdminExports key={meetId} meetId={meetId} /></Suspense>}
+          {shown === 'clubs' && <Suspense fallback={<p>Loading…</p>}><AdminClubs key={meetId} meetId={meetId} /></Suspense>}
         </>
       )}
     </main>

@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, writeBatch, type DocumentData, type Firestore } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, where, writeBatch, type DocumentData, type Firestore } from 'firebase/firestore';
 import type { StoredAthlete } from '../import/diff';
 import type { ImportModel, Session } from '../import/types';
 import { buildClubLinks } from '../club-links';
@@ -44,6 +44,12 @@ export async function loadClubs(db: Firestore, meetId: string): Promise<StoredCl
 export async function loadSessions(db: Firestore, meetId: string): Promise<Session[]> {
   const snap = await getDocs(collection(db, meetPaths(meetId).sessions));
   return snap.docs.map((d) => toStoredSession(d.id, d.data()));
+}
+
+/** Does this meet have any T&T session? (No T&T import → the T&T tab and synchro are hidden, Julia 2026-10-19.) */
+export async function hasTntSessions(db: Firestore, meetId: string): Promise<boolean> {
+  const snap = await getDocs(query(collection(db, meetPaths(meetId).sessions), where('discipline', '==', 'TNT'), limit(1)));
+  return !snap.empty;
 }
 
 export async function hasMeetSettings(db: Firestore, meetId: string): Promise<boolean> {

@@ -75,13 +75,15 @@ export interface ExportsInput extends SquadsInput {
 
 /** A failed read of our own data throws (never print from defaults); a failed read of the Synchro tool is reported, not fatal. */
 export async function loadExportsInput(db: Firestore, meetId: string): Promise<ExportsInput> {
-  const [base, meet, squads, synchroPairs, synchroDoc] = await Promise.all([
+  const [base, meet, squads, synchroDoc] = await Promise.all([
     loadSquadsInput(db, meetId),
     loadMeetSettings(db, meetId),
     getDocs(collection(db, meetPaths(meetId).squads)),
-    fetchSynchroPairs().catch(() => null),
     loadSynchroDoc(db, meetId),
   ]);
+  // A meet with no T&T sessions has no synchro: don't read the Synchro tool or warn about its pairs (Julia 2026-10-19).
+  const hasTnt = base.sessions.some((s) => s.discipline === 'TNT');
+  const synchroPairs: SynchroPair[] | null = hasTnt ? await fetchSynchroPairs().catch(() => null) : [];
   const squadDocs: Record<string, unknown> = {};
   for (const d of squads.docs) squadDocs[d.id] = d.data();
   return { ...base, gymOrder: meet.gymOrder, meet, squadDocs, synchroPairs, synchroAssignments: synchroDoc.assignments, synchroScratched: synchroDoc.scratched };
