@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Select from '../Select';
 import { Modal } from '../ui';
 import { connectGmail, db } from '../../lib/firebase';
 import type { ClubRow } from '../../lib/club-overview';
@@ -210,9 +211,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
           <>
             <label className="cl-field">
               <span>Club</span>
-              <select value={preview.clubId} onChange={(e) => setPreviewId(e.target.value)}>
-                {list.map((e) => <option key={e.clubId} value={e.clubId}>{e.clubName}</option>)}
-              </select>
+              <Select aria-label="Club" value={preview.clubId} onChange={setPreviewId} options={list.map((e) => ({ value: e.clubId, label: e.clubName }))} />
             </label>
             <dl className="cl-mailhead">
               <div><dt>From</dt><dd>{FROM.name} &lt;{FROM.address}&gt;</dd></div>

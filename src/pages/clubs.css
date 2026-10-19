@@ -5,12 +5,12 @@
 .cl-filters .cl-field { margin-bottom: 0; }
 .cl-field > span { font-weight: 700; }
 .cl-grow { flex: 1 1 240px; }
-.cl-field input, .cl-field select, .cl-field textarea, .cl-in {
+.cl-field input, .cl-field textarea, .cl-in {
   font: inherit; padding: 8px 10px; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); min-height: 40px; min-width: 0; max-width: 100%; width: 100%;
 }
 .cl-field textarea { line-height: 1.45; resize: vertical; }
 .cl-field input::placeholder, .cl-in::placeholder { color: var(--ink-soft); opacity: 1; }
-.cl-field input:focus-visible, .cl-field select:focus-visible, .cl-field textarea:focus-visible, .cl-in:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }
+.cl-field input:focus-visible, .cl-field textarea:focus-visible, .cl-in:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }
 .cl-count { margin: 0; font-size: 13px; color: var(--ink); padding-bottom: 10px; }
 .cl-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .cl-head h2 { margin: 0; }

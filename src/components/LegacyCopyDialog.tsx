@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Select from './Select';
 import { Field, Modal } from './ui';
 import { DEFAULT_MEET_SETTINGS } from '../lib/data/plan';
 import type { MeetInfo } from '../lib/data/meet-store';
@@ -91,10 +92,7 @@ export default function LegacyCopyDialog({ meets, defaultMeetId, api, onClose, o
         <form onSubmit={(e) => { e.preventDefault(); void check(); }}>
           <p>Your work from before meets were added is still stored in the old place. This copies it into a meet you choose. The original data is not changed or removed.</p>
           <Field label="Copy it into">
-            <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              {meets.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              <option value={NEW}>A new meet…</option>
-            </select>
+            <Select value={target} onChange={setTarget} options={[...meets.map((m) => ({ value: m.id, label: m.name })), { value: NEW, label: 'A new meet…' }]} />
           </Field>
           {isNew && (
             <Field label="New meet name" hint="It is created when you press Copy, not before.">

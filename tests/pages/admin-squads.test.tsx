@@ -17,6 +17,7 @@ vi.mock('../../src/lib/data/squad-store', () => store);
 
 import AdminSquads from '../../src/pages/AdminSquads';
 import { parseSquadDoc } from '../../src/lib/squad-data';
+import { choose, optionLabels } from '../helpers/select';
 
 const WAG = ['VT', 'UB', 'BB', 'FX'];
 let seq = 0;
@@ -78,7 +79,7 @@ describe('Squads screen', () => {
   it('lists MAG/WAG sessions by gym order and shows the header, capacity and counts', async () => {
     await open();
     const picker = screen.getByRole('combobox', { name: 'Session' });
-    expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Session 1 – Green (WAG)', 'Session 2 – Red (MAG)']);
+    expect(await optionLabels(userEvent.setup(), picker)).toEqual(['Session 1 – Green (WAG)', 'Session 2 – Red (MAG)']);
     expect(screen.getByText(/WAG · Green Gym · Silver XS, Platinum XP, Infinity · 17 athletes · 3 clubs still A–Z · 0 need to decide a split/)).toBeInTheDocument();
     expect(screen.getByTestId('squads-capacity')).toHaveTextContent('Up to 40 WAG athletes fit in 4 squads, and up to 85 in 8. This session has 17.');
     expect(screen.getByRole('region', { name: 'Routines per rotation' })).toBeInTheDocument();
@@ -113,7 +114,7 @@ describe('Squads screen', () => {
 
   it('the Place in squad menu and a drag both move a card; the plan is saved', async () => {
     const user = await open();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Alpha Gymnastics – Silver XS' }), '2');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Alpha Gymnastics – Silver XS' }), '2');
     expect(within(squad('C')).getByText('Alpha Gymnastics – Silver XS')).toBeInTheDocument();
     act(() => { captured.props!.onDragEnd!({ active: { id: 'bravo::XP::0::-' }, over: { id: 'squad-3' } } as never); });
     expect(within(squad('D')).getByText('Bravo Gymnastics – Platinum XP')).toBeInTheDocument();
@@ -132,10 +133,10 @@ describe('Squads screen', () => {
     input.ordersByClub = orders;
     input.sessions[1].levelCodes.push('XD');
     const user = await open(input);
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Charlie Gymnastics – Infinity' }), '0');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Charlie Gymnastics – Silver XS' }), '0');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Charlie Gymnastics – Infinity' }), '0');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Charlie Gymnastics – Silver XS' }), '0');
     expect(within(squad('A')).getByText(/Infinity mixed with other levels: Silver XS, Infinity/)).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Delta Gymnastics – Diamond XD' }), '1');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Delta Gymnastics – Diamond XD' }), '1');
     expect(within(squad('B')).getByText('Over 12 on VT')).toBeInTheDocument();
     // the routines-per-rotation table highlights it too
     const table = screen.getByRole('table');
@@ -144,8 +145,8 @@ describe('Squads screen', () => {
 
   it('swap all groups with another squad trades them, keeps the letters and says where they now start', async () => {
     const user = await openOne();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Alpha Gymnastics – Silver XS' }), '0');
-    await user.selectOptions(screen.getByRole('combobox', { name: "Swap all of Squad A's groups with another squad" }), '2');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Alpha Gymnastics – Silver XS' }), '0');
+    await choose(user, screen.getByRole('combobox', { name: "Swap all of Squad A's groups with another squad" }), '2');
     expect(within(squad('C')).getByText('Alpha Gymnastics – Silver XS')).toBeInTheDocument();
     expect(within(squad('A')).queryByText('Alpha Gymnastics – Silver XS')).toBeNull();
     expect(screen.getByText('Swapped Squad A and Squad C. Their groups now start on VT and BB.')).toBeInTheDocument();
@@ -156,7 +157,7 @@ describe('Squads screen', () => {
     expect(screen.getByRole('button', { name: /Two flights, A\/B equipment · 8/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Flight 1 · A equipment')).toBeInTheDocument();
     expect(squad('B')).toHaveTextContent('VT-B → UB-B → BB-B → FX-B');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Session' }), 's2-red');
+    await choose(user, screen.getByRole('combobox', { name: 'Session' }), 's2-red');
     await screen.findByRole('heading', { name: /Session 2 – Red/ });
     expect(screen.getByRole('button', { name: /One flight · 6 squads/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByText(/Flight 1/)).toBeNull();
@@ -215,7 +216,7 @@ describe('Squads screen', () => {
 
   it('shows the Routines per rotation table with squad letters and totals', async () => {
     const user = await openOne();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Bravo Gymnastics – Platinum XP' }), '0');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Bravo Gymnastics – Platinum XP' }), '0');
     const table = screen.getByRole('table');
     const row1 = within(table).getByRole('row', { name: /Rotation 1/ });
     expect(within(row1).getAllByRole('cell')[0]).toHaveTextContent('6A'); // squad A on VT, 6 routines
@@ -224,7 +225,7 @@ describe('Squads screen', () => {
 
   it('lists specialists in a squad with their first rotation', async () => {
     const user = await openOne();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Pat Solo (Independent) – Platinum XP' }), '1');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Pat Solo (Independent) – Platinum XP' }), '1');
     expect(within(squad('B')).getByText(/Specialists: Pat Solo \(BB\): first up rotation 2/)).toBeInTheDocument();
   });
 
@@ -253,7 +254,7 @@ describe('Squads screen', () => {
     expect(store.saveSquadDoc).not.toHaveBeenCalled(); // restoring alone writes nothing
     await user.click(within(note).getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByTestId('squads-changes')).toBeNull();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Bravo Gymnastics – Platinum XP' }), '1');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Bravo Gymnastics – Platinum XP' }), '1');
     await savedBy();
     const saved = lastSaved();
     expect(saved.schedule).toEqual({ stretch: '8:00', warmups: '8:15', competition: '9:00' }); // not edited here
@@ -263,10 +264,10 @@ describe('Squads screen', () => {
 
   it('switching sessions and back keeps the latest edits', async () => {
     const user = await open();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Place in squad: Alpha Gymnastics – Silver XS' }), '1');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Session' }), 's2-red');
+    await choose(user, screen.getByRole('combobox', { name: 'Place in squad: Alpha Gymnastics – Silver XS' }), '1');
+    await choose(user, screen.getByRole('combobox', { name: 'Session' }), 's2-red');
     await screen.findByRole('heading', { name: /Session 2 – Red/ });
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Session' }), 's1-green');
+    await choose(user, screen.getByRole('combobox', { name: 'Session' }), 's1-green');
     await screen.findByRole('heading', { name: /Session 1 – Green/ });
     expect(within(squad('B')).getByText('Alpha Gymnastics – Silver XS')).toBeInTheDocument();
   });
@@ -316,7 +317,7 @@ describe('Squads screen', () => {
 
     it('MAG lists its five patterns and a MAG session can use 3 squads', async () => {
       const user = await open(fixture(magAthletes()));
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Session' }), 's2-red');
+      await choose(user, screen.getByRole('combobox', { name: 'Session' }), 's2-red');
       await screen.findByRole('heading', { name: /Session 2 – Red/ });
       const labels = within(screen.getByRole('group', { name: 'Rotation' })).getAllByRole('button').map((b) => b.textContent);
       expect(labels).toEqual(['One flight · 6 squads', 'Two flights, A/B equipment · 12', '2 squads', '3 squads', '3 squads, WAG overlap']);

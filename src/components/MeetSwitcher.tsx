@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Select from './Select';
 import { Field, Modal } from './ui';
 import type { MeetInfo } from '../lib/data/meet-store';
 
@@ -37,9 +38,7 @@ export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, on
     <div className="adm-meet">
       <div className="adm-meet-pick">
         <label htmlFor="meet-select">Meet</label>
-        <select id="meet-select" value={selectedId} onChange={(e) => onSelect(e.target.value)}>
-          {meets.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+        <Select id="meet-select" value={selectedId} onChange={onSelect} options={meets.map((m) => ({ value: m.id, label: m.name }))} />
       </div>
       <div className="adm-meet-actions">
         <button className="btn ghost small" type="button" onClick={() => open('new')}>New meet</button>

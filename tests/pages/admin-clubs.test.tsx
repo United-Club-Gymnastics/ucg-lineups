@@ -14,6 +14,7 @@ const store = vi.hoisted(() => ({
 vi.mock('../../src/lib/data/email-store', () => store);
 
 import AdminClubs from '../../src/pages/AdminClubs';
+import { choose } from '../helpers/select';
 
 function data(over: Partial<ClubsScreenData> = {}): ClubsScreenData {
   return {
@@ -66,10 +67,10 @@ describe('Clubs table', () => {
 
   it('filters by status and by search text', async () => {
     const user = await open();
-    await user.selectOptions(screen.getByLabelText('Status'), 'split');
+    await choose(user, screen.getByLabelText('Status'), 'split');
     expect(screen.getByText('1 of 5 clubs')).toBeInTheDocument();
     expect(screen.queryByRole('row', { name: /Alpha/ })).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText('Status'), 'all');
+    await choose(user, screen.getByLabelText('Status'), 'all');
     await user.type(screen.getByLabelText('Search clubs or emails'), 'echo@');
     expect(screen.getByText('1 of 5 clubs')).toBeInTheDocument();
     expect(screen.getByRole('row', { name: /Echo Elite/ })).toBeInTheDocument();

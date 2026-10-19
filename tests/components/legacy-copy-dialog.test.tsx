@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import LegacyCopyDialog, { type LegacyCopyApi } from '../../src/components/LegacyCopyDialog';
 import type { LegacySnapshot, MeetState } from '../../src/lib/legacy-copy';
+import { choose } from '../helpers/select';
 
 const TA = 'tokenAAAAAAAAAAAAAAAAAA';
 const snapshot: LegacySnapshot = {
@@ -41,7 +42,7 @@ describe('Bring in earlier data', () => {
     const a = api();
     const onDone = vi.fn();
     render(<LegacyCopyDialog meets={meets} defaultMeetId="m1" api={a} onClose={() => {}} onDone={onDone} />);
-    await user.selectOptions(screen.getByLabelText('Copy it into'), 'A new meet…');
+    await choose(user, screen.getByLabelText('Copy it into'), 'A new meet…');
     expect(screen.getByLabelText('New meet name')).toHaveValue('UCG Nationals 2026');
     await user.click(screen.getByRole('button', { name: 'See what will be copied' }));
     expect((await screen.findByText(/1 club link/)).closest('p')).toHaveTextContent('will work again');

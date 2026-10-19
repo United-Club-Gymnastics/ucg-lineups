@@ -1,8 +1,9 @@
 // Copied from ucg-platform@32fb372 src/components/ui.tsx — keep in sync by hand
 // Changed: only Field, Modal, Badge, Tabs kept. Dropped ToastProvider, Combo, Stat (store/toast-bus/ui-hooks ties).
-// Field's auto-wiring no longer recognises Combo (not copied); native input/select/textarea only.
+// Field's auto-wiring no longer recognises Combo (not copied); native input/select/textarea only, plus our own Select (components/Select.tsx).
 import { Children, cloneElement, isValidElement, useEffect, useId, useRef } from 'react';
 import type { ReactElement, ReactNode } from 'react';
+import Select from './Select';
 
 // ---- Modal ----
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -140,7 +141,8 @@ export function Tabs<T extends string>({ tabs, active, onChange, pill = false }:
 /** Controls whose label association `Field` can wire up automatically (native form controls). */
 function isLabelableChild(child: ReactNode): child is ReactElement<{ id?: string }> {
   if (!isValidElement(child)) return false;
-  return typeof child.type === 'string' && ['input', 'select', 'textarea'].includes(child.type);
+  // The styled `Select` draws a button (labelable) and takes the id like a native control.
+  return child.type === Select || (typeof child.type === 'string' && ['input', 'select', 'textarea'].includes(child.type));
 }
 
 export function Field({ label, hint, children, tip, required, htmlFor }: { label: string; hint?: string; children: ReactNode; tip?: string; required?: boolean; htmlFor?: string }) {

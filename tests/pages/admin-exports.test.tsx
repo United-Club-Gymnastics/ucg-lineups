@@ -11,6 +11,7 @@ vi.mock('../../src/lib/pdf/files', () => files);
 
 import AdminExports from '../../src/pages/AdminExports';
 import { MEET, magFixture, tntFixture, wagInfinityFixture } from '../pdf/fixtures';
+import { choose, optionLabels } from '../helpers/select';
 
 function input(over: Partial<ExportsInput> = {}): ExportsInput {
   const mag = magFixture();
@@ -53,11 +54,11 @@ beforeEach(() => {
 describe('Exports screen', () => {
   it('lists sessions in gym order and previews every page of the first one', async () => {
     await open();
-    const select = screen.getByLabelText('Session') as HTMLSelectElement;
-    expect([...select.options].map((o) => o.textContent)).toEqual([
+    const select = screen.getByLabelText('Session');
+    expect(await optionLabels(userEvent.setup(), select)).toEqual([
       'Session 2 – Green (WAG)', 'Session 3 – Red (WAG)', 'Session 1 – Orange (MAG)', 'Session 1 – Purple (T&T)',
     ]);
-    expect(select.value).toBe('s2-green');
+    expect(select).toHaveTextContent('Session 2 – Green (WAG)');
     const pages = screen.getAllByRole('region', { name: /^Page \d+ of \d+:/ });
     expect(pages.length).toBeGreaterThan(10);
     expect(pages[0].getAttribute('aria-label')).toMatch(/^Page 1 of \d+: Vault, Squad A$/);
@@ -78,7 +79,7 @@ describe('Exports screen', () => {
 
   it('the jump bar has a row per apparatus with squad letters in arrival order, and moves to the page', async () => {
     const user = await open();
-    await user.selectOptions(screen.getByLabelText('Session'), 's1-orange');
+    await choose(user, screen.getByLabelText('Session'), 's1-orange');
     const nav = screen.getByRole('navigation', { name: 'Jump to a page' });
     const rows = [...nav.querySelectorAll('.ex-jump-row')].map((r) => r.textContent);
     expect(rows).toEqual(['FXAFEDCB', 'PHBAFEDC', 'SRCBAFED', 'VTDCBAFE', 'PBEDCBAF', 'HBFEDCBA']);
@@ -90,7 +91,7 @@ describe('Exports screen', () => {
 
   it('switches to the rotation sheet: one page per session', async () => {
     const user = await open();
-    await user.selectOptions(screen.getByLabelText('Session'), 's1-orange');
+    await choose(user, screen.getByLabelText('Session'), 's1-orange');
     await user.click(screen.getByRole('button', { name: 'Rotation sheet' }));
     const pages = screen.getAllByRole('region', { name: /^Page \d+ of/ });
     expect(pages).toHaveLength(1);
@@ -110,7 +111,7 @@ describe('Exports screen', () => {
     expect(within(warn).getByText(/No squads saved yet/)).toBeInTheDocument();
     expect(within(warn).getByText(/Session 1 – Orange:/)).toBeInTheDocument();
     expect(within(warn).getByText(/not placed in a squad/)).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText('Session'), 's3-red');
+    await choose(user, screen.getByLabelText('Session'), 's3-red');
     expect(screen.getByText(/Nothing to print for Session 3 – Red/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'All sessions, one PDF' })).toBeEnabled();
   });
@@ -157,16 +158,16 @@ describe('Exports screen', () => {
     await user.type(screen.getByLabelText('Session 1 competition'), '7:30 AM');
     await user.type(screen.getByLabelText('Session 1 open stretch'), '6:45 AM');
     // T&T Session 1 – Purple: the rotation sheet title is weekday + competition; the header carries the session's date
-    await user.selectOptions(screen.getByLabelText('Session'), 's1-purple');
+    await choose(user, screen.getByLabelText('Session'), 's1-purple');
     await user.click(screen.getByRole('button', { name: 'Rotation sheet' }));
     expect(screen.getAllByText('T&T Session 1 – Purple · Thursday 7:30 AM').length).toBeGreaterThan(0);
     await user.click(screen.getByRole('button', { name: 'Scorecards' }));
     expect(within(screen.getAllByRole('region', { name: /^Page 1 of/ })[0]).getByText('October 22, 2026')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Rotation sheet' }));
     // artistic rotation sheet: the times; Session 2 has no date so it still prints the single meet date
-    await user.selectOptions(screen.getByLabelText('Session'), 's1-orange');
+    await choose(user, screen.getByLabelText('Session'), 's1-orange');
     expect(screen.getByText('6:45 AM')).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText('Session'), 's2-green');
+    await choose(user, screen.getByLabelText('Session'), 's2-green');
     await user.click(screen.getByRole('button', { name: 'Scorecards' }));
     expect(within(screen.getAllByRole('region', { name: /^Page 1 of/ })[0]).getByText(MEET.date)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save schedule' }));
@@ -176,7 +177,7 @@ describe('Exports screen', () => {
 
   it('a session override wins per field over its number\'s row, and saves on the session', async () => {
     const user = await open(input({ meet: { ...input().meet, schedule: { '1': { date: '2026-10-22', stretch: '6:45 AM', competition: '7:30 AM' } } } }));
-    await user.selectOptions(screen.getByLabelText('Session'), 's1-purple');
+    await choose(user, screen.getByLabelText('Session'), 's1-purple');
     await user.click(screen.getByRole('button', { name: 'Rotation sheet' }));
     expect(screen.getAllByText('T&T Session 1 – Purple · Thursday 7:30 AM').length).toBeGreaterThan(0);
     await user.click(screen.getByText(/Session overrides/));
@@ -185,7 +186,7 @@ describe('Exports screen', () => {
     await user.click(screen.getByRole('button', { name: 'Save overrides' }));
     await waitFor(() => expect(store.saveScheduleOverride).toHaveBeenCalledWith({}, 'm1', 's1-purple', { date: '', stretch: '', warmups: '', competition: '9:00 AM' }));
     // Orange is Session 1 too and keeps the row
-    await user.selectOptions(screen.getByLabelText('Session'), 's1-orange');
+    await choose(user, screen.getByLabelText('Session'), 's1-orange');
     expect(screen.getByText('6:45 AM')).toBeInTheDocument();
   });
 
@@ -209,7 +210,7 @@ describe('Exports screen', () => {
 
   it('T&T scorecards jump bar: TR, DM, TU, SY', async () => {
     const user = await open();
-    await user.selectOptions(screen.getByLabelText('Session'), 's1-purple');
+    await choose(user, screen.getByLabelText('Session'), 's1-purple');
     const nav = screen.getByRole('navigation', { name: 'Jump to a page' });
     expect([...nav.querySelectorAll('.ex-jump-l')].map((e) => e.textContent)).toEqual(['TR', 'DM', 'TU', 'SY']);
   });

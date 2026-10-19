@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MeetInfo } from '../../src/lib/data/meet-store';
@@ -34,6 +34,7 @@ vi.mock('../../src/pages/AdminExports', () => ({ default: ({ meetId }: { meetId:
 import AdminLanding from '../../src/pages/AdminLanding';
 import { SELECTED_MEET_KEY } from '../../src/lib/selected-meet';
 import * as meetStore from '../../src/lib/data/meet-store';
+import { choose, optionLabels } from '../helpers/select';
 
 const seed = (...ms: Partial<MeetInfo>[]) => {
   mem.meets = ms.map((m, i) => ({ id: `s${i}`, name: `Seed ${i}`, createdAt: i + 1, archived: false, ...m }));
@@ -58,7 +59,7 @@ describe('meet switcher', () => {
     await user.type(screen.getByLabelText('Meet name'), 'Nationals 2027');
     await user.click(create);
     expect(await screen.findByText('Import for m1')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Meet' })).toHaveDisplayValue('Nationals 2027');
+    expect(screen.getByRole('combobox', { name: 'Meet' })).toHaveTextContent('Nationals 2027');
     expect(meetStore.createMeet).toHaveBeenCalledWith({}, 'Nationals 2027');
   });
 
@@ -66,8 +67,8 @@ describe('meet switcher', () => {
     seed({ name: 'Old' }, { name: 'Newest' }, { name: 'Hidden', archived: true, createdAt: 99 });
     render(<AdminLanding />);
     const select = await screen.findByRole('combobox', { name: 'Meet' });
-    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Newest', 'Old']);
-    expect(select).toHaveDisplayValue('Newest');
+    expect(await optionLabels(userEvent.setup(), select)).toEqual(['Newest', 'Old']);
+    expect(select).toHaveTextContent('Newest');
     expect(await screen.findByText('Import for s1')).toBeInTheDocument();
   });
 
@@ -79,14 +80,14 @@ describe('meet switcher', () => {
     expect(mounts.n).toBe(1);
     await user.click(screen.getByRole('button', { name: 'Squads' }));
     expect(await screen.findByText('Squads for s1')).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Meet' }), 's0');
+    await choose(user, screen.getByRole('combobox', { name: 'Meet' }), 's0');
     expect(await screen.findByText('Squads for s0')).toBeInTheDocument();
     expect(localStorage.getItem(SELECTED_MEET_KEY)).toBe('s0');
     await user.click(screen.getByRole('button', { name: 'Exports' }));
     expect(await screen.findByText('Exports for s0')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Import' }));
     expect(await screen.findByText('Import for s0')).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Meet' }), 's1');
+    await choose(user, screen.getByRole('combobox', { name: 'Meet' }), 's1');
     expect(await screen.findByText('Import for s1')).toBeInTheDocument();
     expect(mounts.n).toBe(3); // import mounted for s1, then s0 (after the tab round trip), then s1 again
     expect(meetStore.createMeet).not.toHaveBeenCalled(); // switching writes nothing
@@ -120,7 +121,7 @@ describe('meet switcher', () => {
     const user = userEvent.setup();
     render(<AdminLanding />);
     expect(await screen.findByText('Import for s1')).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Meet' }), 's0');
+    await choose(user, screen.getByRole('combobox', { name: 'Meet' }), 's0');
     expect(await screen.findByText('Import for s0')).toBeInTheDocument();
     get.mockRestore();
     set.mockRestore();
@@ -136,7 +137,7 @@ describe('meet switcher', () => {
     await user.click(screen.getByRole('button', { name: 'Create meet' }));
     expect(await screen.findByText('Import for m1')).toBeInTheDocument();
     const select = screen.getByRole('combobox', { name: 'Meet' });
-    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['NE Regionals', 'Nationals']);
+    expect(await optionLabels(userEvent.setup(), select)).toEqual(['NE Regionals', 'Nationals']);
   });
 
   it('Rename changes the name in the list', async () => {
@@ -150,7 +151,7 @@ describe('meet switcher', () => {
     await user.clear(input);
     await user.type(input, 'Nationals 2027');
     await user.click(screen.getByRole('button', { name: 'Save name' }));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Meet' })).toHaveDisplayValue('Nationals 2027'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Meet' })).toHaveTextContent('Nationals 2027'));
     expect(meetStore.renameMeet).toHaveBeenCalledWith({}, 's0', 'Nationals 2027');
   });
 

@@ -16,6 +16,16 @@ Source: `~/Developer/ucg-platform` (read-only), commit `32fb372`. Every copied f
 | `tests/components/competition-order-groups.test.tsx` @e57754a | `tests/components/competition-order-groups.test.tsx` | Rewritten around a state harness for the controlled card; lock/toast/store tests dropped; read-only, apparatus filter and `membershipChanged` tests added; cross-group drag in `tests/components/cross-group-drag.test.tsx` (new) |
 | `src/assets/brand/mark.svg` @d4fd8ba | `src/lib/pdf/logo-mark.ts` | Step 6: only the seven path outlines, as strings (viewBox 126), so jsPDF draws the UCG mark as black vectors and the preview fills the same paths black. No font, no `mark.png`; the "United Club Gymnastics" wording beside it is set in Helvetica |
 
+## Ported from nationals-tools (read-only), commit `0b8116a`
+
+Not byte copies: a React rewrite of the vanilla-JS dropdown, keeping its look and keyboard behaviour.
+
+| nationals-tools path @ 0b8116a | Local path | What changed |
+|---|---|---|
+| `public/shared/select.js` | `src/components/Select.tsx` | Rewritten as a React component (`value` / `onChange(value)` / `options`). Kept: button with `role=combobox`, `aria-haspopup/expanded/controls/activedescendant`, `role=listbox` / `role=option` / `aria-selected`, Up/Down/Home/End, Enter/Space, Escape, Tab closes, focus stays on the button. Added: multi-letter typeahead (the original matched one letter), disabled options skipped, Escape handled in the window capture phase so an enclosing dialog does not close too, a hidden input carrying the value (forms; a dialog notices the change), the list drawn in a fixed-position portal that shifts and flips to stay on screen |
+| `public/shared/enhance-selects.js` | `src/components/Select.tsx` | Its label wiring (`label[for]` or `aria-label` names the box) is covered by `Field` recognising `Select` (`src/components/ui.tsx`) plus the `aria-label` prop; its "hide the native select" mechanism is not needed (we replace the `<select>` elements instead) |
+| `public/shared/styles.css` lines ~96-113 (`select` rules) and ~335-375 (`.dd-*`, `.combo-list`) | `src/components/select.css` | `.dd-button`, `.dd-list` (was `.combo-list`), chevron, coral focus ring, bold selected, light-blue active/hover. Changed: focus border is `--coral-text` (5.2:1 on white) instead of `--coral-500` (2.9:1); `position: fixed` list; `.dd-sm` compact size; ellipsis on the box, wrapping in the list |
+
 Config copied and simplified (not provenance-tracked code): `tsconfig*.json`, `eslint.config.js`.
 
 ## Not copied (decided in step 4)

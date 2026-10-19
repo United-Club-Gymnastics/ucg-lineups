@@ -3,6 +3,7 @@
 // rotation.ts; this only draws and reports moves. The platform builder's tray/squad/swap/specialist layout
 // and the prototype's labels are kept.
 import { useState, type CSSProperties } from 'react';
+import Select from './Select';
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, pointerWithin, rectIntersection,
   useDraggable, useDroppable, useSensor, useSensors,
@@ -63,14 +64,13 @@ function CardView({ card, label, where, plan, pattern, discipline, codes, onPlac
         <span>{n} athlete{n === 1 ? '' : 's'}</span>
         <label className="sq-place">
           <span>Place in squad</span>
-          <select
+          <Select
+            size="sm"
             value={where === null ? '' : String(where)}
-            onChange={(e) => onPlace(card.key, e.target.value === '' ? null : Number(e.target.value))}
+            onChange={(v) => onPlace(card.key, v === '' ? null : Number(v))}
             aria-label={`Place in squad: ${label}`}
-          >
-            <option value="">Unplaced</option>
-            {plan.map((s, i) => <option key={s.name} value={i}>Squad {s.name} ({startsLabel(i, pattern, discipline)})</option>)}
-          </select>
+            options={[{ value: '', label: 'Unplaced' }, ...plan.map((s, i) => ({ value: String(i), label: `Squad ${s.name} (${startsLabel(i, pattern, discipline)})` }))]}
+          />
         </label>
       </div>
       <Counts routines={card.routines} codes={codes} />
@@ -153,14 +153,13 @@ export function SquadBoard({ discipline, pattern, plan, cards, data, onPlace, on
           </div>
           <label className="sq-swap">
             <span>Swap all groups with</span>
-            <select
+            <Select
+              size="sm"
               value=""
-              onChange={(e) => { if (e.target.value !== '') onSwap(i, Number(e.target.value)); }}
+              onChange={(v) => { if (v !== '') onSwap(i, Number(v)); }}
               aria-label={`Swap all of Squad ${slot.name}'s groups with another squad`}
-            >
-              <option value="">Choose a squad…</option>
-              {plan.map((o, j) => j !== i && <option key={o.name} value={j}>Squad {o.name} ({startsLabel(j, pattern, discipline)})</option>)}
-            </select>
+              options={[{ value: '', label: 'Choose a squad…' }, ...plan.flatMap((o, j) => (j === i ? [] : [{ value: String(j), label: `Squad ${o.name} (${startsLabel(j, pattern, discipline)})` }]))]}
+            />
           </label>
           <Counts routines={st.routines} codes={codes} cap={cap} />
           {(st.overCap.length > 0 || st.mixed) && (

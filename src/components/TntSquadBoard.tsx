@@ -1,6 +1,7 @@
 // Built fresh for UCG Lineups: the three T&T squads and the unplaced list. Athletes are dragged by a handle onto a squad
 // (dnd-kit: pointer, touch, keyboard) or moved with the "Move to squad" select. Logic lives in src/lib/tnt-squads.ts.
 import { useState } from 'react';
+import Select from './Select';
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, pointerWithin, rectIntersection,
   useDraggable, useDroppable, useSensor, useSensors,
@@ -54,13 +55,12 @@ function AthleteRow({ a, where, dragging, onMove }: { a: TntAthlete; where: numb
       </span>
       <label className="sq-place">
         <span className="sr-only">Move {name} to squad</span>
-        <select
+        <Select
+          size="sm"
           value={where === null ? '' : String(where)} aria-label={`Move to squad: ${name}`}
-          onChange={(e) => onMove(a.id, e.target.value === '' ? null : Number(e.target.value))}
-        >
-          <option value="">Unplaced</option>
-          {Array.from({ length: TNT_SQUAD_COUNT }, (_, j) => <option key={j} value={j}>Squad {squadLetter(j)}</option>)}
-        </select>
+          onChange={(v) => onMove(a.id, v === '' ? null : Number(v))}
+          options={[{ value: '', label: 'Unplaced' }, ...Array.from({ length: TNT_SQUAD_COUNT }, (_, j) => ({ value: String(j), label: `Squad ${squadLetter(j)}` }))]}
+        />
       </label>
     </li>
   );

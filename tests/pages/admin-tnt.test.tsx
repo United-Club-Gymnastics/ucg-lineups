@@ -20,6 +20,7 @@ const assignStore = vi.hoisted(() => ({ saveSynchroAssignment: vi.fn() }));
 vi.mock('../../src/lib/data/synchro-store', () => assignStore);
 
 import AdminTnt from '../../src/pages/AdminTnt';
+import { choose, optionLabels } from '../helpers/select';
 
 type Lv = Partial<Record<'TR' | 'DM' | 'TU' | 'SY', string>>;
 const tntAth = (club: string, first: string, tnt: Lv, session = 's3-purple'): StoredAthlete => ({
@@ -89,7 +90,7 @@ describe('T&T screen', () => {
     await open();
     await screen.findByText(/3 synchro pairs/);
     const picker = screen.getByRole('combobox', { name: 'Session' });
-    expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Session 3 – Purple (T&T)', 'Session 4 – Purple (T&T)']);
+    expect(await optionLabels(userEvent.setup(), picker)).toEqual(['Session 3 – Purple (T&T)', 'Session 4 – Purple (T&T)']);
     expect(screen.getByText(/T&T · Purple Gym · 7 athletes in squads · 2 synchro only · 3 synchro pairs/)).toBeInTheDocument();
   });
 
@@ -128,7 +129,7 @@ describe('T&T screen', () => {
 
   it('the Move to squad menu and a drag both move an athlete; the plan is saved', async () => {
     const user = await open();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Move to squad: Ann Invented' }), '2');
+    await choose(user, screen.getByRole('combobox', { name: 'Move to squad: Ann Invented' }), '2');
     expect(within(squad('C')).getByText('Ann Invented')).toBeInTheDocument();
     act(() => { board().onDragEnd!({ active: { id: idOf('Alpha Club', 'Abe') }, over: { id: 'squad-1' } } as never); });
     expect(within(squad('B')).getByText('Abe Invented')).toBeInTheDocument();
@@ -144,7 +145,7 @@ describe('T&T screen', () => {
     input.athletes.push(...Array.from({ length: 10 }, (_, i) => tntAth('Echo Club', `Echo${i}`, { TR: 'NF', DM: 'NF', TU: 'NF' })));
     const user = await open(input);
     for (const a of input.athletes.filter((x) => x.sessionId === 's3-purple' && Object.keys(x.tnt!).some((k) => k !== 'SY'))) {
-      await user.selectOptions(screen.getByRole('combobox', { name: `Move to squad: ${a.first} Invented` }), '0');
+      await choose(user, screen.getByRole('combobox', { name: `Move to squad: ${a.first} Invented` }), '0');
     }
     // 17 athletes in squad A
     expect(within(squad('A')).getByText('17 athletes: over 15')).toBeInTheDocument();
@@ -165,7 +166,7 @@ describe('T&T screen', () => {
   describe('competing order', () => {
     async function placed() {
       const user = await open();
-      for (const a of ['Ann', 'Abe', 'Al', 'Cat', 'Cy']) await user.selectOptions(screen.getByRole('combobox', { name: `Move to squad: ${a} Invented` }), '0');
+      for (const a of ['Ann', 'Abe', 'Al', 'Cat', 'Cy']) await choose(user, screen.getByRole('combobox', { name: `Move to squad: ${a} Invented` }), '0');
       return user;
     }
     const orderList = () => screen.getByRole('list', { name: /Trampoline, Squad A/ });
@@ -193,7 +194,7 @@ describe('T&T screen', () => {
 
     it('moving an athlete out of the squad drops them from its order', async () => {
       const user = await placed();
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Move to squad: Cat Invented' }), '1');
+      await choose(user, screen.getByRole('combobox', { name: 'Move to squad: Cat Invented' }), '1');
       expect(names(orderList())).toEqual(['Cy Invented', 'Abe Invented', 'Al Invented', 'Ann Invented']);
     });
   });
@@ -230,7 +231,7 @@ describe('T&T screen', () => {
       const needs = screen.getByTestId('needs-session');
       expect(within(needs).getByText('Dot Invented is in Session 3 – Purple; Fay Invented is in Session 4 – Purple.')).toBeInTheDocument();
       expect(screen.queryByRole('list', { name: 'Flight A' })!.textContent).not.toContain('Fay Invented');
-      await user.selectOptions(within(needs).getByRole('combobox', { name: 'Move to session for Dot Invented & Fay Invented' }), 's3-purple');
+      await choose(user, within(needs).getByRole('combobox', { name: 'Move to session for Dot Invented & Fay Invented' }), 's3-purple');
       expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'm1', 'pcross', 's3-purple');
       const all = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
       expect(all).toContain('Dot Invented & Fay Invented');
@@ -248,7 +249,7 @@ describe('T&T screen', () => {
     it('Move to session sends a pair to another T&T session and takes it out of this session\'s flights', async () => {
       const user = await open();
       await screen.findByRole('list', { name: 'Flight A' });
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Move to session for Bob Invented & Bea Invented' }), 's4-purple');
+      await choose(user, screen.getByRole('combobox', { name: 'Move to session for Bob Invented & Bea Invented' }), 's4-purple');
       expect(assignStore.saveSynchroAssignment).toHaveBeenLastCalledWith({}, 'm1', 'pb', 's4-purple');
       const left = [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
       expect(left).not.toContain('Bob Invented & Bea Invented');
@@ -273,7 +274,7 @@ describe('T&T screen', () => {
     it('moves a pair with the menu or a drag, and saves the flights', async () => {
       const user = await open();
       await screen.findByRole('list', { name: 'Flight A' });
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Flight for Dot Invented & Dan Invented' }), '1');
+      await choose(user, screen.getByRole('combobox', { name: 'Flight for Dot Invented & Dan Invented' }), '1');
       expect(names(screen.getByRole('list', { name: 'Flight B' }))).toEqual(['Abe Invented & Ann Invented', 'Dot Invented & Dan Invented']);
       act(() => { rows('Synchro flights').onDragEnd!({ active: { id: 'pa' }, over: { id: 'rl-list-flight-0' } } as never); });
       expect(names(screen.getByRole('list', { name: 'Flight A' }))).toEqual(['Bob Invented & Bea Invented', 'Abe Invented & Ann Invented']);
@@ -363,7 +364,7 @@ describe('T&T screen', () => {
   it('asks before Auto-balance replaces placed squads', async () => {
     const user = await open();
     await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Move to squad: Ann Invented' }), '2');
+    await choose(user, screen.getByRole('combobox', { name: 'Move to squad: Ann Invented' }), '2');
     await user.click(screen.getByRole('button', { name: 'Auto-balance' }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));

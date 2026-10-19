@@ -3,7 +3,7 @@
 .ex-fields { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; margin: 8px 0; }
 .ex-field { display: grid; gap: 4px; font-size: 13.5px; color: var(--ink); min-width: min(100%, 220px); flex: 1 1 220px; }
 .ex-field > span { font-weight: 700; }
-.ex-field input, .ex-field select { font: inherit; padding: 8px 10px; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); min-height: 40px; min-width: 0; max-width: 100%; }
+.ex-field input { font: inherit; padding: 8px 10px; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); min-height: 40px; min-width: 0; max-width: 100%; }
 .ex-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin-bottom: 8px; }
 .ex-seg { display: inline-flex; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); overflow: hidden; }
 .ex-seg button { font: inherit; font-weight: 700; padding: 9px 14px; border: 0; background: var(--white); color: var(--ink); cursor: pointer; min-height: 40px; }

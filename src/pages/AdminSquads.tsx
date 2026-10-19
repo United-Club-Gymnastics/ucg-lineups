@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Select from '../components/Select';
 import { db } from '../lib/firebase';
 import { Modal } from '../components/ui';
 import { SquadBoard } from '../components/SquadBoard';
@@ -110,9 +111,7 @@ function SquadsScreen({ meetId, input, save, onRetry, onReload, schedule, onOpen
         <div className="sq-pick-row">
           <label className="sq-field">
             <span>Session</span>
-            <select value={sessionId} onChange={(e) => { setDocError(''); setSessionId(e.target.value); }}>
-              {sessions.map((s) => <option key={s.id} value={s.id}>{sessionTitle(s)} ({s.discipline})</option>)}
-            </select>
+            <Select aria-label="Session" value={sessionId} onChange={(v) => { setDocError(''); setSessionId(v); }} options={sessions.map((s) => ({ value: s.id, label: `${sessionTitle(s)} (${s.discipline})` }))} />
           </label>
           <button type="button" className="btn ghost small" onClick={onReload}>Reload data</button>
         </div>

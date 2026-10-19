@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Select from '../components/Select';
 import { db } from '../lib/firebase';
 import { PagePreview } from '../components/PdfPreview';
 import { loadExportsInput, runScheduleMigration, saveMeetNameDate, saveScheduleOverride, saveScheduleRow, type ExportsInput } from '../lib/data/export-store';
@@ -247,9 +248,7 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
         <div className="ex-row">
           <label className="ex-field">
             <span>Session</span>
-            <select value={selected?.id ?? ''} onChange={(e) => setSessionId(e.target.value)} disabled={sessions.length === 0}>
-              {sessions.map((s) => <option key={s.id} value={s.id}>{s.title} ({s.session.discipline === 'TNT' ? 'T&T' : s.session.discipline})</option>)}
-            </select>
+            <Select aria-label="Session" value={selected?.id ?? ''} onChange={setSessionId} disabled={sessions.length === 0} options={sessions.map((s) => ({ value: s.id, label: `${s.title} (${s.session.discipline === 'TNT' ? 'T&T' : s.session.discipline})` }))} />
           </label>
           <div className="ex-seg" role="group" aria-label="Export">
             <button type="button" aria-pressed={kind === 'scorecards'} onClick={() => setKind('scorecards')}>Scorecards</button>

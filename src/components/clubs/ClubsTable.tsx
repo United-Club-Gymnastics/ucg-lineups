@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Select from '../Select';
 import { Badge, Modal } from '../ui';
 import { matchesClubFilter, type ClubRow } from '../../lib/club-overview';
 import { STATUS_LABEL, type SessionStatus } from '../../lib/club-status';
@@ -58,9 +59,7 @@ export default function ClubsTable({ rows, linkBase, onSaveEmails, onRegenerate 
       <div className="cl-filters">
         <label className="cl-field">
           <span>Status</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            {FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-          </select>
+          <Select aria-label="Status" value={status} onChange={setStatus} options={FILTERS.map((f) => ({ value: f.id, label: f.label }))} />
         </label>
         <label className="cl-field cl-grow">
           <span>Search clubs or emails</span>

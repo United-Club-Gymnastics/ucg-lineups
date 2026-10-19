@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Select from '../components/Select';
 import { db } from '../lib/firebase';
 import { Badge, Modal } from '../components/ui';
 import { ReorderLists } from '../components/ReorderLists';
@@ -127,9 +128,7 @@ function TntScreen({ meetId, input, save, onRetry, onReload, schedule }: {
         <div className="sq-pick-row">
           <label className="sq-field">
             <span>Session</span>
-            <select value={sessionId} onChange={(e) => { setDocError(''); setSessionId(e.target.value); }}>
-              {sessions.map((s) => <option key={s.id} value={s.id}>{sessionTitle(s)} (T&amp;T)</option>)}
-            </select>
+            <Select aria-label="Session" value={sessionId} onChange={(v) => { setDocError(''); setSessionId(v); }} options={sessions.map((s) => ({ value: s.id, label: `${sessionTitle(s)} (T&T)` }))} />
           </label>
           <button type="button" className="btn ghost small" onClick={onReload}>Reload data</button>
         </div>
@@ -301,10 +300,10 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
   const sessionSelect = (p: PlacedPair, blank: boolean) => (
     <label className="sq-place">
       <span className="sr-only">Move to session for {pairNames(p)}</span>
-      <select value={p.sessionId ?? ''} aria-label={`Move to session for ${pairNames(p)}`} onChange={(e) => e.target.value && moveToSession(p.id, e.target.value)}>
-        {blank && <option value="">Choose a session…</option>}
-        {sessions.map((s) => <option key={s.id} value={s.id}>{sessionTitle(s)}</option>)}
-      </select>
+      <Select
+        size="sm" value={p.sessionId ?? ''} aria-label={`Move to session for ${pairNames(p)}`} onChange={(v) => v && moveToSession(p.id, v)}
+        options={[...(blank ? [{ value: '', label: 'Choose a session…' }] : []), ...sessions.map((s) => ({ value: s.id, label: sessionTitle(s) }))]}
+      />
     </label>
   );
 
@@ -502,12 +501,11 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
                     {sessionSelect(p, false)}
                     <label className="sq-place">
                       <span className="sr-only">Flight for {pairNames(p)}</span>
-                      <select
-                        value={listIndex} aria-label={`Flight for ${pairNames(p)}`}
-                        onChange={(e) => setFlights(movePair(shown, id, Number(e.target.value)))}
-                      >
-                        {shown.map((f, j) => <option key={j} value={j}>Flight {f.name}</option>)}
-                      </select>
+                      <Select
+                        size="sm" value={String(listIndex)} aria-label={`Flight for ${pairNames(p)}`}
+                        onChange={(v) => setFlights(movePair(shown, id, Number(v)))}
+                        options={shown.map((f, j) => ({ value: String(j), label: `Flight ${f.name}` }))}
+                      />
                     </label>
                   </span>
                 </>
