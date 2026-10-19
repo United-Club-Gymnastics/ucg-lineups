@@ -222,6 +222,8 @@ export function CompetitionOrderCard({
 }
 
 const GROUP_PREFIX = 'co-group-';
+/** How many tints the groups cycle through (A, B, C, D, then A again): see `.co-group[data-tint]` in club.css. */
+const GROUP_TINTS = 4;
 
 const apparatusName = (discipline: 'WAG' | 'MAG', code: string): string =>
   APPARATUS[discipline].find((a) => a.code === code)?.name ?? code;
@@ -266,25 +268,15 @@ function GroupBlock({
       ref={setNodeRef}
       aria-label={label}
       data-testid={`co-group-${index}`}
-      style={{
-        border: over ? '2px solid var(--coral-700)' : '1px solid var(--line)',
-        borderRadius: 10,
-        padding: over ? 11 : 12,
-        marginBottom: 14,
-        minWidth: 0,
-        background: isOver ? 'var(--ice-100)' : 'var(--surface)',
-      }}
+      data-tint={index % GROUP_TINTS}
+      className={`co-group${isOver ? ' is-over' : ''}${over ? ' is-over-cap' : ''}`}
+      style={{ marginBottom: 14, minWidth: 0 }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+      {/* Header strip: a deeper step of the group's tint, so each group reads as its own block (tints: club.css). */}
+      <div className="co-group-strip">
         <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{label}</h4>
         <span style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
           {members.length} athlete{members.length === 1 ? '' : 's'}
-        </span>
-        <span
-          style={{ fontSize: 12.5, fontWeight: 700, color: over ? 'var(--coral-700)' : 'var(--ink-soft)' }}
-          title={`Most athletes on any one event in this group (max ${cap})`}
-        >
-          busiest event {busiest} / {cap}
         </span>
         {editable && members.length === 0 && groupCount > 1 && (
           <button type="button" className="btn small ghost" style={{ marginLeft: 'auto', padding: '1px 8px' }} onClick={onRemove}>
@@ -292,6 +284,13 @@ function GroupBlock({
           </button>
         )}
       </div>
+      <div className="co-group-body">
+      <p
+        style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 700, color: over ? 'var(--coral-700)' : 'var(--ink-soft)' }}
+        title={`Most athletes on any one event in this group (max ${cap})`}
+      >
+        busiest event {busiest} / {cap}
+      </p>
 
       {/* Membership: who is in this group, with move-to-group buttons (the non-drag way to change group). */}
       {members.length === 0 ? (
@@ -306,7 +305,7 @@ function GroupBlock({
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 padding: editable && others.length > 0 ? '3px 4px 3px 10px' : '4px 10px',
-                borderRadius: 999, border: '1px solid var(--line)', background: 'var(--ice-100)',
+                borderRadius: 999, border: '1px solid var(--line)', background: 'var(--surface)',
                 color: 'var(--ink)', fontSize: 12.5, maxWidth: '100%', minWidth: 0,
               }}
             >
@@ -341,6 +340,7 @@ function GroupBlock({
           lineBefore={lineBefore}
         />
       )}
+      </div>
     </section>
   );
 }
@@ -427,9 +427,9 @@ function SortableChip({ id, name, order }: { id: string; name: string; order: nu
 
 /** Athlete chip — used inside the sortable list, inside `DragOverlay`
  *  (which renders a plain, non-sortable copy that follows the cursor), and
- *  (`staticChip`) in the locked view-only list. Fill is `--ice-100` (pale)
- *  with `--ink` text — the app's default body-text pairing, so contrast holds
- *  without a bespoke pairing. */
+ *  (`staticChip`) in the locked view-only list. Fill is `--surface` (white, so it
+ *  stands out on every group tint) with `--ink` text — the app's default
+ *  body-text pairing. */
 function Chip({ name, order, dragging, staticChip }: { name: string; order?: number; dragging?: boolean; staticChip?: boolean }) {
   return (
     <div
@@ -440,7 +440,7 @@ function Chip({ name, order, dragging, staticChip }: { name: string; order?: num
         padding: '6px 10px',
         marginBottom: 6,
         borderRadius: 6,
-        background: 'var(--ice-100)',
+        background: 'var(--surface)',
         color: 'var(--ink)',
         fontSize: 13,
         border: '1px solid var(--line)',

@@ -30,3 +30,30 @@ button.club-chip:focus-visible, .club .tab:focus-visible, .club .btn:focus-visib
   .club-head h1 { font-size: 34px; }
   .club-card { padding: 10px; }
 }
+
+/* Competition-order groups: each group is its own tinted block (A, B, C, D, then the cycle repeats). Light fills only: the pale
+   brand accents are fills, never text, and every text pairing below is navy on the tint. Measured (WCAG, 2026-10-18):
+     fill       A #eef5f7 (--ice-100)   B #e4e8f6 (purple 30%)   C #faebbc (--gold-100)   D #d9e7ea (blue-green 40%)
+     strip      A #dbebee (--ice-200)   B #d1d8f2 (purple 55%)   C #f9e092 (gold 50%)     D #c8dde1 (blue-green 60%)
+     navy-800 text on fill 13.06 / 11.78 / 12.12 / 11.37; on strip 11.75 / 10.16 / 11.05 / 10.21
+     soft text (navy-700, see --ink-soft below) on fill 10.06 / 9.08 / 9.34 / 8.76; on strip 9.06 / 7.83 / 8.51 / 7.87
+     coral-700 "over the cap" text on fill 5.41 / 4.88 / 5.02 / 4.71
+     drop line (navy-800) on fill 13.06 / 11.78 / 12.12 / 11.37; white chips (navy text 14.6) stand out on every tint. */
+.co-group {
+  --g-fill: #eef5f7; --g-strip: #dbebee; --g-edge: var(--bluegreen);
+  /* --ink-soft (#5a6a78) is 4.4-5.1:1 on these tints, so inside a group the quiet text steps up to navy-700. */
+  --ink-soft: var(--navy-700);
+  background: var(--g-fill);
+  border: 1px solid var(--navy-600);
+  border-top: 4px solid var(--g-edge);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.co-group[data-tint='1'] { --g-fill: #e4e8f6; --g-strip: #d1d8f2; --g-edge: var(--purple); }
+.co-group[data-tint='2'] { --g-fill: #faebbc; --g-strip: #f9e092; --g-edge: var(--gold); }
+.co-group[data-tint='3'] { --g-fill: #d9e7ea; --g-strip: #c8dde1; --g-edge: var(--bluegreen); }
+.co-group-strip { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 8px 12px; background: var(--g-strip); border-bottom: 1px solid var(--navy-600); color: var(--ink); }
+.co-group-body { padding: 10px 12px 12px; }
+/* Dragging over a group: a navy inner outline, visible on every tint (the fill alone would not show on the ice tint). */
+.co-group.is-over { box-shadow: inset 0 0 0 2px var(--navy-800); }
+.co-group.is-over-cap { border: 2px solid var(--coral-700); border-top: 4px solid var(--coral-700); }
