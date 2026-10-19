@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { auth, db } from '../lib/firebase';
+import { Tabs } from '../components/ui';
 import ClubsTable from '../components/clubs/ClubsTable';
-import ReminderPanel from '../components/clubs/ReminderPanel';
+import ReminderPanel, { type ClubsView } from '../components/clubs/ReminderPanel';
 import { buildClubRows } from '../lib/club-overview';
 import { loadClubsScreenData, regenerateClubLink, saveClubEmails, saveOrderDeadline, watchClubsLive, type ClubsLive, type ClubsScreenData, type EmailLogEntry } from '../lib/data/email-store';
 import { dateToPacific, formatDeadline, pacificToDate } from '../lib/pacific';
@@ -53,6 +54,12 @@ export default function AdminClubs({ meetId, pauseMs }: { meetId: string; pauseM
   );
 }
 
+const VIEWS: { id: ClubsView; label: string }[] = [
+  { id: 'clubs', label: 'Clubs' },
+  { id: 'email', label: 'Who to email' },
+  { id: 'message', label: 'Message & preview' },
+];
+
 export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connecting', onRetryLive, pauseMs }: {
   meetId: string;
   data: ClubsScreenData;
@@ -62,6 +69,7 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
   onRetryLive?: () => void;
   pauseMs?: number;
 }) {
+  const [view, setView] = useState<ClubsView>('clubs');
   const [localClubs, setClubs] = useState(data.clubs);
   const [log, setLog] = useState<EmailLogEntry[]>(data.log);
   const [deadline, setDeadline] = useState<Date | null>(data.deadline);
@@ -75,6 +83,8 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
   return (
     <div className="cl">
       <LiveStatus status={liveStatus} onRetry={onRetryLive} />
+      <Tabs pill tabs={VIEWS} active={view} onChange={setView} />
+      <div hidden={view !== 'clubs'} className="cl-view">
       <DeadlineCard meetId={meetId} deadline={deadline} onSaved={setDeadline} />
       <ClubsTable
         rows={rows}
@@ -91,7 +101,10 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
           return res;
         }}
       />
+      </div>
       <ReminderPanel
+        view={view}
+        onView={setView}
         meetId={meetId}
         rows={rows}
         templates={data.templates}

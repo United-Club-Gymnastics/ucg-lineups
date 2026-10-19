@@ -24,6 +24,8 @@ function data(over: Partial<ClubsScreenData> = {}): ClubsScreenData {
 }
 
 const fetchMock = vi.fn();
+/** The page has three pills (Julia 2026-10-18): Clubs, Who to email, Message & preview. */
+const pill = (user: ReturnType<typeof userEvent.setup>, name: 'Clubs' | 'Who to email' | 'Message & preview') => user.click(screen.getByRole('button', { name }));
 async function open(d = data()) {
   store.loadClubsScreenData.mockResolvedValue(d);
   const user = userEvent.setup();
@@ -132,6 +134,7 @@ describe('Deadline', () => {
 describe('Reminders', () => {
   it('shows the two lists with counts and the clubs with no email separately', async () => {
     const user = await open();
+    await pill(user, 'Who to email');
     expect(screen.getByRole('button', { name: 'Still A–Z (1)' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Needs to decide a split (1)' })).toBeInTheDocument();
     const list = screen.getByRole('list', { name: /Still A–Z reminder/ });
@@ -145,6 +148,7 @@ describe('Reminders', () => {
 
   it('previews From, To (test alias + struck-through real address), Subject, the HTML and the text version', async () => {
     const user = await open();
+    await pill(user, 'Message & preview');
     const head = screen.getByRole('heading', { name: 'Preview' }).parentElement!;
     expect(head).toHaveTextContent('United Club Gymnastics <info@unitedclubgymnastics.org>');
     expect(within(head).getByText('jzsharpe+alpha-gymnastics@gmail.com')).toBeInTheDocument();
@@ -157,12 +161,15 @@ describe('Reminders', () => {
     expect(frame.getAttribute('srcdoc')).toContain('Fri Mar 26, 11:59 PM PT');
     expect(frame.getAttribute('srcdoc')).toContain('/#/c/tokAlpha');
     expect(head).toHaveTextContent('Plain-text version');
+    await pill(user, 'Who to email');
     await user.click(screen.getByRole('radio', { name: 'nssharpe+…@gmail.com' }));
+    await pill(user, 'Message & preview');
     expect(within(head).getByText('nssharpe+alpha-gymnastics@gmail.com')).toBeInTheDocument();
   });
 
   it('edited wording shows in the preview at once and saves to emailSettings; Reset restores the default', async () => {
     const user = await open();
+    await pill(user, 'Message & preview');
     const subject = screen.getByLabelText('Subject');
     await user.clear(subject);
     await user.type(subject, 'Hello {{club}');
@@ -176,7 +183,7 @@ describe('Reminders', () => {
 
 describe('Sending (test mode, Gmail mocked)', () => {
   it('has a disabled real-send control with the note, and send needs a Gmail connection', async () => {
-    await open();
+    await pill(await open(), 'Who to email');
     const real = screen.getByRole('checkbox', { name: /Send to real club addresses/ });
     expect(real).toBeDisabled();
     expect(screen.getByText("Needs Julia's go-ahead for each send")).toBeInTheDocument();
@@ -185,6 +192,7 @@ describe('Sending (test mode, Gmail mocked)', () => {
 
   it('sends only to test aliases, shows progress and per-recipient results, logs the send, then skips the club the next time', async () => {
     const user = await open();
+    await pill(user, 'Who to email');
     await user.click(screen.getByRole('button', { name: 'Connect Gmail' }));
     expect(await screen.findByText('Connected as admin@unitedclubgymnastics.org.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Send 1 test email' }));
@@ -209,6 +217,7 @@ describe('Sending (test mode, Gmail mocked)', () => {
 
   it('lets the admin pick nssharpe, and a club can be unticked', async () => {
     const user = await open();
+    await pill(user, 'Who to email');
     await user.click(screen.getByRole('radio', { name: 'nssharpe+…@gmail.com' }));
     await user.click(screen.getByRole('button', { name: 'Connect Gmail' }));
     await screen.findByText(/Connected as/);
@@ -223,6 +232,7 @@ describe('Sending (test mode, Gmail mocked)', () => {
   it('reports a failed send per recipient and does not log it', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 403, json: async () => ({ error: { message: 'API off' } }) });
     const user = await open();
+    await pill(user, 'Who to email');
     await user.click(screen.getByRole('button', { name: 'Connect Gmail' }));
     await screen.findByText(/Connected as/);
     await user.click(screen.getByRole('button', { name: 'Send 1 test email' }));
@@ -234,7 +244,7 @@ describe('Sending (test mode, Gmail mocked)', () => {
 
   it('shows the existing log, newest first, and skips clubs the log says were sent today', async () => {
     const earlier = { id: 'old', template: 'az' as const, clubId: 'alpha-gymnastics', club: 'Alpha Gymnastics', to: 'jzsharpe+alpha-gymnastics@gmail.com', subject: 'S', at: new Date(), by: 'x@unitedclubgymnastics.org', mode: 'test' as const };
-    await open(data({ log: [earlier] }));
+    await pill(await open(data({ log: [earlier] })), 'Who to email');
     expect(screen.getByRole('button', { name: 'Send 0 test emails' })).toBeDisabled();
     expect(screen.getByText(/sent today/)).toBeInTheDocument();
     expect(screen.getByText('x@unitedclubgymnastics.org')).toBeInTheDocument();
@@ -278,14 +288,16 @@ describe('Live updates', () => {
   });
 
   it('a club changing its order updates the table and both reminder lists with no refresh', async () => {
-    await open();
+    const user = await open();
     act(() => live.handlers!.onChange(snapshot()));
     const row = () => screen.getByRole('row', { name: /Alpha Gymnastics/ });
     expect(within(row()).getByText('Still A–Z (default)')).toBeInTheDocument();
+    await pill(user, 'Who to email');
     expect(screen.getByRole('button', { name: 'Still A–Z (1)' })).toBeInTheDocument();
     act(() => live.handlers!.onChange(snapshot({ saved: changed() })));
-    expect(within(row()).queryByText('Still A–Z (default)')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Still A–Z (0)' })).toBeInTheDocument();
+    await pill(user, 'Clubs');
+    expect(within(row()).queryByText('Still A–Z (default)')).not.toBeInTheDocument();
     expect(store.loadClubsScreenData).toHaveBeenCalledTimes(1);
   });
 
@@ -307,6 +319,7 @@ describe('Live updates', () => {
   it('holds the recipient list steady from the moment Send is pressed until it finishes', async () => {
     const user = await open();
     act(() => live.handlers!.onChange(snapshot()));
+    await pill(user, 'Who to email');
     await user.click(screen.getByRole('button', { name: 'Connect Gmail' }));
     await screen.findByText('Connected as admin@unitedclubgymnastics.org.');
     await user.click(screen.getByRole('button', { name: 'Send 1 test email' }));
@@ -326,6 +339,7 @@ describe('Live updates', () => {
   it('releases the list when the confirmation is cancelled', async () => {
     const user = await open();
     act(() => live.handlers!.onChange(snapshot()));
+    await pill(user, 'Who to email');
     await user.click(screen.getByRole('button', { name: 'Connect Gmail' }));
     await screen.findByText('Connected as admin@unitedclubgymnastics.org.');
     await user.click(screen.getByRole('button', { name: 'Send 1 test email' }));
@@ -340,6 +354,7 @@ describe('Clubs & email: list conveniences (Julia 2026-10-18)', () => {
 
   it('Uncheck all and Check all tick every club on the current list', async () => {
     const user = await open();
+    await pill(user, 'Who to email');
     const box = screen.getByRole('checkbox', { name: 'Alpha Gymnastics' });
     expect(screen.getByRole('button', { name: 'Check all' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Uncheck all' }));
@@ -357,6 +372,7 @@ describe('Clubs & email: list conveniences (Julia 2026-10-18)', () => {
     Element.prototype.scrollIntoView = spy;
     try {
       const user = await open();
+      await pill(user, 'Who to email');
       await user.click(screen.getByRole('button', { name: 'Preview Alpha Gymnastics' }));
       const heading = screen.getByRole('heading', { name: 'Preview' });
       await waitFor(() => expect(spy.mock.contexts).toContain(heading));
@@ -364,5 +380,36 @@ describe('Clubs & email: list conveniences (Julia 2026-10-18)', () => {
     } finally {
       Element.prototype.scrollIntoView = orig;
     }
+  });
+});
+
+describe('Clubs & Emails: pills (Julia 2026-10-18)', () => {
+  beforeEach(() => { live.handlers = null; });
+
+  it('opens on Clubs and shows one pill at a time; ticks and the chosen reminder survive switching', async () => {
+    const user = await open();
+    expect(screen.getByRole('button', { name: 'Clubs' })).toHaveClass('active');
+    expect(screen.getByRole('row', { name: /Alpha Gymnastics/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Reminders' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Preview' })).toBeNull();
+    await pill(user, 'Who to email');
+    expect(screen.queryByRole('row', { name: /Alpha Gymnastics/ })).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: 'Alpha Gymnastics' }));
+    await user.click(screen.getByRole('button', { name: 'Needs to decide a split (1)' }));
+    await pill(user, 'Message & preview');
+    expect(screen.getByRole('heading', { name: /Message: Needs to decide a split/ })).toBeInTheDocument();
+    await user.click(within(screen.getByRole('group', { name: 'Which message' })).getByRole('button', { name: 'Still A–Z (1)' }));
+    expect(screen.getByRole('heading', { name: /Message: Still A–Z/ })).toBeInTheDocument();
+    await pill(user, 'Who to email');
+    expect(screen.getByRole('checkbox', { name: 'Alpha Gymnastics' })).not.toBeChecked();
+  });
+
+  it('Preview on a club switches to Message & preview showing that club', async () => {
+    const user = await open();
+    await pill(user, 'Who to email');
+    await user.click(screen.getByRole('button', { name: 'Preview Alpha Gymnastics' }));
+    expect(await screen.findByRole('heading', { name: 'Preview' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Message & preview' })).toHaveClass('active');
+    expect(screen.getByRole('heading', { name: 'Preview' }).parentElement).toHaveTextContent('jzsharpe+alpha-gymnastics@gmail.com');
   });
 });

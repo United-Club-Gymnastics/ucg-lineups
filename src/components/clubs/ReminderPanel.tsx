@@ -16,7 +16,13 @@ function devGmailToken(): string | undefined {
   return import.meta.env.DEV ? (window as unknown as { __ucgGmailToken?: string }).__ucgGmailToken : undefined;
 }
 
-export default function ReminderPanel({ meetId, rows: liveRows, templates: savedTemplates, meetName, deadline, linkBase, adminEmail, log: liveLog, onLogged, pauseMs }: {
+/** The page's three pills (Julia 2026-10-18). The panel stays mounted across them so ticks, choice and preview survive. */
+export type ClubsView = 'clubs' | 'email' | 'message';
+
+export default function ReminderPanel({ meetId, rows: liveRows, templates: savedTemplates, meetName, deadline, linkBase, adminEmail, log: liveLog, onLogged, pauseMs, view = 'email', onView }: {
+  /** Which pill is showing: 'email' shows the lists, Send and the log; 'message' the wording and preview. */
+  view?: ClubsView;
+  onView?: (v: ClubsView) => void;
   meetId: string;
   rows: ClubRow[];
   templates: Templates;
@@ -45,11 +51,13 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
   // "Preview" on a club line shows that club's message and jumps down to it (focus moves there for keyboard users).
   const showPreview = (clubId: string) => {
     setPreviewId(clubId);
-    requestAnimationFrame(() => {
+    onView?.('message');
+    // Two frames: the Message & preview pill has to be shown before it can scroll into view.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       const h = document.getElementById('cl-prev-h');
       h?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
       h?.focus({ preventScroll: true });
-    });
+    }));
   };
   const [skipToday, setSkipToday] = useState(true);
   const [who, setWho] = useState<TestWho>('jz');
@@ -143,7 +151,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
 
   return (
     <>
-      <section className="adm-card" aria-labelledby="cl-rem-h">
+      <section className="adm-card" aria-labelledby="cl-rem-h" hidden={view !== 'email'}>
         <div className="cl-head">
           <h2 className="display" id="cl-rem-h">Reminders</h2>
           <span className="badge warn">Test mode: real club addresses are off</span>
@@ -202,8 +210,16 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-tpl-h">
+      <section className="adm-card" aria-labelledby="cl-tpl-h" hidden={view !== 'message'}>
         <h2 className="display" id="cl-tpl-h">Message: {REMINDER_LABEL[kind]}</h2>
+        {/* The same reminder switch as on "Who to email", so both messages can be edited and previewed here. */}
+        <div className="cl-seg" role="group" aria-label="Which message">
+          {KINDS.map((k) => (
+            <button key={k} type="button" aria-pressed={kind === k} onClick={() => { setKind(k); setPreviewId(''); setSummary(null); }}>
+              {REMINDER_LABEL[k]} ({reminders[k].length})
+            </button>
+          ))}
+        </div>
         <p className="adm-muted">Placeholders: {PLACEHOLDERS.map((p) => <code key={p} className="cl-ph">{p}</code>)}. <code className="cl-ph">{'{sessions}'}</code> becomes a bulleted list. Blank line = new paragraph; <code className="cl-ph">**bold**</code>.</p>
         <label className="cl-field">
           <span>Subject</span>
@@ -221,7 +237,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         </div>
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-prev-h">
+      <section className="adm-card" aria-labelledby="cl-prev-h" hidden={view !== 'message'}>
         <h2 className="display" id="cl-prev-h" tabIndex={-1}>Preview</h2>
         {!preview || !rendered ? (
           <p className="adm-muted">No clubs on this list.</p>
@@ -251,7 +267,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-send-h">
+      <section className="adm-card" aria-labelledby="cl-send-h" hidden={view !== 'email'}>
         <h2 className="display" id="cl-send-h">Send</h2>
         <div className="adm-banner warn" role="note">
           <strong>Test mode.</strong> Every message goes to a test alias, never to a club. Sent from your Gmail as {FROM.address}.
@@ -296,7 +312,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-log-h">
+      <section className="adm-card" aria-labelledby="cl-log-h" hidden={view !== 'email'}>
         <h2 className="display" id="cl-log-h">Send log</h2>
         {logRows.length === 0 ? <p className="adm-muted">Nothing sent yet.</p> : (
           <table className="cl-table cl-log">
