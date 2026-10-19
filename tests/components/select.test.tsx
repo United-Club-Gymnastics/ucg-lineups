@@ -1,5 +1,5 @@
 // The styled Select (ported from nationals-tools select.js): ARIA listbox pattern, keyboard, selection, focus, labels, placement.
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -264,5 +264,34 @@ describe('Select: placement', () => {
     expect(list().style.bottom).toBe('84px');
     expect(list().style.top).toBe('');
     vi.restoreAllMocks(); vi.unstubAllGlobals();
+  });
+});
+
+describe('Select: scrolling a long list', () => {
+  it('scrolling inside the open list neither re-places it nor snaps back to the highlighted option', async () => {
+    const user = userEvent.setup();
+    const many: SelectOption[] = Array.from({ length: 30 }, (_, i) => ({ value: `s${i + 1}`, label: `Session ${i + 1}` }));
+    const spy = vi.fn();
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = spy;
+    try {
+      render(<Harness options={many} initial="s1" />);
+      await user.click(box());
+      const list = screen.getByRole('listbox');
+      const style = list.getAttribute('style');
+      const calls = spy.mock.calls.length;
+      await act(async () => {
+        list.scrollTop = 400;
+        list.dispatchEvent(new Event('scroll', { bubbles: false }));
+        await new Promise((r) => setTimeout(r, 20));
+        list.dispatchEvent(new Event('scroll', { bubbles: false }));
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(spy.mock.calls.length).toBe(calls);
+      expect(list.getAttribute('style')).toBe(style);
+      expect(screen.getByRole('listbox')).toBe(list);
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
   });
 });

@@ -103,8 +103,10 @@ export default function Select({
   useEffect(() => {
     if (!open) return;
     const onMove = () => place();
+    // Scrolling the list itself must not re-place it (that re-render snapped it back to the highlighted option).
+    const onScroll = (e: Event) => { if (!listRef.current?.contains(e.target as Node)) place(); };
     window.addEventListener('resize', onMove);
-    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('scroll', onScroll, true);
     // Escape is handled here, in the capture phase on the window, so a dialog around the box (which also listens for Escape)
     // does not close with the list.
     const onKey = (e: KeyboardEvent) => {
@@ -117,15 +119,17 @@ export default function Select({
     window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('resize', onMove);
-      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('keydown', onKey, true);
     };
   }, [open, place, closeList]);
-  // Keep the highlighted option in view.
+  // Keep the highlighted option in view when it changes (keyboard, typeahead) or the list first opens — not on every
+  // re-placement, so the mouse wheel / trackpad can scroll the list freely.
+  const placed = pos !== null;
   useEffect(() => {
-    if (!open || active < 0) return;
+    if (!open || !placed || active < 0) return;
     document.getElementById(`${listId}-${active}`)?.scrollIntoView?.({ block: 'nearest' });
-  }, [open, active, listId, pos]);
+  }, [open, placed, active, listId]);
   // A disabled box (or one that lost its options) shows no list, whatever `open` says.
   const showList = open && !disabled && options.length > 0;
 
