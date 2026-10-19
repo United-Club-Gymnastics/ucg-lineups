@@ -136,31 +136,13 @@ function ClubOrders({ token, link, meets }: { token: string; link: ClubLinkDoc; 
       ) : (
         <>
           {list.length > 1 && (
-            list.length <= 4 ? (
-              <ul className="club-meets" aria-label="Your meets">
-                {list.map(({ meetId: id, entry }) => (
-                  <li key={id}>
-                    <button
-                      type="button"
-                      className={`club-chip club-meet${id === meetId ? ' active' : ''}`}
-                      aria-pressed={id === meetId}
-                      onClick={() => setMeetId(id)}
-                    >
-                      <span className="club-chip-label">{meetName(id, entry)}</span>
-                      <span className="club-chip-meta">{deadlineText(meets[id]?.deadline ?? null, isLocked(id))}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="club-meet-select">
-                <label htmlFor="club-meet">Meet</label>
-                <Select
-                  id="club-meet" value={meetId} onChange={setMeetId}
-                  options={list.map(({ meetId: id, entry }) => ({ value: id, label: `${meetName(id, entry)} · ${deadlineText(meets[id]?.deadline ?? null, isLocked(id))}` }))}
-                />
-              </div>
-            )
+            <div className="club-meet-select">
+              <label htmlFor="club-meet">Meet</label>
+              <Select
+                id="club-meet" value={meetId} onChange={setMeetId}
+                options={list.map(({ meetId: id, entry }) => ({ value: id, label: `${meetName(id, entry)} · ${deadlineText(meets[id]?.deadline ?? null, isLocked(id))}` }))}
+              />
+            </div>
           )}
 
           {locked ? (

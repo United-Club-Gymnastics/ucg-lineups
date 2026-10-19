@@ -77,7 +77,7 @@ comes from SF Events and goes stale).
 
 - **One unguessable link per club across ALL meets** (Julia 2026-10-19): `/#/c/<token>` (see §7a). It covers **all of the club's sessions** across
   MAG and WAG in each meet; each session shows its own status. **Meet switcher:** the page lists the club's meets (not archived), newest first,
-  newest selected by default; pills up to four meets, a styled `Select` beyond that, each showing the meet's name and deadline. The sessions, statuses,
+  newest selected by default; a styled `Select` dropdown (like the admin's), each showing the meet's name and deadline. The sessions, statuses,
   levels and autosave below are for the selected meet only; a meet past ITS deadline is read-only (the club can still switch to and edit another). T&T sessions show "Set by UCG" (clubs never order T&T).
 - Order model = the platform's competition **groups** (`competition-order.ts`): a level's groups are
   the same athletes on every apparatus; only the order differs per apparatus. Per-apparatus cap

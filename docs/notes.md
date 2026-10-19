@@ -251,3 +251,7 @@
 - Rotation sheet names (Julia 2026-10-19): a row with 1 or 2 athletes, and every independent row, lists the athletes (A–Z) on a smaller second line under "Club – Level". Those rows are 1.6 layout units tall, counted in the page-split so a long session still breaks at a squad boundary.
 
 - Rotation sheet rows lead with the level code: `Dev – Alpha Gymnastics · Group B` (Julia 2026-10-19).
+
+## Removed "Bring in earlier data"; club page meet dropdown (2026-10-19)
+- Julia ran "Bring in earlier data" once and asked to hide it. The button, dialog, planner and store (`LegacyCopyDialog`, `legacy-copy.ts`, `legacy-store.ts`) and their unit tests are deleted. The old top-level data is untouched; the admin-only rule still covers it (its rules test stays).
+- The club page meet picker is always the styled `Select` when a club is in more than one meet (the pills for up to four meets are gone). One meet still shows just its name.

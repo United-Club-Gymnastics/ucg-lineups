@@ -198,16 +198,19 @@ describe('meet switcher (one private link across meets)', () => {
     };
   };
 
-  it('lists the meets with their deadlines, newest selected by default, and shows that meet\'s statuses', async () => {
+  it('a dropdown lists the meets with their deadlines, newest selected by default, and shows that meet\'s statuses', async () => {
+    const user = userEvent.setup();
     setup(5, twoMeets());
-    const meets = await screen.findByRole('list', { name: 'Your meets' });
-    const [finals, prelims] = within(meets).getAllByRole('button');
+    const box = await screen.findByRole('combobox', { name: 'Meet' });
+    expect(box).toHaveTextContent('Finals');
+    expect(box).toHaveTextContent(/Locks /);
+    await user.click(box);
+    const [finals, prelims] = screen.getAllByRole('option');
     expect(finals).toHaveTextContent('Finals');
-    expect(finals).toHaveTextContent(/Locks /);
+    expect(finals).toHaveAttribute('aria-selected', 'true');
     expect(prelims).toHaveTextContent('Prelims');
     expect(prelims).toHaveTextContent('Locked');
-    expect(finals).toHaveAttribute('aria-pressed', 'true');
-    expect(prelims).toHaveAttribute('aria-pressed', 'false');
+    await user.keyboard('{Escape}');
     expect(screen.getByRole('button', { name: /Session 1/ })).toHaveTextContent('Order set');
     expect(screen.queryByTestId('club-locked')).toBeNull();
   });
@@ -215,12 +218,12 @@ describe('meet switcher (one private link across meets)', () => {
   it('switching shows the other meet: its own statuses and its own lock; Prelims is read-only', async () => {
     const user = userEvent.setup();
     setup(5, twoMeets());
-    await screen.findByRole('list', { name: 'Your meets' });
-    await user.click(screen.getByRole('button', { name: /Prelims/ }));
+    await screen.findByRole('combobox', { name: 'Meet' });
+    await choose(user, screen.getByRole('combobox', { name: 'Meet' }), 'prelims');
     expect(screen.getByRole('button', { name: /Session 1/ })).toHaveTextContent('Still A–Z (default)');
     expect(screen.getByTestId('club-locked')).toHaveTextContent('The order deadline has passed for Prelims');
     expect(screen.queryByRole('button', { name: '+ Add group' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /Finals/ }));
+    await choose(user, screen.getByRole('combobox', { name: 'Meet' }), 'finals');
     expect(screen.queryByTestId('club-locked')).toBeNull();
     expect(screen.getByRole('button', { name: /Session 1/ })).toHaveTextContent('Order set');
     expect(screen.getByRole('button', { name: '+ Add group' })).toBeInTheDocument();
@@ -231,27 +234,27 @@ describe('meet switcher (one private link across meets)', () => {
     const t = twoMeets();
     t.meets.prelims.deadline = new Date(Date.now() + day); // both open this time
     setup(5, t);
-    await screen.findByRole('list', { name: 'Your meets' });
+    await screen.findByRole('combobox', { name: 'Meet' });
     await user.click(screen.getByRole('button', { name: '+ Add group' }));
     await waitFor(() => expect(store.saveLevelOrder).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(store.saveLevelOrder.mock.calls[0].slice(1, 4)).toEqual(['tok123', 'finals', 's1-green__Dev']);
-    await user.click(screen.getByRole('button', { name: /Prelims/ }));
+    await choose(user, screen.getByRole('combobox', { name: 'Meet' }), 'prelims');
     await user.click(screen.getByRole('button', { name: '+ Add group' }));
     await waitFor(() => expect(store.saveLevelOrder).toHaveBeenCalledTimes(2), { timeout: 2000 });
     expect(store.saveLevelOrder.mock.calls[1].slice(1, 4)).toEqual(['tok123', 'prelims', 's1-green__Dev']);
     // The change made in Prelims did not touch Finals' view.
-    await user.click(screen.getByRole('button', { name: /Finals/ }));
+    await choose(user, screen.getByRole('combobox', { name: 'Meet' }), 'finals');
     expect(screen.getByRole('button', { name: /Session 1/ })).toHaveTextContent('Order set');
   });
 
   it('a club in one meet only gets no switcher, just the meet name', async () => {
     setup(5);
     await screen.findByRole('heading', { name: 'Invented Gymnastics' });
-    expect(screen.queryByRole('list', { name: 'Your meets' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Meet' })).toBeNull();
     expect(screen.getByText('NE Regionals')).toBeInTheDocument();
   });
 
-  it('more than four meets use a dropdown instead of pills', async () => {
+  it('many meets still use the same dropdown', async () => {
     const user = userEvent.setup();
     const meets: Record<string, MeetLinkEntry> = {};
     const per: Record<string, MeetSetup> = {};
@@ -259,7 +262,6 @@ describe('meet switcher (one private link across meets)', () => {
     setup(5, { link: { clubId: 'c', clubName: 'Invented Gymnastics', meets }, meets: per });
     const box = await screen.findByRole('combobox', { name: 'Meet' });
     expect(box).toHaveTextContent('Meet 4');
-    expect(screen.queryByRole('list', { name: 'Your meets' })).toBeNull();
     await choose(user, box, 'm1');
     expect(screen.getByRole('combobox', { name: 'Meet' })).toHaveTextContent('Meet 1');
   });

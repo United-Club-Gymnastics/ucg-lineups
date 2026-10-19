@@ -4,8 +4,6 @@ import { isDomainAdmin, onUser, signInAdmin, signOutAdmin } from '../lib/firebas
 import { Tabs } from '../components/ui';
 import MeetSwitcher, { FirstMeet } from '../components/MeetSwitcher';
 import { db } from '../lib/firebase';
-import LegacyCopyDialog from '../components/LegacyCopyDialog';
-import { applyLegacyOps, hasLegacyData, loadLegacy, loadMeetState } from '../lib/data/legacy-store';
 import { createMeet, listMeets, renameMeet, setMeetArchived, type MeetInfo } from '../lib/data/meet-store';
 import UpgradeLinksDialog from '../components/UpgradeLinksDialog';
 import { applyUpgrade, hasOldStyleLinks, loadUpgradePlan } from '../lib/data/club-links-upgrade-store';
@@ -42,8 +40,6 @@ export default function AdminLanding() {
   const [meets, setMeets] = useState<MeetInfo[] | null>(null);
   const [meetsError, setMeetsError] = useState('');
   const [meetId, setMeetId] = useState<string | null>(null);
-  const [legacy, setLegacy] = useState(false);
-  const [legacyOpen, setLegacyOpen] = useState(false);
   const [oldLinks, setOldLinks] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   // null = not known yet (the tab shows until we know). Re-checked on each tab change so a T&T import shows it straight away.
@@ -71,8 +67,6 @@ export default function AdminLanding() {
     setMeetsError(e instanceof Error ? e.message : 'Could not load the meets.');
   }), []);
   useEffect(() => { if (isAdmin) void loadMeets(); }, [isAdmin, loadMeets]);
-  // Cheap existence check; the button only shows when there is earlier data to bring in.
-  useEffect(() => { if (isAdmin) void hasLegacyData(db).then(setLegacy); }, [isAdmin]);
   // The "Upgrade club links" action shows only while links in the old per-meet shape exist.
   useEffect(() => { if (isAdmin) void hasOldStyleLinks(db).then(setOldLinks); }, [isAdmin]);
 
@@ -137,23 +131,6 @@ export default function AdminLanding() {
       )}
       {!meetsError && meets === null && <p role="status">Loading meets…</p>}
       {meets && visibleMeets(meets).length === 0 && <FirstMeet onCreate={onCreateMeet} />}
-      {meets && visibleMeets(meets).length === 0 && legacy && (
-        <p><button className="btn ghost" type="button" onClick={() => setLegacyOpen(true)}>Bring in earlier data</button></p>
-      )}
-      {meets && legacyOpen && (
-        <LegacyCopyDialog
-          meets={visibleMeets(meets)}
-          defaultMeetId={meetId}
-          api={{
-            load: () => loadLegacy(db),
-            loadMeet: (id) => loadMeetState(db, id),
-            createMeet: (name) => createMeet(db, name),
-            apply: (ops, onProgress) => applyLegacyOps(db, ops, onProgress),
-          }}
-          onClose={() => setLegacyOpen(false)}
-          onDone={(id) => { setLegacyOpen(false); void loadMeets(id); }}
-        />
-      )}
       {meets && upgradeOpen && (
         <UpgradeLinksDialog
           api={upgradeApi}
@@ -175,7 +152,6 @@ export default function AdminLanding() {
               await unpublishMeetFromLinks(db, meetId);
               await loadMeets(null);
             }}
-            onBringInData={legacy ? () => setLegacyOpen(true) : undefined}
             onUpgradeLinks={oldLinks ? () => setUpgradeOpen(true) : undefined}
           />
           <nav aria-label="Admin sections" className="adm-tabs">
