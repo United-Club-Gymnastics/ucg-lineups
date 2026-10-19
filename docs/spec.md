@@ -75,8 +75,10 @@ comes from SF Events and goes stale).
 
 ## 3. Club page (private link)
 
-- One unguessable link per club **per meet**: `/#/c/<token>` (see §7a). It covers **all of the club's sessions** across
-  MAG and WAG; each session shows its own status. T&T sessions show "Set by UCG" (clubs never order T&T).
+- **One unguessable link per club across ALL meets** (Julia 2026-10-19): `/#/c/<token>` (see §7a). It covers **all of the club's sessions** across
+  MAG and WAG in each meet; each session shows its own status. **Meet switcher:** the page lists the club's meets (not archived), newest first,
+  newest selected by default; pills up to four meets, a styled `Select` beyond that, each showing the meet's name and deadline. The sessions, statuses,
+  levels and autosave below are for the selected meet only; a meet past ITS deadline is read-only (the club can still switch to and edit another). T&T sessions show "Set by UCG" (clubs never order T&T).
 - Order model = the platform's competition **groups** (`competition-order.ts`): a level's groups are
   the same athletes on every apparatus; only the order differs per apparatus. Per-apparatus cap
   12 WAG / 15 MAG inside a group.
@@ -88,8 +90,8 @@ comes from SF Events and goes stale).
   groups counts as deciding the split.
 - When a level has more athletes than fit one squad (busiest apparatus > cap), the club sees the
   suggested split (`splitEvenly`) and **Keep this split**.
-- Orders lock at the order deadline (enforced in rules); the host can still edit afterwards.
-- The host can regenerate a club's token (old link stops working).
+- Orders lock at the selected meet's order deadline (enforced in rules, per meet); the host can still edit afterwards.
+- The host can regenerate a club's token (old link stops working; the new one works for all its meets).
 
 ### Club status (derived, per session)
 - **Needs to decide a split** — a level is over one squad's cap and the club hasn't kept/changed the split.
@@ -238,8 +240,8 @@ Collation for all sessions: **scorecards by location** (the meet's location orde
 The **Clubs & email** tab works on the selected meet (§7a).
 
 - **Order deadline:** date + time in Pacific, saved to `meets/{id}/settings/meet.orderDeadline` as a Timestamp (it can be removed: no deadline).
-- **Clubs table**, one row per club: full name; per session the levels with athlete counts and the status the club sees (§3); last change (latest save of the club's orders); contact emails (editable inline, saved to `meets/{id}/clubs/{clubId}.emails`); the private link with **Copy** and **Regenerate link**. Filters: by status (or "No email") and a text search (club name or email).
-- **Regenerate link** asks first, then: copies the club's saved orders to the new token, publishes the new `clubLinks/{new}`, points the club at the new token, and only then deletes `clubLinks/{old}`. A failure before the last step leaves the old link working and nothing lost.
+- **Clubs table**, one row per club: full name; per session the levels with athlete counts and the status the club sees (§3) **in the selected meet** (status and reminders stay per meet); last change (latest save of the club's orders in this meet); contact emails (editable inline, saved to `meets/{id}/clubs/{clubId}.emails`); the club's one private link (the same for every meet, and the one the email `{link}` uses) with **Copy** and **Regenerate link**. Above the table: **Start orders from another meet** (§7b). Filters: by status (or "No email") and a text search (club name or email).
+- **Regenerate link** asks first, then: copies the club's saved orders **for every meet** (archived ones too) to the new token, writes `clubLinks/{new}` as a copy of the old link document (all the club's meets) with this meet refreshed, points the club at the new token (`clubTokens/{clubId}`), and only then deletes `clubLinks/{old}`. A failure before the last step leaves the old link working and nothing lost.
 - **Two reminder lists** (pure, `src/lib/reminders.ts`): **Still A–Z** = clubs with at least one MAG/WAG session still default and no split pending; the email lists only those sessions. **Needs to decide a split** = clubs with a level over one squad's cap they haven't kept or changed; they get only the split email, naming the levels that are too big (and are not on the A–Z list). Clubs with no contact email are listed apart ("No email — add one above") and are never sent to. T&T, "Nothing to order" and "Order set" get no reminder.
 - **Templates:** editable subject and body for each reminder, saved to `meets/{id}/emailSettings/main`, with `{club}`, `{sessions}`, `{levels}`, `{deadline}`, `{link}`, `{meet}`. Defaults are the prototype's wording (plain, friendly, A–Z is fine if they do nothing, keep the link private). Body markup: blank line = paragraph, `- ` bullets, `**bold**`, bare links. Per-club preview shows From, To (test alias plus the real address struck through) and Subject, the HTML body and the plain-text alternative. Sent messages are multipart/alternative.
 - **Test mode is the default and the only mode until Julia approves real sends:** every recipient is rewritten to `jzsharpe+<club id>@gmail.com` (or `nssharpe+…`, the admin's choice). There is **no code path that sends to a club's real address** in this version; the "Send to real club addresses" control is disabled ("Needs Julia's go-ahead for each send"). Real sending is a separate switch that ships via PR + review, and each real send needs Julia's go-ahead.
@@ -259,18 +261,43 @@ and work when she switches to another.
   With no meets the admin sees "Create your first meet". Import, Squads, T&T, Exports (and Clubs &
   email later) all work on the selected meet. Archived meets can only be un-hidden in the Firebase
   console (`archived: false` on `meets/{id}`); there is no UI for it yet.
-- **Club links stay top-level** (`clubLinks/{token}`, `clubOrders/{token}/levels/{levelKey}`): the club
-  page has only a token. Each link document carries its `meetId`. Tokens are per club **per meet**, so a
-  club gets a different link for each meet. The club page reads the meet's public settings (name,
-  order deadline) from `meets/{link.meetId}/settings/meet`, and works from the link alone as before.
-  A link without a `meetId` (made before meets existed) shows "This link isn't valid".
+- **Club links stay top-level and are shared by all meets** (`clubTokens/{clubId}`, `clubLinks/{token}`, `clubOrders/{token}/meets/{meetId}/levels/{levelKey}`): the
+  club page has only a token. A club has **one token across meets**; the link document lists every meet the club is in (`meets` map, §8), and the page
+  reads each meet's public settings (name, order deadline) from `meets/{meetId}/settings/meet`. Publishing a meet's links (Import, name fixes) merges just
+  that meet's entry, never the others. **Archiving a meet removes its entry** from every club's link (so the switcher drops it and the rules refuse writes to it); the clubs' saved orders are kept.
+  A link in the old per-meet shape (a `meetId`, no `meets`) shows "This link isn't valid" (see §7c to upgrade).
 - **Rules:** everything under `meets/**` is admin-only except `meets/{meetId}/settings/meet`, which is
-  public read (name, dates, deadline are public facts) and admin write. The `clubOrders` write check
-  reads the deadline from the meet named in the club's link: a club in meet X is locked by X's
-  deadline, never Y's. A link with no `meetId`, or whose meet has no settings, cannot write.
+  public read (name, dates, deadline are public facts) and admin write. A token holder may write
+  `clubOrders/{token}/meets/{meetId}/levels/{levelKey}` only if the link exists, `meetId` is in the link's `meets`, `levelKey` is in THAT meet's `levelKeys`,
+  that meet's own deadline (`meets/{meetId}/settings/meet.orderDeadline`) has not passed, and the data is the order shape with `updatedAt == request.time`: a club in
+  meet X is locked by X's deadline, never Y's. A meet with no settings document cannot be written. The old path `clubOrders/{token}/levels/{levelKey}` stays
+  readable (with a link) but only admins write it. `clubTokens` is admin-only.
 - **Old data:** the top-level test import from 2026 (`athletes`, `clubs`, `sessions`, `squads`,
   `settings`, …) is **not migrated** and is no longer readable by the app or the public. Julia creates a
   meet and re-imports once. Nothing deletes the old documents; they can be removed in the console.
+
+## 7b. Start orders from another meet (admin)
+
+Finals clubs should not have to re-order everyone (Julia 2026-10-19). On the **Clubs & Emails > Clubs** pill, **Start orders from another meet** copies each club's saved orders
+from a source meet (Prelims) into the selected meet (Finals). It lives there, not in the meet menu, because it is about the clubs' orders and its counts sit beside the statuses.
+
+- **Matching:** per club, a target level is matched to a source level by **level code within the discipline** (WAG XP to WAG XP; MAG Dev is not WAG Dev). If a club has the same code in two sessions, the
+  source level with the most athletes in common wins. Athlete ids are the same in every meet (`<DISC>_<club slug>_<name slug>`).
+- **What is copied:** the source level's groups and per-apparatus order, kept for the athletes present in the target (empty groups dropped). Nobody should be new in Finals (you must compete in Prelims);
+  if someone is, they go to the **end** (last group, every apparatus), A–Z, and the screen lists them. A club/level whose source order is missing or still A–Z stays default.
+- **Cap:** if the source groups fit the cap in the target they are kept; otherwise the groups are re-split (`splitEvenly`, source order kept). New arrivals that do not fit the last group start a new last group.
+  `splitDecided` stays as the source had it (so a copy can still land on "Needs to decide a split").
+- **Status:** copied orders are **Order set** (no Still A–Z reminder). Only clubs left at A–Z in the source, or with no source order, stay on the reminder list. A copy that comes out identical to A–Z is not written.
+- **Never overwrites** an order the club already saved in the target (it differs from A–Z, or the club kept the split) unless **Replace orders already set in this meet** is ticked.
+- **Confirm screen:** source picker, counts (clubs, levels, athletes, already-set skipped or replaced, levels with nothing to copy, re-splits), the source and target levels that could not be matched, and the newcomers; then Copy and a result.
+  Running it again copies nothing new (the copied levels count as set).
+
+## 7c. Upgrade club links (admin, one time)
+
+Before one link per club, each club had a link per meet (`clubLinks/{token}` with a `meetId`; orders at `clubOrders/{token}/levels/*`). **Upgrade club links** (button next to the meet menu, shown only while old-shape links exist):
+per club, keep the token already in `clubTokens`, else the token of the club's newest meet; copy every meet's saved orders from the old tokens to `clubOrders/{token}/meets/{meetId}/levels/*` (never over one already there);
+write the combined link document (whole, so the old fields go); delete the other old per-meet link documents (old links stop working). Preview counts first; idempotent (a re-run after a failure picks up where it stopped);
+nothing else is deleted (the old order documents stay). Links for a meet that no longer exists are left alone and reported.
 
 ## 8. Data model (Firestore)
 
@@ -282,14 +309,16 @@ Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[
 | `meets/{meetId}/settings/meet` | admin write, **public read** | meet name/date (fallback), order deadline, gym order, capacity settings, `schedule` (date and times by schedule key: session number or name) |
 | `meets/{meetId}/sessions/{id}` | admin | name, location, gym (= location), number (only `Session N`), discipline, levels, `scheduleOverride` (optional date/times) |
 | `meets/{meetId}/athletes/{id}` | admin | names, club id + full name, level, session, apparatus / T&T levels, removed flag (id `<DISC>_<club>_<first-last>`; see notes) |
-| `meets/{meetId}/clubs/{clubId}` | admin | full name, contact emails, token |
+| `meets/{meetId}/clubs/{clubId}` | admin | full name, contact emails (the token is NOT here any more: see `clubTokens`) |
 | `meets/{meetId}/squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |
 | `meets/{meetId}/synchroSessions/main` | admin | `{ assignments: { <pairId>: <sessionId> } }`: the host's session choice per synchro pair |
 | `meets/{meetId}/nameFixes/main` | admin (catch-all; not in the public settings) | `{ fixes: [{ field: 'first'\|'last', from, to }], updatedAt }`: display-only name fixes (spec §2) |
 | `meets/{meetId}/emailLog/{id}` | admin | one row per message sent: `{ template: 'az'\|'split', clubId, club, to (the test alias), subject, at, by (admin email), mode: 'test' }` |
 | `meets/{meetId}/emailSettings/main` | admin | `{ templates: { az: { subject, body }, split: { subject, body } } }` |
-| `clubLinks/{token}` | public **get** only (no list) | **meetId**, clubId, club name, the club's roster per session (names, levels, apparatus — no emails/DOB) |
-| `clubOrders/{token}/levels/{sessionId_level}` | club with token (until its meet's deadline), admin | groups, per-apparatus sections, splitDecided, updatedAt |
+| `clubTokens/{clubId}` | admin only | `{ token }`: the club's ONE private-link token across all meets (`clubId` = slug of the full club name). Created on first publish |
+| `clubLinks/{token}` | public **get** only (no list) | `{ clubId, clubName, meets: { <meetId>: { meetName, createdAt, archived?, sessions: [...roster per session: names, levels, apparatus; no emails/DOB], levelKeys: [...] } } }`. Publishing merges one meet's entry; archiving removes it |
+| `clubOrders/{token}/meets/{meetId}/levels/{sessionId__level}` | club with token (until that meet's deadline, only for meets and level keys in its link), admin | groups, per-apparatus sections, splitDecided, updatedAt |
+| `clubOrders/{token}/levels/{levelKey}` | read with a link; **admin write only** | the old per-meet-token path, kept readable so "Upgrade club links" can move it |
 | `admins/{email}` | console only | extra admins |
 
 Token = 128-bit random (base64url). Knowing it is the only club credential.
