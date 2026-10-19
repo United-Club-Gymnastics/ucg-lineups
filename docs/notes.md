@@ -220,3 +220,5 @@
 - 2026-10-19: Julia confirmed names like "MurrayMetzger" / "StPierre" are spelled correctly in the exports. Name fixes stay for genuine typos; the inner-capital suggestions are not errors to act on.
 
 - Name fixes card: suggestions removed (Julia 2026-10-19); manual fixes only. `suggestNameFixes` stays in `src/lib/name-fixes.ts`, unused by the UI.
+
+- Favicon (Julia 2026-10-19): white UCG mark on a Dark Blue Green (#184b56) circle — `public/favicon.svg` plus 32/180/192/512 px PNGs; `theme-color` #184b56.
