@@ -4,7 +4,7 @@ import { PagePreview } from '../components/PdfPreview';
 import { loadExportsInput, runScheduleMigration, saveMeetNameDate, saveScheduleOverride, saveScheduleRow, type ExportsInput } from '../lib/data/export-store';
 import { sessionFileName, sessionPages, type ExportKind } from '../lib/pdf/collate';
 import { applySchedules, buildExportSessions } from '../lib/pdf/export-all';
-import { EMPTY_FIELDS, SCHEDULE_KEYS, collectLegacy, parseFields, planMigration, resolveSchedule, type ScheduleFields, type ScheduleRows } from '../lib/schedule';
+import { EMPTY_FIELDS, SCHEDULE_KEYS, collectLegacy, formatTime, parseFields, planMigration, resolveSchedule, type ScheduleFields, type ScheduleRows } from '../lib/schedule';
 import { allSessionsPdf, allSessionsZip, sessionPdf } from '../lib/pdf/files';
 import { jumpGroups } from '../lib/pdf/model';
 import './exports.css';
@@ -326,6 +326,8 @@ function FieldCells({ id, label, value, onChange, placeholders }: {
         id={`${id}-${k}`} className="ex-sched-in" aria-label={`${label} ${title.toLowerCase()}`}
         type={k === 'date' ? 'date' : 'text'} value={value[k]} placeholder={placeholders?.[k] || hint}
         onChange={(e) => onChange({ ...value, [k]: e.target.value })}
+        // Times tidy themselves into "7:30 AM" when you leave the box.
+        onBlur={k === 'date' ? undefined : (e) => { const t = formatTime(e.target.value); if (t !== e.target.value) onChange({ ...value, [k]: t }); }}
       />
     </td>
   );

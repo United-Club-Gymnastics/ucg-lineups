@@ -158,3 +158,30 @@ export function collectLegacy(
   }
   return out;
 }
+
+/**
+ * Tidy a typed time into `h:mm AM/PM` (Julia 2026-10-18), e.g. `730` / `7:30` / `7.30a` / `19:30` / `7 pm` →
+ * `7:30 AM` / `7:30 PM`. Without AM/PM, 24-hour values are converted; 7–11 read as AM and 12–6 as PM (meet hours).
+ * Anything that isn't a time (e.g. `TBD`) is returned as typed (trimmed).
+ */
+export function formatTime(raw: string): string {
+  const s = raw.trim();
+  if (!s) return '';
+  const m = /^(\d{1,2})(?:[:.]?(\d{2}))?\s*([ap])?\.?\s*(?:m\.?)?$/i.exec(s.replace(/\s+/g, ' '));
+  if (!m) return s;
+  let h = Number(m[1]);
+  const min = m[2] === undefined ? 0 : Number(m[2]);
+  if (min > 59) return s;
+  let suffix: 'AM' | 'PM';
+  if (m[3]) {
+    if (h < 1 || h > 12) return s;
+    suffix = m[3].toLowerCase() === 'a' ? 'AM' : 'PM';
+  } else {
+    if (h > 23) return s;
+    if (h === 0) { h = 12; suffix = 'AM'; }
+    else if (h >= 13) { h -= 12; suffix = 'PM'; }
+    else if (h === 12) suffix = 'PM';
+    else suffix = h >= 7 ? 'AM' : 'PM';
+  }
+  return `${h}:${String(min).padStart(2, '0')} ${suffix}`;
+}
