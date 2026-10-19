@@ -44,3 +44,7 @@
 .tnt-needs-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
 .tnt-needs-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 8px 0; border-top: 1px solid var(--ink-soft); }
 .tnt-needs-list li:first-child { border-top: 0; }
+.tnt-scratched { margin: 0 0 16px; padding: 8px 12px; border: 1px solid var(--ink-soft); border-radius: 8px; }
+.tnt-scratched summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
+.tnt-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 4px 0 8px; }
+.tnt-check .tnt-links { margin: 4px 0 0; }

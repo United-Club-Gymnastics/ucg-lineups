@@ -3,7 +3,7 @@
 import type { LevelOrder } from '../club-order-model';
 import type { StoredAthlete } from '../import/diff';
 import type { Session } from '../import/types';
-import { mergeFlights, pairNames, pairsInSession, pairsNeedingSession, placePairs, type PlacedPair, type SynchroAssignments } from '../synchro-flights';
+import { mergeFlights, pairNames, pairsInSession, pairsNeedingSession, placePairs, type PlacedPair, type SynchroAssignments, type SynchroScratched } from '../synchro-flights';
 import type { SynchroPair } from '../synchro-source';
 import { isArtisticSession, parseSquadDoc, sessionTitle, sortSessionsByGym } from '../squad-data';
 import { buildTntRoster, isTntSession, parseTntDoc } from '../tnt-data';
@@ -47,6 +47,8 @@ export function buildExportSessions(input: {
   synchroPairs: SynchroPair[] | null;
   /** The host's synchro session choices (`synchroSessions/main`); none when omitted. */
   synchroAssignments?: SynchroAssignments;
+  /** Pairs the host scratched: on no sheet and in no warning; none when omitted. */
+  synchroScratched?: SynchroScratched;
 }): ExportBuild {
   const out: ExportSession[] = [];
   const warnings: ExportWarning[] = [];
@@ -54,7 +56,7 @@ export function buildExportSessions(input: {
 
   const sessionsSorted = sortSessionsByGym(input.sessions, input.gymOrder);
   const placed: PlacedPair[] | null = input.synchroPairs
-    ? placePairs(input.synchroPairs, buildTntRoster(input.athletes), input.synchroAssignments ?? {}, input.sessions.filter(isTntSession).map((s) => s.id))
+    ? placePairs(input.synchroPairs, buildTntRoster(input.athletes), input.synchroAssignments ?? {}, input.sessions.filter(isTntSession).map((s) => s.id), input.synchroScratched ?? {})
     : null;
 
   for (const session of sessionsSorted) {

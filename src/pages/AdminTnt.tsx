@@ -7,11 +7,11 @@ import { SaveIndicator } from '../components/SaveIndicator';
 import { TntSquadBoard } from '../components/TntSquadBoard';
 import { Autosaver, type SaveState } from '../lib/autosave';
 import { loadTntDoc, loadTntInput, saveTntDoc, type TntInput } from '../lib/data/tnt-store';
-import { fetchSynchroPairs, type SynchroPair } from '../lib/synchro-source';
-import { saveSynchroAssignment } from '../lib/data/synchro-store';
+import { fetchSynchroPairs, SYNCHRO_LINKS, type SynchroPair } from '../lib/synchro-source';
+import { saveSynchroAssignment, saveSynchroScratch } from '../lib/data/synchro-store';
 import {
-  assignPair, defaultFlights, flightName, mergeFlights, movePair, pairClubs, pairNames, pairsInSession, pairsNeedingSession, placePairs,
-  type Flight, type PlacedPair, type RosterPerson, type SynchroAssignments,
+  assignPair, defaultFlights, flightName, mergeFlights, movePair, pairClubs, pairNames, pairsInSession, pairsNeedingSession, placePairs, scratchedPairs,
+  type Flight, type PlacedPair, type RosterPerson, type SynchroAssignments, type SynchroScratched,
 } from '../lib/synchro-flights';
 import type { Session } from '../lib/import/types';
 import { sessionTitle, sortSessionsByGym } from '../lib/squad-data';
@@ -94,6 +94,18 @@ function TntScreen({ meetId, input, save, onRetry, onReload, schedule }: {
     setAssignError('');
     saveSynchroAssignment(db, meetId, pairId, toSessionId).catch((e) => setAssignError(e instanceof Error ? e.message : 'Could not save the session choice.'));
   };
+  const [scratched, setScratched] = useState<SynchroScratched>(input.scratched);
+  const scratchRef = useRef(scratched);
+  /** Scratch or restore one pair (`meets/{id}/synchroSessions/main`, `scratched.<pairId>`: `true` or deleted). */
+  const setScratch = (pairId: string, on: boolean) => {
+    const { [pairId]: _drop, ...rest } = scratchRef.current;
+    void _drop;
+    const next: SynchroScratched = on ? { ...rest, [pairId]: true } : rest;
+    scratchRef.current = next;
+    setScratched(next);
+    setAssignError('');
+    saveSynchroScratch(db, meetId, pairId, on).catch((e) => setAssignError(e instanceof Error ? e.message : 'Could not save the change.'));
+  };
   const [docs, setDocs] = useState<Record<string, StoredDoc>>({});
   const [docError, setDocError] = useState('');
   const hasDoc = sessionId in docs;
@@ -135,11 +147,11 @@ function TntScreen({ meetId, input, save, onRetry, onReload, schedule }: {
         <SaveIndicator state={save} onRetry={onRetry} />
       </section>
       {docError && <div className="adm-banner err" role="alert">{docError}</div>}
-      {assignError && <div className="adm-banner err" role="alert">Could not save the synchro session choice: {assignError} Try again.</div>}
+      {assignError && <div className="adm-banner err" role="alert">Could not save the synchro change: {assignError} Try again.</div>}
       {session && hasDoc && (
         <TntSession
           key={session.id} session={session} sessions={sessions} input={input} stored={docs[session.id]} schedule={remember}
-          roster={roster} assignments={assignments} onAssign={assign}
+          roster={roster} assignments={assignments} onAssign={assign} scratched={scratched} onScratch={setScratch}
         />
       )}
       {session && !hasDoc && !docError && <p role="status">Loading saved squads…</p>}
@@ -157,13 +169,16 @@ interface Snapshot {
   readAt: Date | null;
 }
 
-function TntSession({ session, sessions, input, stored, schedule: scheduleSave, roster, assignments, onAssign }: {
+function TntSession({ session, sessions, input, stored, schedule: scheduleSave, roster, assignments, onAssign, scratched, onScratch }: {
   session: Session;
   /** Every T&T session (the choices for "Move to session"). */
   sessions: Session[];
   roster: RosterPerson[];
   assignments: SynchroAssignments;
   onAssign: (pairId: string, sessionId: string) => void;
+  /** Pairs the host scratched, and how to scratch (true) or restore (false) one. */
+  scratched: SynchroScratched;
+  onScratch: (pairId: string, on: boolean) => void;
   input: TntInput;
   stored: StoredDoc;
   schedule: (sessionId: string, doc: StoredTntDoc) => void;
@@ -232,11 +247,12 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
 
   /** Every pair, with its session (the host's choice, else the session both athletes are in). */
   const placed = useMemo(
-    () => (pairsState.kind === 'ready' ? placePairs(pairsState.raw, roster, assignments, sessionIds) : []),
-    [pairsState, roster, assignments, sessionIds],
+    () => (pairsState.kind === 'ready' ? placePairs(pairsState.raw, roster, assignments, sessionIds, scratched) : []),
+    [pairsState, roster, assignments, sessionIds, scratched],
   );
   const pairs = useMemo(() => pairsInSession(placed, session.id), [placed, session.id]);
   const needing = useMemo(() => pairsNeedingSession(placed), [placed]);
+  const scratchedList = useMemo(() => scratchedPairs(placed), [placed]);
   const pairById = useMemo(() => new Map(pairs.map((p) => [p.id, p])), [pairs]);
   const savedFlights = flights.length > 0;
   const shown: Flight[] = useMemo(
@@ -269,13 +285,40 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
     }
   };
 
+  /** Scratch a pair: it leaves every list, sheet and warning at once (a scratched pair is kept in the stored map, not deleted). */
+  const scratchPair = (id: string) => {
+    const p = placed.find((x) => x.id === id);
+    onScratch(id, true);
+    if (savedFlights) commit({ flights: cur.current.flights.map((f) => ({ name: f.name, pairIds: f.pairIds.filter((x) => x !== id) })) });
+    setNotice(`${p ? pairNames(p) : 'Pair'} scratched. Restore it from Scratched pairs.`);
+  };
+  /** Restore: the pair goes back by the usual rules (the stored session choice if any, else the session both athletes share). */
+  const restorePair = (id: string) => {
+    const p = placed.find((x) => x.id === id);
+    if (!p) return;
+    onScratch(id, false);
+    if (p.sessionId === session.id && savedFlights) {
+      const mine = pairsInSession(placed.map((x) => (x.id === id ? { ...x, scratched: false } : x)), session.id);
+      commit({ flights: mergeFlights(cur.current.flights, mine).flights, readAt: cur.current.readAt ?? readAt });
+    }
+    setNotice(`${pairNames(p)} restored${p.sessionId ? ` to ${sessionName(p.sessionId)}` : ': it needs a session'}.`);
+  };
+  const askScratch = (p: PlacedPair) => setConfirm({
+    title: 'Scratch this pair?',
+    body: `${pairNames(p)} comes off every flight, session list and export. You can restore it from Scratched pairs.`,
+    action: 'Scratch pair', run: () => scratchPair(p.id),
+  });
+  const scratchButton = (p: PlacedPair) => (
+    <button type="button" className="btn small ghost" aria-label={`Scratch pair ${pairNames(p)}`} onClick={() => askScratch(p)}>Scratch pair</button>
+  );
+
   const doRefresh = async () => {
     setRefreshing(true);
     setPairsError('');
     try {
       const raw = await fetchSynchroPairs();
       // The session choices are not touched: Refresh pairs keeps them.
-      const fresh = pairsInSession(placePairs(raw, roster, assignments, sessionIds), session.id);
+      const fresh = pairsInSession(placePairs(raw, roster, assignments, sessionIds, scratched), session.id);
       const first = cur.current.flights.length === 0;
       const merged = mergeFlights(cur.current.flights, fresh);
       const at = new Date();
@@ -422,6 +465,7 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
           Pairs are read from the Synchro tool and matched to the T&amp;T athletes by club and name. A pair competes in the session both athletes are in; use Move to session to put it somewhere else.
           {readAt ? ` Last read ${whenFmt.format(readAt)}${savedFlights ? '' : ' (flights are not saved until you change something or refresh)'}.` : ''}
         </p>
+        <SynchroLinks hint />
         {pairsState.kind === 'ready' && needing.length > 0 && (
           <div className="tnt-needs" data-testid="needs-session">
             <h3 className="tnt-h3">Needs a session</h3>
@@ -437,16 +481,36 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
                     {p.unassignedReason === 'different-sessions' && (
                       <span className="tnt-why">{p.name1} is in {sessionName(p.athleteSessions[0])}; {p.name2} is in {sessionName(p.athleteSessions[1])}.</span>
                     )}
-                    {p.check && <span className="tnt-check"><Badge tone="warn">Check pair</Badge> <span className="tnt-why">{p.problems.join('; ')}</span></span>}
+                    {p.check && <span className="tnt-check"><Badge tone="warn">Check pair</Badge> <span className="tnt-why">{p.problems.join('; ')}</span> <SynchroLinks /></span>}
                   </span>
                   <span className="tnt-ctl">
                     <span className="tnt-chip lvl">{p.level}</span>
                     {sessionSelect(p, true)}
+                    {scratchButton(p)}
                   </span>
                 </li>
               ))}
             </ul>
           </div>
+        )}
+        {pairsState.kind === 'ready' && scratchedList.length > 0 && (
+          <details className="tnt-scratched" data-testid="scratched-pairs">
+            <summary>Scratched pairs ({scratchedList.length})</summary>
+            <ul className="tnt-needs-list">
+              {scratchedList.map((p) => (
+                <li key={p.id}>
+                  <span className="tnt-who">
+                    <b>{pairNames(p)}</b>
+                    <span className="tnt-club">{pairClubs(p)}</span>
+                  </span>
+                  <span className="tnt-ctl">
+                    <span className="tnt-chip lvl">{p.level}</span>
+                    <button type="button" className="btn small" aria-label={`Restore ${pairNames(p)}`} onClick={() => restorePair(p.id)}>Restore</button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
         {pairsState.kind === 'loading' && <p role="status">Reading pairs from the Synchro tool…</p>}
         {pairsState.kind === 'error' && (
@@ -464,7 +528,7 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
         )}
         {checkCount > 0 && (
           <div className="adm-banner warn" role="status">
-            {checkCount} pair{checkCount === 1 ? '' : 's'} flagged &ldquo;Check pair&rdquo;: an athlete could not be matched to this import, or is on the roster but not entered in synchro. They are still shown with the names from the Synchro tool.
+            {checkCount} pair{checkCount === 1 ? '' : 's'} flagged &ldquo;Check pair&rdquo;: an athlete could not be matched to this import, or is on the roster but not entered in synchro. They are still shown, with the import's spelling of a name when it is unambiguous, otherwise the Synchro tool's.
           </div>
         )}
         {pairsState.kind === 'ready' && pairs.length === 0 && <p className="adm-muted">No synchro pairs for this session yet.</p>}
@@ -494,11 +558,12 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
                   <span className="tnt-who">
                     <b>{pairNames(p)}</b>
                     <span className="tnt-club">{pairClubs(p)}</span>
-                    {p.check && <span className="tnt-check"><Badge tone="warn">Check pair</Badge> <span className="tnt-why">{p.problems.join('; ')}</span></span>}
+                    {p.check && <span className="tnt-check"><Badge tone="warn">Check pair</Badge> <span className="tnt-why">{p.problems.join('; ')}</span> <SynchroLinks /></span>}
                   </span>
                   <span className="tnt-ctl">
                     <span className="tnt-chip lvl">{p.level}</span>
                     {sessionSelect(p, false)}
+                    {scratchButton(p)}
                     <label className="sq-place">
                       <span className="sr-only">Flight for {pairNames(p)}</span>
                       <Select
@@ -526,6 +591,17 @@ function TntSession({ session, sessions, input, stored, schedule: scheduleSave, 
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Links to the Synchro tool, where pairs are made, fixed and removed. */
+function SynchroLinks({ hint }: { hint?: boolean }) {
+  return (
+    <span className="tnt-links" data-testid="synchro-links">
+      <a className="btn small ghost" href={SYNCHRO_LINKS.admin} target="_blank" rel="noopener noreferrer">Remove or fix pairs (Synchro admin)</a>
+      <a className="btn small ghost" href={SYNCHRO_LINKS.signup} target="_blank" rel="noopener noreferrer">Make a new pair (Synchro sign-up page)</a>
+      {hint && <span className="adm-muted">After changing pairs there, press Refresh pairs here.</span>}
+    </span>
   );
 }
 

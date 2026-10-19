@@ -15,8 +15,8 @@ vi.mock('../../src/lib/firebase', () => ({ db: {} }));
 const store = vi.hoisted(() => ({ loadTntInput: vi.fn(), loadTntDoc: vi.fn(), saveTntDoc: vi.fn() }));
 vi.mock('../../src/lib/data/tnt-store', () => store);
 const synchro = vi.hoisted(() => ({ fetchSynchroPairs: vi.fn() }));
-vi.mock('../../src/lib/synchro-source', () => synchro);
-const assignStore = vi.hoisted(() => ({ saveSynchroAssignment: vi.fn() }));
+vi.mock('../../src/lib/synchro-source', async (orig) => ({ ...(await orig<typeof import('../../src/lib/synchro-source')>()), ...synchro }));
+const assignStore = vi.hoisted(() => ({ saveSynchroAssignment: vi.fn(), saveSynchroScratch: vi.fn() }));
 vi.mock('../../src/lib/data/synchro-store', () => assignStore);
 
 import AdminTnt from '../../src/pages/AdminTnt';
@@ -48,6 +48,7 @@ function fixture() {
     athletes,
     gymOrder: ['Green', 'Red', 'Yellow', 'Orange', 'Purple'],
     assignments: {} as Record<string, string>,
+    scratched: {} as Record<string, true>,
   };
 }
 
@@ -68,6 +69,7 @@ async function open(input = fixture(), doc: unknown = null, pairs: SynchroPair[]
   store.loadTntDoc.mockResolvedValue(doc);
   store.saveTntDoc.mockResolvedValue(undefined);
   assignStore.saveSynchroAssignment.mockResolvedValue(undefined);
+  assignStore.saveSynchroScratch.mockResolvedValue(undefined);
   if (pairs instanceof Error) synchro.fetchSynchroPairs.mockRejectedValue(pairs); else synchro.fetchSynchroPairs.mockResolvedValue(pairs);
   const user = userEvent.setup();
   render(<AdminTnt meetId="m1" />);
@@ -269,6 +271,181 @@ describe('T&T screen', () => {
       await screen.findByRole('list', { name: 'Flight A' });
       expect(screen.getByText(/1 pair flagged .Check pair./)).toBeInTheDocument();
       expect(screen.getByText('Cat Invented is on the roster but not entered in synchro; Cy Invented is on the roster but not entered in synchro')).toBeInTheDocument();
+    });
+
+    it('links to the Synchro tool (admin and sign-up) in a new tab, near Refresh pairs and by each Check pair', async () => {
+      await open();
+      await screen.findByRole('list', { name: 'Flight A' });
+      const links = screen.getAllByRole('link', { name: 'Remove or fix pairs (Synchro admin)' });
+      expect(links.length).toBeGreaterThanOrEqual(2); // section + the one Check pair
+      for (const a of links) {
+        expect(a).toHaveAttribute('href', 'https://synchro.unitedclubgymnastics.org/admin');
+        expect(a).toHaveAttribute('target', '_blank');
+        expect(a).toHaveAttribute('rel', 'noopener noreferrer');
+      }
+      for (const a of screen.getAllByRole('link', { name: 'Make a new pair (Synchro sign-up page)' })) {
+        expect(a).toHaveAttribute('href', 'https://synchro.unitedclubgymnastics.org/');
+        expect(a).toHaveAttribute('target', '_blank');
+      }
+      expect(screen.getByText('After changing pairs there, press Refresh pairs here.')).toBeInTheDocument();
+      expect(within(screen.getByTestId('needs-session')).getByRole('link', { name: /Synchro admin/ })).toBeInTheDocument();
+    });
+
+    describe('scratching a pair', () => {
+      const flightsText = () => [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))];
+      const confirmScratch = async (user: ReturnType<typeof userEvent.setup>) => {
+        const dlg = screen.getByRole('dialog');
+        expect(dlg).toHaveTextContent('Scratch this pair?');
+        await user.click(within(dlg).getByRole('button', { name: 'Scratch pair' }));
+      };
+
+      it('scratches from a flight after a confirm: the pair leaves the flights, is stored, and shows in a collapsed Scratched pairs list', async () => {
+        const user = await open();
+        await screen.findByRole('list', { name: 'Flight A' });
+        expect(screen.queryByTestId('scratched-pairs')).toBeNull();
+        await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
+        await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+        expect(assignStore.saveSynchroScratch).not.toHaveBeenCalled();
+        expect(flightsText()).toContain('Bob Invented & Bea Invented');
+        await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
+        await confirmScratch(user);
+        expect(assignStore.saveSynchroScratch).toHaveBeenCalledWith({}, 'm1', 'pb', true);
+        expect(flightsText()).not.toContain('Bob Invented & Bea Invented');
+        expect(screen.getByText(/2 synchro pairs/)).toBeInTheDocument();
+        const box = screen.getByTestId('scratched-pairs');
+        expect(box.tagName).toBe('DETAILS');
+        expect(box).not.toHaveAttribute('open');
+        expect(within(box).getByText('Scratched pairs (1)')).toBeInTheDocument();
+        expect(store.saveTntDoc).not.toHaveBeenCalled(); // flights were never saved, so there is nothing to change
+      });
+
+      it('with saved flights, scratching takes the pair out of them', async () => {
+        const user = await open(fixture(), {
+          kind: 'tnt', squads: [], trayAthleteIds: [], orders: {}, pairsReadAt: new Date('2026-10-01T12:00:00Z'),
+          flights: [{ name: 'A', pairIds: ['pd', 'pb'] }, { name: 'B', pairIds: ['pa'] }],
+        });
+        await screen.findByRole('list', { name: 'Flight A' });
+        await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
+        await confirmScratch(user);
+        await savedBy();
+        expect(lastSaved().flights).toEqual([{ name: 'A', pairIds: ['pd'] }, { name: 'B', pairIds: ['pa'] }]);
+        const box = screen.getByTestId('scratched-pairs');
+        await user.click(within(box).getByText(/Scratched pairs/));
+        await user.click(within(box).getByRole('button', { name: 'Restore Bob Invented & Bea Invented' }));
+        await waitFor(() => expect(lastSaved().flights.flatMap((f: { pairIds: string[] }) => f.pairIds)).toContain('pb'));
+      });
+
+      it('Restore puts a pair back by the usual rules (the default session, at the end of its level in the flights)', async () => {
+        const user = await open();
+        await screen.findByRole('list', { name: 'Flight A' });
+        await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
+        await confirmScratch(user);
+        const box = screen.getByTestId('scratched-pairs');
+        await user.click(within(box).getByText(/Scratched pairs/));
+        await user.click(within(box).getByRole('button', { name: 'Restore Bob Invented & Bea Invented' }));
+        expect(assignStore.saveSynchroScratch).toHaveBeenLastCalledWith({}, 'm1', 'pb', false);
+        expect(flightsText()).toContain('Bob Invented & Bea Invented');
+        expect(screen.queryByTestId('scratched-pairs')).toBeNull();
+        expect(screen.getByText(/2 synchro pairs|3 synchro pairs/)).toBeInTheDocument();
+      });
+
+      it('scratching from Needs a session removes it there, and Restore returns it there when it still has no session', async () => {
+        const user = await open();
+        await screen.findByRole('list', { name: 'Flight A' });
+        const needs = screen.getByTestId('needs-session');
+        await user.click(within(needs).getByRole('button', { name: 'Scratch pair Dot Invented & Nobody Known' }));
+        await confirmScratch(user);
+        expect(screen.queryByTestId('needs-session')).toBeNull();
+        expect(screen.queryByText("Nobody Known isn't in this import")).toBeNull();
+        const box = screen.getByTestId('scratched-pairs');
+        await user.click(within(box).getByText(/Scratched pairs \(1\)/));
+        await user.click(within(box).getByRole('button', { name: 'Restore Dot Invented & Nobody Known' }));
+        expect(within(screen.getByTestId('needs-session')).getByText('Dot Invented & Nobody Known')).toBeInTheDocument();
+      });
+
+      it('Restore keeps a stored session choice: a pair chosen for another session goes there, not to Needs a session', async () => {
+        const input = { ...fixture(), assignments: { pa: 's4-purple' }, scratched: { pa: true as const } };
+        const user = await open(input);
+        await screen.findByRole('list', { name: 'Flight A' });
+        const box = screen.getByTestId('scratched-pairs');
+        await user.click(within(box).getByText(/Scratched pairs/));
+        await user.click(within(box).getByRole('button', { name: 'Restore Abe Invented & Ann Invented' }));
+        expect(within(screen.getByTestId('needs-session')).queryByText('Abe Invented & Ann Invented')).toBeNull();
+        expect(flightsText()).not.toContain('Abe Invented & Ann Invented'); // it is in Session 4
+        expect(screen.getByText('Abe Invented & Ann Invented restored to Session 4 – Purple.')).toBeInTheDocument();
+      });
+
+      it('a pair scratched earlier is already off the flights and Needs a session on load, and Refresh pairs keeps it scratched', async () => {
+        const input = { ...fixture(), scratched: { pa: true as const, pc: true as const } };
+        const user = await open(input);
+        await screen.findByRole('list', { name: 'Flight A' });
+        expect(flightsText()).not.toContain('Abe Invented & Ann Invented');
+        expect(screen.queryByTestId('needs-session')).toBeNull();
+        expect(within(screen.getByTestId('scratched-pairs')).getByText('Scratched pairs (2)')).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
+        await screen.findByText(/Read \d+ pairs?/);
+        expect(flightsText()).not.toContain('Abe Invented & Ann Invented');
+        expect(screen.queryByTestId('needs-session')).toBeNull();
+        expect(within(screen.getByTestId('scratched-pairs')).getByText('Scratched pairs (2)')).toBeInTheDocument();
+        expect(assignStore.saveSynchroScratch).not.toHaveBeenCalled(); // refresh writes no scratches
+      });
+
+      it('Refresh pairs keeps a scratch made on this screen, and a scratched pair deleted in the Synchro tool just disappears', async () => {
+        const user = await open();
+        await screen.findByRole('list', { name: 'Flight A' });
+        await user.click(screen.getByRole('button', { name: 'Scratch pair Bob Invented & Bea Invented' }));
+        await confirmScratch(user);
+        await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
+        await screen.findByText(/Pairs refreshed|Read \d+ pairs?/);
+        expect(flightsText()).not.toContain('Bob Invented & Bea Invented');
+        expect(screen.getByText('Scratched pairs (1)')).toBeInTheDocument();
+        synchro.fetchSynchroPairs.mockResolvedValue(PAIRS().filter((p) => p.id !== 'pb'));
+        await user.click(screen.getByRole('button', { name: 'Refresh pairs' }));
+        await waitFor(() => expect(screen.queryByTestId('scratched-pairs')).toBeNull());
+      });
+
+      it('a scratched pair is not counted as "Check pair"', async () => {
+        const input = { ...fixture(), scratched: { pc: true as const } };
+        await open(input, null, [...PAIRS(), pair('Cat Invented', 'Charlie Club', 'Cy Invented', 'Charlie Club', 'HF', 'pnoSY')]);
+        await screen.findByRole('list', { name: 'Flight A' });
+        expect(screen.getByText(/1 pair flagged .Check pair./)).toBeInTheDocument(); // pnoSY only
+      });
+    });
+
+    it('shows the import\'s spelling for a pair athlete the Synchro tool wrote without spaces, in the flights and the problem text', async () => {
+      const input = fixture();
+      input.athletes.push(
+        { ...tntAth('Echo Club', 'Mary Ann', { SY: 'IF' }), id: 'TNT_echo_maryann' },
+        { ...tntAth('Echo Club', 'Eve', { SY: 'IF' }), id: 'TNT_echo_eve' },
+        { ...tntAth('Echo Club', 'Sue Lee', { SY: 'IF' }, 's4-purple'), id: 'TNT_echo_sue', last: 'Invented' },
+      );
+      await open(input, null, [
+        pair('MaryAnn Invented', 'Echo Club', 'Eve Invented', 'Echo Club', 'IF', 'pm'),
+        pair('MaryAnn Invented', 'Echo Club', 'SueLee Invented', 'Echo Club', 'IF', 'pcross2'),
+        pair('Mary Ann Invented', 'Echo Club', 'Eve Invented', 'Echo Club', 'IF', 'unused'),
+      ]);
+      await screen.findByRole('list', { name: 'Flight A' });
+      expect(flightsText2()).toContain('Mary Ann Invented & Eve Invented');
+      expect(flightsText2().join('|')).not.toContain('MaryAnn');
+      const needs = screen.getByTestId('needs-session');
+      expect(within(needs).getByText('Mary Ann Invented & Sue Lee Invented')).toBeInTheDocument();
+      expect(within(needs).getByText('Mary Ann Invented is in Session 3 – Purple; Sue Lee Invented is in Session 4 – Purple.')).toBeInTheDocument();
+      function flightsText2() { return [...names(screen.getByRole('list', { name: 'Flight A' })), ...names(screen.getByRole('list', { name: 'Flight B' }))]; }
+    });
+
+    it('shows the import\'s spelling for a roster athlete scratched from every event and for an unmatched name that one roster athlete has', async () => {
+      const input = fixture();
+      input.athletes.push({ ...tntAth('Echo Club', 'Ul Tot', { TR: 'NF' }), id: 'TNT_ultot', competes: false, apparatus: [] });
+      await open(input, null, [
+        pair('UlTot Invented', 'Echo Club', 'Dan Invented', 'Delta Club', 'IF', 'px'),
+        pair('UlTot Invented', 'Renamed Club', 'Nobody Known', 'Delta Club', 'IF', 'py'),
+      ]);
+      await screen.findByTestId('needs-session');
+      const needs = screen.getByTestId('needs-session');
+      expect(within(needs).getByText('Ul Tot Invented is scratched from every event')).toBeInTheDocument();
+      expect(within(needs).getByText("Ul Tot Invented is scratched from every event; Nobody Known isn't in this import")).toBeInTheDocument();
+      expect(within(needs).getByText('Ul Tot Invented & Nobody Known')).toBeInTheDocument();
+      expect(needs.textContent).not.toContain('UlTot');
     });
 
     it('moves a pair with the menu or a drag, and saves the flights', async () => {

@@ -4,8 +4,8 @@ import { collection, deleteField, doc, getDoc, getDocs, setDoc, updateDoc, write
 import { DEFAULT_GYM_ORDER } from '../import/types';
 import { parseRows, type MigrationPlan, type ScheduleFields, type ScheduleRows } from '../schedule';
 import { fetchSynchroPairs, type SynchroPair } from '../synchro-source';
-import { loadSynchroAssignments } from './synchro-store';
-import type { SynchroAssignments } from '../synchro-flights';
+import { loadSynchroDoc } from './synchro-store';
+import type { SynchroAssignments, SynchroScratched } from '../synchro-flights';
 import { meetPaths } from './meet-paths';
 import { loadSquadsInput, type SquadsInput } from './squad-store';
 
@@ -69,18 +69,20 @@ export interface ExportsInput extends SquadsInput {
   synchroPairs: SynchroPair[] | null;
   /** The host's synchro session choices. */
   synchroAssignments: SynchroAssignments;
+  /** Pairs the host scratched (left out of every export and warning). */
+  synchroScratched: SynchroScratched;
 }
 
 /** A failed read of our own data throws (never print from defaults); a failed read of the Synchro tool is reported, not fatal. */
 export async function loadExportsInput(db: Firestore, meetId: string): Promise<ExportsInput> {
-  const [base, meet, squads, synchroPairs, synchroAssignments] = await Promise.all([
+  const [base, meet, squads, synchroPairs, synchroDoc] = await Promise.all([
     loadSquadsInput(db, meetId),
     loadMeetSettings(db, meetId),
     getDocs(collection(db, meetPaths(meetId).squads)),
     fetchSynchroPairs().catch(() => null),
-    loadSynchroAssignments(db, meetId),
+    loadSynchroDoc(db, meetId),
   ]);
   const squadDocs: Record<string, unknown> = {};
   for (const d of squads.docs) squadDocs[d.id] = d.data();
-  return { ...base, gymOrder: meet.gymOrder, meet, squadDocs, synchroPairs, synchroAssignments };
+  return { ...base, gymOrder: meet.gymOrder, meet, squadDocs, synchroPairs, synchroAssignments: synchroDoc.assignments, synchroScratched: synchroDoc.scratched };
 }

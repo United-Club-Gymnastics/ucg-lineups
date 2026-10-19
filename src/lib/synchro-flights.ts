@@ -100,6 +100,8 @@ export interface PlacedPair extends FlightPair {
   athleteSessions: [string | null, string | null];
   /** Set only while `sessionId` is null. */
   unassignedReason: UnassignedReason | null;
+  /** The host scratched this pair: it is on no list, sheet or warning, only in the "Scratched pairs" list. Its `sessionId` is what Restore would use. */
+  scratched: boolean;
 }
 
 /** A T&T athlete in the import (competing or scratched), with their session and whether they are entered in synchro. */
@@ -112,6 +114,17 @@ export interface RosterPerson extends Person {
 
 /** `synchroSessions/main`: the host's session choice per pair id. */
 export type SynchroAssignments = Record<string, string>;
+
+/** `synchroSessions/main`: pairs the host scratched, `{ <pairId>: true }`. */
+export type SynchroScratched = Record<string, true>;
+
+/** Read the scratched map defensively (anything but `true` is ignored). */
+export function parseScratched(raw: unknown): SynchroScratched {
+  const a = raw && typeof raw === 'object' ? (raw as { scratched?: unknown }).scratched : null;
+  const out: SynchroScratched = {};
+  if (a && typeof a === 'object') for (const [k, v] of Object.entries(a as Record<string, unknown>)) if (v === true) out[k] = true;
+  return out;
+}
 
 /** Read `synchroSessions/main` defensively (anything unusable = no choices). */
 export function parseAssignments(raw: unknown): SynchroAssignments {
@@ -128,12 +141,29 @@ export function parseAssignments(raw: unknown): SynchroAssignments {
  * @param roster every T&T athlete in the import (all sessions); only those with `competes` can be matched, the rest only
  *   change the wording ("scratched from every event" vs "isn't in this import")
  * @param assignments the host's stored choices; one naming a session not in `sessionIds` is ignored
+ * @param scratched pairs the host scratched: still returned (flagged `scratched`, placed by the usual rules so Restore knows
+ *   where they go), but left out of `pairsInSession` and `pairsNeedingSession`
+ * Names: a matched athlete shows the import's first + last name. An unmatched one shows the import's spelling too when exactly
+ * one roster athlete (any session, competing or not) has the same compact name; otherwise the Synchro tool's text. The Synchro
+ * export drops some spaces ("MurrayMetzger"); the athletes export, which the import reads, has them right.
  */
-export function placePairs(pairs: SynchroPair[], roster: RosterPerson[], assignments: SynchroAssignments, sessionIds: string[]): PlacedPair[] {
+export function placePairs(
+  pairs: SynchroPair[], roster: RosterPerson[], assignments: SynchroAssignments, sessionIds: string[], scratched: SynchroScratched = {},
+): PlacedPair[] {
   const competing = roster.filter((r) => r.competes);
   const idx = index(competing);
-  const scratched = index(roster.filter((r) => !r.competes));
-  const isScratched = (club: string, name: string) => scratched.byClubName.has(personKey(club, name)) || scratched.byName.has(compact(name));
+  const out = index(roster.filter((r) => !r.competes));
+  const everyone = index(roster);
+  const rosterById = new Map(roster.map((r) => [r.id, r]));
+  const isScratched = (club: string, name: string) => out.byClubName.has(personKey(club, name)) || out.byName.has(compact(name));
+  const spelled = (r: RosterPerson) => `${r.first} ${r.last}`.trim();
+  /** An unmatched athlete's name in the import's spelling when that is unambiguous, else the Synchro tool's text. */
+  const unmatchedName = (club: string, name: string): string => {
+    const here = out.byClubName.get(personKey(club, name)) ?? [];
+    if (here.length === 1) return spelled(rosterById.get(here[0])!);
+    const all = everyone.byName.get(compact(name)) ?? [];
+    return all.length === 1 ? spelled(rosterById.get(all[0])!) : name;
+  };
   const byId = new Map(competing.map((r) => [r.id, r]));
   const valid = new Set(sessionIds);
   return pairs.map((p) => {
@@ -145,13 +175,16 @@ export function placePairs(pairs: SynchroPair[], roster: RosterPerson[], assignm
     const ra = a.id ? byId.get(a.id)! : null;
     const rb = b.id ? byId.get(b.id)! : null;
     const problems: string[] = [];
-    const why = (who: typeof a, name: string, club: string) => {
-      if (who.match === 'many') problems.push(`${name} matches more than one athlete`);
-      else if (who.match === 'none') problems.push(isScratched(club, name) ? `${name} is scratched from every event` : `${name} isn't in this import`);
-      else if (!byId.get(who.id!)!.inSynchro) problems.push(`${name} is on the roster but not entered in synchro`);
+    const shown = (r: RosterPerson | null, name: string, club: string, fallback: string) => (r ? spelled(r) : name ? unmatchedName(club, name) : fallback);
+    const name1 = shown(ra, p.name1, p.club1, 'First athlete');
+    const name2 = shown(rb, p.name2, p.club2, 'Second athlete');
+    const why = (who: typeof a, name: string, club: string, shownName: string) => {
+      if (who.match === 'many') problems.push(`${shownName} matches more than one athlete`);
+      else if (who.match === 'none') problems.push(isScratched(club, name) ? `${shownName} is scratched from every event` : `${shownName} isn't in this import`);
+      else if (!byId.get(who.id!)!.inSynchro) problems.push(`${shownName} is on the roster but not entered in synchro`);
     };
-    why(a, p.name1 || 'First athlete', p.club1);
-    why(b, p.name2 || 'Second athlete', p.club2);
+    why(a, p.name1, p.club1, name1);
+    why(b, p.name2, p.club2, name2);
     const sa = a.id ? byId.get(a.id)!.sessionId : null;
     const sb = b.id ? byId.get(b.id)!.sessionId : null;
     const defaultSessionId = sa && sa === sb ? sa : null;
@@ -161,19 +194,22 @@ export function placePairs(pairs: SynchroPair[], roster: RosterPerson[], assignm
     return {
       id: p.id, level: tntLevelCode(p.level),
       // Matched athletes show the import's current name and club; the Synchro tool's are kept only for unmatched ones.
-      name1: ra ? `${ra.first} ${ra.last}`.trim() : p.name1, name2: rb ? `${rb.first} ${rb.last}`.trim() : p.name2,
+      name1, name2,
       club1: ra ? ra.clubName : p.club1, club2: rb ? rb.clubName : p.club2,
       athlete1: a.id, athlete2: b.id, check: problems.length > 0, problems,
       sessionId, defaultSessionId, manual, athleteSessions: [sa, sb],
       unassignedReason: sessionId ? null : sa && sb ? 'different-sessions' : 'unmatched',
+      scratched: scratched[p.id] === true,
     };
   });
 }
 
-/** Pairs competing in this session. */
-export const pairsInSession = (placed: PlacedPair[], sessionId: string): PlacedPair[] => placed.filter((p) => p.sessionId === sessionId);
-/** Pairs waiting for the host to pick a session. */
-export const pairsNeedingSession = (placed: PlacedPair[]): PlacedPair[] => placed.filter((p) => p.sessionId === null);
+/** Pairs competing in this session (scratched pairs are never included). */
+export const pairsInSession = (placed: PlacedPair[], sessionId: string): PlacedPair[] => placed.filter((p) => !p.scratched && p.sessionId === sessionId);
+/** Pairs waiting for the host to pick a session (scratched pairs are never included). */
+export const pairsNeedingSession = (placed: PlacedPair[]): PlacedPair[] => placed.filter((p) => !p.scratched && p.sessionId === null);
+/** Pairs the host scratched. */
+export const scratchedPairs = (placed: PlacedPair[]): PlacedPair[] => placed.filter((p) => p.scratched);
 
 /** Record the host's choice for a pair (kept by Refresh pairs, which never touches the assignments). */
 export const assignPair = (assignments: SynchroAssignments, pairId: string, sessionId: string): SynchroAssignments => ({ ...assignments, [pairId]: sessionId });

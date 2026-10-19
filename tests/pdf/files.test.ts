@@ -119,6 +119,54 @@ describe('buildExportSessions: synchro pairs and their sessions', () => {
   });
 });
 
+describe('buildExportSessions: scratched pairs and names', () => {
+  const sy = tnt.athletes.filter((a) => a.apparatus.includes('SY'));
+  const flightPairs = (b: ReturnType<typeof buildExportSessions>) => {
+    const s = b.sessions.find((x) => x.id === tnt.session.id)!.input;
+    return s.type === 'tnt' ? s.input.flights.flatMap((f) => f.pairs) : [];
+  };
+  const allText = (b: ReturnType<typeof buildExportSessions>) => {
+    const s = b.sessions.find((x) => x.id === tnt.session.id)!.input;
+    return s.type === 'tnt' ? JSON.stringify([...sessionPages('scorecards', s), ...sessionPages('rotation', s)]) : '';
+  };
+
+  it('a scratched pair is on no flight, sheet or warning', () => {
+    const gone = tnt.pairs[0];
+    const b = buildExportSessions({ ...base(), synchroScratched: { [gone.id]: true } });
+    expect(flightPairs(b).map((p) => p.id)).not.toContain(gone.id);
+    expect(flightPairs(b).length).toBe(flightPairs(buildExportSessions(base())).length - 1);
+    expect(b.warnings.filter((w) => w.text.includes(gone.name1))).toEqual([]);
+    // restoring (not in the map) puts it back
+    expect(flightPairs(buildExportSessions({ ...base(), synchroScratched: {} })).map((p) => p.id)).toContain(gone.id);
+  });
+
+  it('a scratched pair that needed a session no longer produces the warning', () => {
+    const cross = { id: 'x1', level: 'IF', a1: '', name1: tnt.pairs[0].name1, club1: tnt.pairs[0].club1, a2: '', name2: 'Nobody Known', club2: 'Nowhere', createdAt: null, source: '' };
+    const input = { ...base(), synchroPairs: [...base().synchroPairs, cross] };
+    expect(buildExportSessions(input).warnings.some((w) => w.session === 'Synchro')).toBe(true);
+    expect(buildExportSessions({ ...input, synchroScratched: { x1: true } }).warnings.some((w) => w.session === 'Synchro')).toBe(false);
+  });
+
+  it('a scratched pair is not counted as "not in the saved flights"', () => {
+    const stored = { ...tnt.stored, flights: [{ name: 'A', pairIds: [tnt.pairs[0].id] }] };
+    const b = buildExportSessions({ ...base(), squadDocs: { ...base().squadDocs, [tnt.session.id]: stored }, synchroScratched: Object.fromEntries(tnt.pairs.slice(1).map((p) => [p.id, true])) });
+    expect(b.warnings.some((w) => /not in the saved flights/.test(w.text))).toBe(false);
+  });
+
+  it('flights show the import\'s spelling when the Synchro tool dropped the spaces', () => {
+    const [x, y] = sy;
+    const pair = { id: 'sp1', level: 'IF', a1: '', name1: `${x.first}${x.last}`.replace(/ /g, ''), club1: x.clubName, a2: '', name2: `${y.first}${y.last}`.replace(/ /g, ''), club2: y.clubName, createdAt: null, source: '' };
+    const b = buildExportSessions({ ...base(), synchroPairs: [pair] });
+    expect(flightPairs(b)[0].names).toBe(`${x.first} ${x.last} & ${y.first} ${y.last}`);
+  });
+
+  it('scorecards and the rotation sheet print the import\'s names for athletes', () => {
+    const odd = { ...tnt.athletes.find((a) => !a.apparatus.includes('SY'))!, id: 'TNT_odd', first: 'Mary Ann', last: 'St Pierre' };
+    const b = buildExportSessions({ ...base(), athletes: [...base().athletes, odd], squadDocs: { ...base().squadDocs, [tnt.session.id]: { ...tnt.stored, squads: tnt.stored.squads.map((q, i) => (i === 0 ? { ...q, athleteIds: [...q.athleteIds, 'TNT_odd'] } : q)) } } });
+    expect(allText(b)).toContain('Mary Ann St Pierre');
+  });
+});
+
 describe('files', () => {
   const inputs = () => buildExportSessions(base()).sessions.map((s) => s.input);
 

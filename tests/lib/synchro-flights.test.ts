@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { SynchroPair } from '../../src/lib/synchro-source';
 import {
-  assignPair, defaultFlights, mergeFlights, movePair, pairClubs, pairNames, pairsInSession, pairsNeedingSession, parseAssignments, placePairs, sortPairs,
-  type FlightPair, type RosterPerson, type SynchroAssignments,
+  assignPair, defaultFlights, mergeFlights, movePair, pairClubs, pairNames, pairsInSession, pairsNeedingSession, parseAssignments, parseScratched, placePairs, scratchedPairs, sortPairs,
+  type FlightPair, type RosterPerson, type SynchroAssignments, type SynchroScratched,
 } from '../../src/lib/synchro-flights';
 
 const S1 = 's1-green';
@@ -258,5 +258,119 @@ describe('movePair', () => {
     expect(movePair([{ name: 'A', pairIds: ['x', 'y'] }, { name: 'B', pairIds: ['z'] }], 'x', 1)).toEqual([
       { name: 'A', pairIds: ['y'] }, { name: 'B', pairIds: ['z', 'x'] },
     ]);
+  });
+});
+
+describe('scratched pairs', () => {
+  const same = sp('Ada Test', 'Alpha Gymnastics', 'Bo StPierre', 'Alpha Gymnastics');
+  const zeta = sp('Zed Far', 'Zeta Club', 'Zoe Far', 'Zeta Club');
+  const lost = sp('Who Ever', 'Nowhere', 'Else Where', 'Nowhere');
+  const cross = sp('Ada Test', 'Alpha Gymnastics', 'Zoe Far', 'Zeta Club');
+  const withScratch = (pairs: SynchroPair[], scratched: SynchroScratched, assignments: SynchroAssignments = {}) => placePairs(pairs, roster, assignments, SESSIONS, scratched);
+
+  it('a scratched pair is in no session list, not in Needs a session, and only in the scratched list', () => {
+    const placed = withScratch([same, zeta, lost, cross], { [same.id]: true, [lost.id]: true, [cross.id]: true });
+    expect(placed.map((p) => p.scratched)).toEqual([true, false, true, true]);
+    expect(pairsInSession(placed, S1)).toEqual([]);
+    expect(pairsInSession(placed, S2).map((p) => p.id)).toEqual([zeta.id]);
+    expect(pairsNeedingSession(placed)).toEqual([]);
+    expect(scratchedPairs(placed).map((p) => p.id)).toEqual([same.id, lost.id, cross.id]);
+  });
+
+  it('nothing scratched by default, and an id that is not in the Synchro tool is simply ignored', () => {
+    const placed = withScratch([same], { 'deleted-in-synchro': true });
+    expect(placed[0].scratched).toBe(false);
+    expect(scratchedPairs(placed)).toEqual([]);
+    expect(pairsInSession(placed, S1)).toHaveLength(1);
+  });
+
+  it('restoring (the id leaves the map) places the pair by the usual rules: its stored choice if it has one, else the default', () => {
+    const [off] = withScratch([same], { [same.id]: true }, { [same.id]: S2 });
+    expect(off.sessionId).toBe(S2); // where Restore would put it
+    const [onChoice] = withScratch([same], {}, { [same.id]: S2 });
+    expect([onChoice.scratched, onChoice.sessionId, onChoice.manual]).toEqual([false, S2, true]);
+    const [onDefault] = withScratch([same], {});
+    expect([onDefault.scratched, onDefault.sessionId, onDefault.manual]).toEqual([false, S1, false]);
+    const [needs] = withScratch([cross], {});
+    expect(pairsNeedingSession([needs])).toHaveLength(1);
+  });
+
+  it('parseScratched keeps only entries that are exactly true', () => {
+    expect(parseScratched({ scratched: { a: true, b: false, c: 'yes', d: null }, assignments: { x: 's1' } })).toEqual({ a: true });
+    expect(parseScratched(null)).toEqual({});
+    expect(parseScratched({ scratched: 'nope' })).toEqual({});
+  });
+});
+
+describe('names in the import\'s spelling', () => {
+  // The Synchro tool's text drops some spaces; the athletes export (the import) has them right.
+  const r: RosterPerson[] = [
+    person('m1', 'Murray', 'Metzger', 'Alpha Gymnastics'), person('m2', 'Sam', 'St Pierre', 'Alpha Gymnastics'),
+    person('s1', 'Ultot', 'Perez', 'Beta Club', S1, true, false), // scratched from every event
+    person('u1', 'Mary Ann', 'Solo', 'Gamma Club', S2, false, false),
+    person('d1', 'Jo', 'Ng', 'Alpha Gymnastics'), person('d2', 'Jo', 'Ng', 'Delta Club', S2, true, false),
+    person('d3', 'J', 'Ong', 'Delta Club', S2, true, false), person('d4', 'Jon', 'G', 'Delta Club', S2, true, false),
+  ];
+  const run = (pair: SynchroPair) => placePairs([pair], r, {}, SESSIONS)[0];
+
+  it('matched athletes show the roster\'s first + last name, club + name or name alone', () => {
+    const p = run(sp('MurrayMetzger', 'Alpha Gymnastics', 'SamSt Pierre', 'Old Name'));
+    expect([p.name1, p.name2]).toEqual(['Murray Metzger', 'Sam St Pierre']);
+    expect(pairNames(p)).toBe('Murray Metzger & Sam St Pierre');
+    expect(p.check).toBe(false);
+  });
+
+  it('the problem text uses the roster spelling for a matched athlete who is not entered in synchro', () => {
+    const rr = r.map((x) => (x.id === 'm1' ? { ...x, inSynchro: false } : x));
+    const p = placePairs([sp('MurrayMetzger', 'Alpha Gymnastics', 'SamSt Pierre', 'Alpha Gymnastics')], rr, {}, SESSIONS)[0];
+    expect(p.problems).toEqual(['Murray Metzger is on the roster but not entered in synchro']);
+  });
+
+  it('a roster athlete scratched from every event shows the roster spelling, in the pair and in the problem text', () => {
+    const p = run(sp('UltotPerez', 'Beta Club', 'MurrayMetzger', 'Alpha Gymnastics'));
+    expect(p.name1).toBe('Ultot Perez');
+    expect(p.problems).toEqual(['Ultot Perez is scratched from every event']);
+    // same, when the club was renamed: one roster athlete has that compact name
+    const q = run(sp('UltotPerez', 'Renamed Club', 'MurrayMetzger', 'Alpha Gymnastics'));
+    expect(q.name1).toBe('Ultot Perez');
+    expect(q.problems).toEqual(['Ultot Perez is scratched from every event']);
+  });
+
+  it('an athlete on the roster but not competing and not in synchro still gets the roster spelling', () => {
+    const p = run(sp('MaryAnnSolo', 'Gamma Club', 'MurrayMetzger', 'Alpha Gymnastics'));
+    expect(p.name1).toBe('Mary Ann Solo');
+  });
+
+  it('an unmatched athlete with no roster athlete of that compact name keeps the Synchro tool\'s text', () => {
+    const p = run(sp('NoBodyKnown', 'Alpha Gymnastics', 'MurrayMetzger', 'Alpha Gymnastics'));
+    expect(p.name1).toBe('NoBodyKnown');
+    expect(p.problems).toEqual(["NoBodyKnown isn't in this import"]);
+  });
+
+  it('keeps the Synchro tool\'s text when two roster athletes share the compact name', () => {
+    // Jo Ng (Alpha, competing) and Jo Ng (Delta, scratched) are both "jong"; J Ong / Jon G also compact to "jong"
+    const none = placePairs([sp('JoNg', 'Elsewhere', 'MurrayMetzger', 'Alpha Gymnastics')], r.filter((x) => x.id !== 'd1'), {}, SESSIONS)[0];
+    expect(none.athlete1).toBeNull();
+    expect(none.name1).toBe('JoNg'); // d2, d3, d4 all compact to jong: not exactly one
+    const dup = [...r, person('d5', 'Jo', 'Ng', 'Alpha Gymnastics')]; // two competing Jo Ng in one club: matches more than one
+    const many = placePairs([sp('JoNg', 'Alpha Gymnastics', 'MurrayMetzger', 'Alpha Gymnastics')], dup, {}, SESSIONS)[0];
+    expect(many.athlete1).toBeNull();
+    expect(many.name1).toBe('JoNg');
+    expect(many.problems[0]).toBe('JoNg matches more than one athlete');
+    // exactly one roster athlete (a scratched one) with that compact name: its spelling
+    const one = placePairs([sp('JoNg', 'Elsewhere', 'MurrayMetzger', 'Alpha Gymnastics')], r.filter((x) => !['d1', 'd3', 'd4'].includes(x.id)), {}, SESSIONS)[0];
+    expect(one.name1).toBe('Jo Ng');
+  });
+
+  it('a unique compact name wins even when the Synchro tool\'s text has other spaces or case', () => {
+    const p = run(sp('ULTOT  perez', 'Nowhere', 'MurrayMetzger', 'Alpha Gymnastics'));
+    expect(p.name1).toBe('Ultot Perez');
+    expect(p.athlete1).toBeNull(); // still unmatched for placement
+    expect(p.sessionId).toBeNull();
+  });
+
+  it('keeps the placeholder when a name is empty', () => {
+    const p = run(sp('', 'Alpha Gymnastics', 'MurrayMetzger', 'Alpha Gymnastics'));
+    expect(p.problems).toEqual(["First athlete isn't in this import"]);
   });
 });

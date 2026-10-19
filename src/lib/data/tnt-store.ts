@@ -6,8 +6,8 @@ import { parseTntDoc, type StoredTntDoc } from '../tnt-data';
 import { meetPaths } from './meet-paths';
 import { loadGymOrder } from './squad-store';
 import { loadAthletes, loadSessions } from './store';
-import { loadSynchroAssignments } from './synchro-store';
-import type { SynchroAssignments } from '../synchro-flights';
+import { loadSynchroDoc } from './synchro-store';
+import type { SynchroAssignments, SynchroScratched } from '../synchro-flights';
 
 export interface TntInput {
   sessions: Session[];
@@ -15,12 +15,14 @@ export interface TntInput {
   gymOrder: string[];
   /** The host's synchro session choices (`meets/{meetId}/synchroSessions/main`). */
   assignments: SynchroAssignments;
+  /** Pairs the host scratched. */
+  scratched: SynchroScratched;
 }
 
 /** A failed read throws: never show defaults for data we could not read. */
 export async function loadTntInput(db: Firestore, meetId: string): Promise<TntInput> {
-  const [sessions, athletes, gymOrder, assignments] = await Promise.all([loadSessions(db, meetId), loadAthletes(db, meetId), loadGymOrder(db, meetId), loadSynchroAssignments(db, meetId)]);
-  return { sessions, athletes, gymOrder, assignments };
+  const [sessions, athletes, gymOrder, synchro] = await Promise.all([loadSessions(db, meetId), loadAthletes(db, meetId), loadGymOrder(db, meetId), loadSynchroDoc(db, meetId)]);
+  return { sessions, athletes, gymOrder, assignments: synchro.assignments, scratched: synchro.scratched };
 }
 
 export async function loadTntDoc(db: Firestore, meetId: string, sessionId: string) {

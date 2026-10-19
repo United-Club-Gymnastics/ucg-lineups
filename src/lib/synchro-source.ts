@@ -10,6 +10,12 @@ const synchroConfig = {
   appId: '1:715467172013:web:caaae161f7d5a81957fe24',
 };
 
+/** The Synchro partner tool's pages the T&T screen links to (one place to change them). */
+export const SYNCHRO_LINKS = {
+  admin: 'https://synchro.unitedclubgymnastics.org/admin',
+  signup: 'https://synchro.unitedclubgymnastics.org/',
+} as const;
+
 const APP_NAME = 'synchro-source';
 
 export interface SynchroPair {
