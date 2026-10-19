@@ -24,9 +24,8 @@
 .pv-apparatus { font-size: 24pt; font-weight: 700; text-transform: uppercase; }
 .pv-rot { text-align: right; font-size: 11pt; }
 .pv-grid { display: grid; box-sizing: border-box; position: relative; }
-.pv-cell { box-sizing: border-box; border: 0.75pt solid #000; display: flex; align-items: center; justify-content: center; flex-direction: column; min-width: 0; overflow: hidden; }
+.pv-cell { box-sizing: border-box; border: 0 solid #000; border-width: var(--bt, 0) var(--br, 0) var(--bb, 0) var(--bl, 0); display: flex; align-items: center; justify-content: center; flex-direction: column; min-width: 0; overflow: hidden; }
 .pv-cell.pv-left { align-items: flex-start; justify-content: center; padding: 0 4pt; }
-.pv-heavy { border: 2.4pt solid #000; }
 .pv-th { font-size: 7.5pt; text-transform: uppercase; }
 .pv-th small { font-size: 6pt; text-transform: none; font-weight: 400; }
 .pv-tnt-head .pv-th, .pv-sy .pv-th { text-transform: none; font-size: 8pt; }
@@ -34,7 +33,9 @@
 .pv-ath { font-size: 10.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .pv-club { font-size: 8pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .pv-check { display: inline-block; box-sizing: border-box; border: 1.1pt solid #000; }
-.pv-break::before { content: ''; position: absolute; left: 0; right: 0; top: -2pt; height: 3pt; border-top: 1.3pt solid #000; border-bottom: 1.3pt solid #000; z-index: 2; }
+/* The level divide: two 1.3pt rules with a 1.3pt white channel, centred on the row's top edge (the same on every sheet; the PDF draws it the same way). */
+.pv-break::before { content: ''; position: absolute; left: 0; right: 0; top: -1.95pt; height: 3.9pt; box-sizing: border-box; border-top: 1.3pt solid #000; border-bottom: 1.3pt solid #000; background: #fff; z-index: 2; }
+.pv-sy.pv-break::before { top: -6.95pt; }
 .pv-key { display: flex; align-items: center; gap: 8pt; margin-top: 8pt; font-size: 8.5pt; }
 .pv-swatch { display: inline-block; width: 22pt; height: 9pt; border: 2.4pt solid #000; box-sizing: border-box; }
 .pv-foot { position: absolute; left: 36pt; right: 36pt; bottom: 24pt; display: flex; justify-content: space-between; align-items: center; font-size: 8pt; color: #4d4d4d; }
@@ -44,7 +45,7 @@
 .pv-passes > .pv-cell { height: 100%; }
 /* synchro */
 .pv-sy-scratch { margin: 6pt 0 4pt; }
-.pv-sy { position: relative; display: grid; grid-template-columns: 34pt 170pt 42pt 1fr; margin-bottom: 8pt; height: 70pt; }
+.pv-sy { position: relative; display: grid; grid-template-columns: 34pt 170pt 42pt 1fr; margin-bottom: 10pt; height: 70pt; }
 .pv-sy-chk { display: flex; align-items: center; justify-content: center; }
 .pv-sy-name, .pv-sy-lv { display: grid; grid-template-rows: 13pt 1fr; min-width: 0; }
 .pv-sy-names { gap: 1pt; padding-top: 2pt; }

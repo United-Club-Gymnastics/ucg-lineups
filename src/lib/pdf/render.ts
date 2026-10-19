@@ -3,11 +3,46 @@
 import { jsPDF } from 'jspdf';
 import { MARK_PATHS, MARK_SIZE } from './logo-mark';
 import {
-  BRAND_NAME, LETTER, MARGIN, SITE, TIMELINE_ROW_UNITS, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
-  type ArtisticRotationPage, type ArtisticScorecardPage, type Column, type Page, type RotationTimeline, type SynchroPage, type TntRotationPage, type TntScorecardPage,
+  BRAND_NAME, HEAVY_BOX_STYLE, LEVEL_RULE, LETTER, MARGIN, SITE, TIMELINE_ROW_UNITS, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
+  type ArtisticRotationPage, type HeavyBoxStyle, type ArtisticScorecardPage, type Column, type Page, type RotationTimeline, type SynchroPage, type TntRotationPage, type TntScorecardPage,
 } from './model';
 import { splitPair } from './pair';
 import { parsePath } from './svg-path';
+
+/** One cell of a scorecard grid. Cells that touch share their edge: it is drawn once (see `Pen.boxes`). */
+export interface BoxCell { x: number; y: number; w: number; h: number; heavy: boolean }
+interface Run { a: number; b: number; heavy: boolean }
+const key = (v: number) => Math.round(v * 100);
+
+/**
+ * Collinear edges of `cells` as non-overlapping runs. `horizontal`: edges at a y, running along x. An edge shared by two cells
+ * (or by a heavy and a thin one) becomes one run, heavy when either cell is heavy.
+ */
+export function edgeRuns(cells: BoxCell[], horizontal: boolean): { at: number; runs: Run[] }[] {
+  const lines = new Map<number, { at: number; items: Run[] }>();
+  const add = (at: number, a: number, b: number, heavy: boolean) => {
+    const l = lines.get(key(at)) ?? { at, items: [] };
+    l.items.push({ a, b, heavy });
+    lines.set(key(at), l);
+  };
+  for (const c of cells) {
+    if (horizontal) { add(c.y, c.x, c.x + c.w, c.heavy); add(c.y + c.h, c.x, c.x + c.w, c.heavy); }
+    else { add(c.x, c.y, c.y + c.h, c.heavy); add(c.x + c.w, c.y, c.y + c.h, c.heavy); }
+  }
+  return [...lines.values()].map(({ at, items }) => {
+    const cuts = [...new Set(items.flatMap((i) => [key(i.a), key(i.b)]))].sort((u, v) => u - v);
+    const runs: Run[] = [];
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const covering = items.filter((it) => key(it.a) <= cuts[i] && key(it.b) >= cuts[i + 1]);
+      if (covering.length === 0) continue;
+      const heavy = covering.some((it) => it.heavy);
+      const last = runs[runs.length - 1];
+      if (last && key(last.b) === cuts[i] && last.heavy === heavy) last.b = cuts[i + 1] / 100;
+      else runs.push({ a: cuts[i] / 100, b: cuts[i + 1] / 100, heavy });
+    }
+    return { at, runs };
+  });
+}
 
 type Style = 'normal' | 'bold' | 'italic' | 'bolditalic';
 
@@ -32,7 +67,29 @@ const xsOf = (widths: number[], left: number): number[] => widths.reduce<number[
 
 class Pen {
   readonly doc: jsPDF;
-  constructor(doc: jsPDF) { this.doc = doc; }
+  readonly boxStyle: HeavyBoxStyle;
+  constructor(doc: jsPDF, boxStyle: HeavyBoxStyle = HEAVY_BOX_STYLE) { this.doc = doc; this.boxStyle = boxStyle; }
+
+  /**
+   * Draw a grid of cells with every line stroked exactly once. Stroking each cell's rectangle draws the edge two neighbours
+   * share twice, and an anti-aliasing viewer then shows it darker than an edge drawn once (that is why the heavy boxes looked
+   * heavier across than down). Heavy edges use HEAVY, the rest THIN. Style 'A' draws the horizontal edges THIN even on heavy
+   * boxes. Edges at the y values in `skipY` are left out (a level rule goes there). Square caps close the corners.
+   */
+  boxes(cells: BoxCell[], skipY: number[] = []) {
+    const d = this.doc;
+    d.setDrawColor(0);
+    d.setLineDashPattern([], 0);
+    d.setLineCap('square');
+    for (const { at, runs } of edgeRuns(cells, true)) {
+      if (skipY.some((y) => key(y) === key(at))) continue;
+      for (const r of runs) { d.setLineWidth(r.heavy && this.boxStyle === 'B' ? HEAVY : THIN); d.line(r.a, at, r.b, at); }
+    }
+    for (const { at, runs } of edgeRuns(cells, false)) {
+      for (const r of runs) { d.setLineWidth(r.heavy ? HEAVY : THIN); d.line(at, r.a, at, r.b); }
+    }
+    d.setLineCap('butt');
+  }
 
   line(x1: number, y1: number, x2: number, y2: number, w = THIN, dash?: [number, number]) {
     const d = this.doc;
@@ -117,10 +174,12 @@ class Pen {
     this.rect(cx - s / 2, cy - s / 2, s, s, 1.1);
   }
 
-  /** Heavy double rule across [x1, x2] at y. */
-  doubleRule(x1: number, x2: number, y: number) {
-    this.line(x1, y - 1.6, x2, y - 1.6, 1.3);
-    this.line(x1, y + 1.0, x2, y + 1.0, 1.3);
+  /** The level divide across [x1, x2] centred on y: two LEVEL_RULE.line rules with a white channel between, cutting any line that crosses. */
+  levelRule(x1: number, x2: number, y: number) {
+    const { line, gap } = LEVEL_RULE;
+    this.fill(x1, y - gap / 2, x2 - x1, gap, 1);
+    this.line(x1, y - (gap + line) / 2, x2, y - (gap + line) / 2, line);
+    this.line(x1, y + (gap + line) / 2, x2, y + (gap + line) / 2, line);
   }
 }
 
@@ -170,8 +229,11 @@ function drawArtisticScorecard(p: Pen, pg: ArtisticScorecardPage, W: number, H: 
   const rowH = artisticRowHeight(n);
   const widths = columnWidths(pg.columns, CW);
   const xs = xsOf(widths, L);
+  const cells: BoxCell[] = pg.columns.map((c, i) => ({ x: xs[i], y: top, w: widths[i], h: headH, heavy: c.heavy }));
+  pg.rows.forEach((_r, ri) => pg.columns.forEach((c, i) => cells.push({ x: xs[i], y: top + headH + ri * rowH, w: widths[i], h: rowH, heavy: c.kind === 'box' && c.heavy })));
+  const breaks = pg.rows.flatMap((r, ri) => (r.levelBreak ? [top + headH + ri * rowH] : []));
+  p.boxes(cells, breaks);
   pg.columns.forEach((c, i) => {
-    p.rect(xs[i], top, widths[i], headH, c.heavy ? HEAVY : THIN);
     const mid = c.sub ? top + headH / 2 - 4 : top + headH / 2;
     const left = c.kind === 'text';
     p.text(c.header.toUpperCase(), left ? xs[i] + 4 : xs[i] + widths[i] / 2, mid, { size: 7.5, style: 'bold', align: left ? 'left' : 'center' });
@@ -179,8 +241,6 @@ function drawArtisticScorecard(p: Pen, pg: ArtisticScorecardPage, W: number, H: 
   });
   pg.rows.forEach((r, ri) => {
     const y = top + headH + ri * rowH;
-    pg.columns.forEach((c, i) => { if (!(c.kind === 'box' && c.heavy)) p.rect(xs[i], y, widths[i], rowH, THIN); });
-    pg.columns.forEach((c, i) => { if (c.kind === 'box' && c.heavy) p.rect(xs[i], y, widths[i], rowH, HEAVY); });
     const cy = y + rowH / 2;
     pg.columns.forEach((c, i) => {
       if (c.kind === 'check') p.checkBox(xs[i] + widths[i] / 2, cy, 12);
@@ -188,7 +248,7 @@ function drawArtisticScorecard(p: Pen, pg: ArtisticScorecardPage, W: number, H: 
       const v = c.id === 'level' ? r.level : c.id === 'athlete' ? r.athlete : r.club;
       p.text(v, xs[i] + 4, cy, c.id === 'level' ? { size: 8, style: 'bold', maxW: widths[i] - 6 } : c.id === 'athlete' ? { size: 10.5, maxW: widths[i] - 8 } : { size: 8, style: 'italic', maxW: widths[i] - 8 });
     });
-    if (r.levelBreak) p.doubleRule(L, R, y);
+    if (r.levelBreak) p.levelRule(L, R, y);
   });
   keyLine(p, L, top + headH + n * rowH + 14, pg.key);
   footer(p, pg, W, H);
@@ -219,18 +279,19 @@ function drawTntScorecard(p: Pen, pg: TntScorecardPage, W: number, H: number) {
   const subH = athleteH / pg.passes;
   const widths = columnWidths(pg.columns, CW);
   const xs = xsOf(widths, L);
+  const cells: BoxCell[] = pg.columns.map((c, i) => ({ x: xs[i], y: top, w: widths[i], h: headH, heavy: c.heavy }));
+  pg.rows.forEach((_r, ri) => pg.columns.forEach((c, i) => {
+    const y = top + headH + ri * athleteH;
+    if (c.kind === 'box') for (let k = 0; k < pg.passes; k++) cells.push({ x: xs[i], y: y + k * subH, w: widths[i], h: subH, heavy: c.heavy });
+    else cells.push({ x: xs[i], y, w: widths[i], h: athleteH, heavy: false });
+  }));
+  p.boxes(cells, pg.rows.flatMap((r, ri) => (r.levelBreak ? [top + headH + ri * athleteH] : [])));
   pg.columns.forEach((c, i) => {
-    p.rect(xs[i], top, widths[i], headH, c.heavy ? HEAVY : THIN);
     const left = c.id === 'name';
     p.text(c.header, left ? xs[i] + 4 : xs[i] + widths[i] / 2, top + headH / 2, { size: 8.5, align: left ? 'left' : 'center', style: c.heavy ? 'bold' : 'normal' });
   });
   pg.rows.forEach((r, ri) => {
     const y = top + headH + ri * athleteH;
-    pg.columns.forEach((c, i) => {
-      if (c.kind === 'box') {
-        for (let k = 0; k < pg.passes; k++) p.rect(xs[i], y + k * subH, widths[i], subH, c.heavy ? HEAVY : THIN);
-      } else p.rect(xs[i], y, widths[i], athleteH, THIN);
-    });
     pg.columns.forEach((c, i) => {
       if (c.kind === 'check') p.checkBox(xs[i] + widths[i] / 2, y + athleteH / 2, 12);
       if (c.id === 'name' && !r.blank) {
@@ -239,7 +300,7 @@ function drawTntScorecard(p: Pen, pg: TntScorecardPage, W: number, H: number) {
       }
       if (c.id === 'level' && !r.blank) p.text(r.level, xs[i] + widths[i] / 2, y + athleteH / 2, { size: 10, style: 'bold', align: 'center' });
     });
-    if (r.levelBreak) p.doubleRule(L, R, y);
+    if (r.levelBreak) p.levelRule(L, R, y);
   });
   keyLine(p, L, top + headH + n * athleteH + 14, pg.key);
   footer(p, pg, W, H);
@@ -262,32 +323,32 @@ function drawSynchro(p: Pen, pg: SynchroPage, W: number, H: number) {
   const bh = 22;
   const blockH = hh + bh + hh + bh;
   const gap = Math.min(10, (H - MARGIN - 52 - top - 7 * blockH) / 7);
+  const bx = L + chkW + nameW + lvW;
+  const yOf = (i: number) => top + i * (blockH + gap);
+  const cells: BoxCell[] = [];
+  pg.pairs.forEach((_q, i) => {
+    const y = yOf(i);
+    cells.push({ x: L + chkW, y, w: nameW, h: hh, heavy: false }, { x: L + chkW + nameW, y, w: lvW, h: hh, heavy: false });
+    cells.push({ x: L + chkW, y: y + hh, w: nameW, h: blockH - hh, heavy: false }, { x: L + chkW + nameW, y: y + hh, w: lvW, h: blockH - hh, heavy: false });
+    [[pg.row1, y, hh], [pg.row1, y + hh, bh], [pg.row2, y + hh + bh, hh], [pg.row2, y + hh + bh + hh, bh]].forEach(([cols, yy, h]) =>
+      (cols as Column[]).forEach((c, k) => cells.push({ x: bx + k * boxW, y: yy as number, w: boxW, h: h as number, heavy: c.heavy })));
+  });
+  p.boxes(cells);
   pg.pairs.forEach((q, i) => {
-    const y = top + i * (blockH + gap);
-    const bx = L + chkW + nameW + lvW;
+    const y = yOf(i);
     p.checkBox(L + chkW / 2, y + blockH / 2, 13);
-    // the name and level cells span the header row and both box rows
-    p.rect(L + chkW, y, nameW, hh, THIN);
     p.text('Pair / Club', L + chkW + 4, y + hh / 2, { size: 7.5 });
-    p.rect(L + chkW + nameW, y, lvW, hh, THIN);
     p.text('Level', L + chkW + nameW + lvW / 2, y + hh / 2, { size: 7.5, align: 'center' });
-    p.rect(L + chkW, y + hh, nameW, blockH - hh, THIN);
     const [n1, n2] = splitPair(q.names);
     const mid = y + hh + (blockH - hh) / 2;
     p.text(n2 ? `${n1} &` : n1, L + chkW + 4, mid - 15, { size: 10, style: 'bold', maxW: nameW - 8 });
     if (n2) p.text(n2, L + chkW + 4, mid - 3, { size: 10, style: 'bold', maxW: nameW - 8 });
     p.text(q.club, L + chkW + 4, mid + 13, { size: 8, style: 'italic', maxW: nameW - 8 });
-    p.rect(L + chkW + nameW, y + hh, lvW, blockH - hh, THIN);
     p.text(q.level, L + chkW + nameW + lvW / 2, y + hh + (blockH - hh) / 2, { size: 11, style: 'bold', align: 'center' });
-    const row = (cols: Column[], yy: number, h: number, label: boolean) => cols.forEach((c, k) => {
-      p.rect(bx + k * boxW, yy, boxW, h, c.heavy ? HEAVY : THIN);
-      if (label) p.text(c.header, bx + k * boxW + boxW / 2, yy + h / 2, { size: 7.5, align: 'center', style: c.heavy ? 'bold' : 'normal' });
-    });
-    row(pg.row1, y, hh, true);
-    row(pg.row1, y + hh, bh, false);
-    row(pg.row2, y + hh + bh, hh, true);
-    row(pg.row2, y + hh + bh + hh, bh, false);
-    if (q.levelBreak) p.doubleRule(L, R, y - gap / 2);
+    const label = (cols: Column[], yy: number, h: number) => cols.forEach((c, k) => p.text(c.header, bx + k * boxW + boxW / 2, yy + h / 2, { size: 7.5, align: 'center', style: c.heavy ? 'bold' : 'normal' }));
+    label(pg.row1, y, hh);
+    label(pg.row2, y + hh + bh, hh);
+    if (q.levelBreak) p.levelRule(L, R, y - gap / 2);
   });
   keyLine(p, L, H - MARGIN - 18, pg.key);
   footer(p, pg, W, H);
@@ -453,11 +514,11 @@ function drawPage(p: Pen, page: Page, W: number, H: number) {
 }
 
 /** Draw every page, in order, into one document. */
-export function renderPdf(pages: Page[], title = 'UCG Lineups', compress = true): jsPDF {
+export function renderPdf(pages: Page[], title = 'UCG Lineups', compress = true, boxStyle: HeavyBoxStyle = HEAVY_BOX_STYLE): jsPDF {
   const first = pages[0];
   const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: first && isLandscape(first) ? 'landscape' : 'portrait', compress });
   doc.setProperties({ title, creator: 'UCG Lineups' });
-  const p = new Pen(doc);
+  const p = new Pen(doc, boxStyle);
   pages.forEach((page, i) => {
     const land = isLandscape(page);
     if (i > 0) doc.addPage('letter', land ? 'landscape' : 'portrait');

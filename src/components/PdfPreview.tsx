@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { MARK_PATHS, MARK_SIZE } from '../lib/pdf/logo-mark';
 import {
-  BRAND_NAME, LETTER, MARGIN, SITE, TIMELINE_ROW_UNITS, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
+  BRAND_NAME, HEAVY_BOX_STYLE, LETTER, MARGIN, SITE, TIMELINE_ROW_UNITS, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
   type ArtisticRotationPage, type ArtisticScorecardPage, type Column, type Page, type SynchroPage, type TntRotationPage, type TntScorecardPage,
 } from '../lib/pdf/model';
 import { pageLabel } from '../lib/pdf/labels';
@@ -12,7 +12,22 @@ import './pdf-preview.css';
 
 const pt = (n: number) => `${n}pt`;
 const cols = (columns: { weight: number }[], total: number) => columnWidths(columns, total).map(pt).join(' ');
-const boxClass = (c: Column) => `pv-cell${c.heavy ? ' pv-heavy' : ''}`;
+
+/**
+ * Cell edges. Each shared edge belongs to ONE cell (its right and bottom, plus the table's left and top), so it is drawn once, as the
+ * PDF does. The weights follow HEAVY_BOX_STYLE exactly like the PDF: a vertical edge is heavy when either box beside it is; a
+ * horizontal edge is heavy only in style 'B'.
+ */
+const THIN_W = 0.75;
+const HEAVY_W = 2.4;
+const vertW = (heavy: boolean) => (heavy ? HEAVY_W : THIN_W);
+const horizW = (heavy: boolean) => (heavy && HEAVY_BOX_STYLE === 'B' ? HEAVY_W : THIN_W);
+interface Edges { t?: number; r?: number; b?: number; l?: number }
+const edges = (e: Edges): CSSProperties => ({
+  '--bt': pt(e.t ?? 0), '--br': pt(e.r ?? 0), '--bb': pt(e.b ?? 0), '--bl': pt(e.l ?? 0),
+} as CSSProperties);
+const rightOf = (cs: Column[], i: number) => vertW(cs[i].heavy || (i + 1 < cs.length && cs[i + 1].heavy));
+const boxClass = () => 'pv-cell';
 
 function Mark({ size }: { size: number }) {
   return (
@@ -67,16 +82,16 @@ function ArtisticScorecard({ pg }: { pg: ArtisticScorecardPage }) {
         <span className="pv-rot">{pg.band.discipline}{pg.band.rotation != null ? ` · Rotation ${pg.band.rotation}` : ''}{pg.band.equipment ? ` · ${pg.band.equipment}` : ''}</span>
       </div>
       <div className="pv-grid pv-headrow" style={{ gridTemplateColumns: grid, height: pt(26) }} role="presentation">
-        {pg.columns.map((c) => (
-          <div key={c.id} className={`${boxClass(c)} pv-th${c.kind === 'text' ? ' pv-left' : ''}`}>
+        {pg.columns.map((c, i) => (
+          <div key={c.id} className={`${boxClass()} pv-th${c.kind === 'text' ? ' pv-left' : ''}`} style={edges({ t: horizW(c.heavy), b: horizW(c.heavy), r: rightOf(pg.columns, i), l: i === 0 ? vertW(c.heavy) : 0 })}>
             <b>{c.header}</b>{c.sub && <small>{c.sub}</small>}
           </div>
         ))}
       </div>
       {pg.rows.map((r, i) => (
         <div key={i} className={`pv-grid pv-row${r.levelBreak ? ' pv-break' : ''}`} style={{ gridTemplateColumns: grid, height: pt(rowH) }}>
-          {pg.columns.map((c) => (
-            <div key={c.id} className={`${boxClass(c)}${c.kind === 'text' ? ' pv-left' : ''}`}>
+          {pg.columns.map((c, ci) => (
+            <div key={c.id} className={`${boxClass()}${c.kind === 'text' ? ' pv-left' : ''}`} style={edges({ b: pg.rows[i + 1]?.levelBreak ? 0 : horizW(c.heavy), r: rightOf(pg.columns, ci), l: ci === 0 ? vertW(c.heavy) : 0 })}>
               {c.kind === 'check' && <Check />}
               {!r.blank && c.id === 'level' && <b className="pv-lv">{r.level}</b>}
               {!r.blank && c.id === 'athlete' && <span className="pv-ath">{r.athlete}</span>}
@@ -107,16 +122,18 @@ function TntScorecard({ pg }: { pg: TntScorecardPage }) {
     <>
       <SheetHeader title={pg.title} subtitle={pg.subtitle} meet={pg.meet} printedOn={pg.printedOn} />
       <div className="pv-grid pv-headrow pv-tnt-head" style={{ gridTemplateColumns: grid, height: pt(20) }}>
-        {pg.columns.map((c) => <div key={c.id} className={`${boxClass(c)} pv-th${c.id === 'name' ? ' pv-left' : ''}`}>{c.header}</div>)}
+        {pg.columns.map((c, i) => <div key={c.id} className={`${boxClass()} pv-th${c.id === 'name' ? ' pv-left' : ''}`} style={edges({ t: horizW(c.heavy), b: horizW(c.heavy), r: rightOf(pg.columns, i), l: i === 0 ? vertW(c.heavy) : 0 })}>{c.header}</div>)}
       </div>
       {pg.rows.map((r, i) => (
         <div key={i} className={`pv-grid pv-row pv-tnt-row${r.levelBreak ? ' pv-break' : ''}`} style={{ gridTemplateColumns: grid, height: pt(h) }}>
-          {pg.columns.map((c) => c.kind === 'box' ? (
+          {pg.columns.map((c, ci) => c.kind === 'box' ? (
             <div key={c.id} className="pv-passes">
-              {Array.from({ length: pg.passes }, (_, k) => <div key={k} className={boxClass(c)} />)}
+              {Array.from({ length: pg.passes }, (_, k) => (
+                <div key={k} className={boxClass()} style={edges({ b: k === pg.passes - 1 && pg.rows[i + 1]?.levelBreak ? 0 : horizW(c.heavy), r: rightOf(pg.columns, ci) })} />
+              ))}
             </div>
           ) : (
-            <div key={c.id} className={`${boxClass(c)}${c.id === 'name' ? ' pv-left' : ''}`}>
+            <div key={c.id} className={`${boxClass()}${c.id === 'name' ? ' pv-left' : ''}`} style={edges({ b: pg.rows[i + 1]?.levelBreak ? 0 : THIN_W, r: rightOf(pg.columns, ci), l: ci === 0 ? vertW(c.heavy) : 0 })}>
               {c.kind === 'check' && <Check />}
               {!r.blank && c.id === 'name' && <><b className="pv-ath">{r.name}</b><i className="pv-club">{r.club}</i></>}
               {!r.blank && c.id === 'level' && <b className="pv-lv">{r.level}</b>}
@@ -130,10 +147,9 @@ function TntScorecard({ pg }: { pg: TntScorecardPage }) {
 }
 
 function Synchro({ pg }: { pg: SynchroPage }) {
-  const boxes = `repeat(5, 1fr)`;
-  const row = (cs: Column[], label: boolean, h: number) => (
-    <div className="pv-sy-boxes" style={{ gridTemplateColumns: boxes, height: pt(h) }}>
-      {cs.map((c) => <div key={c.id} className={`${boxClass(c)} pv-th`}>{label ? c.header : ''}</div>)}
+  const row = (cs: Column[], label: boolean, h: number, top: boolean) => (
+    <div className="pv-sy-boxes" style={{ gridTemplateColumns: 'repeat(5, 1fr)', height: pt(h) }}>
+      {cs.map((c, k) => <div key={c.id} className={`${boxClass()} pv-th`} style={edges({ t: top ? horizW(c.heavy) : 0, b: horizW(c.heavy), r: rightOf(cs, k), l: k === 0 ? vertW(c.heavy) : 0 })}>{label ? c.header : ''}</div>)}
     </div>
   );
   return (
@@ -146,15 +162,15 @@ function Synchro({ pg }: { pg: SynchroPage }) {
           <div key={i} className={`pv-sy${q.levelBreak ? ' pv-break' : ''}`}>
             <div className="pv-sy-chk"><Check size={13} /></div>
             <div className="pv-sy-name">
-              <div className="pv-cell pv-left pv-th" style={{ height: pt(13) }}>Pair / Club</div>
-              <div className="pv-cell pv-left pv-sy-names"><b>{n2 ? `${n1} &` : n1}</b>{n2 && <b>{n2}</b>}<i className="pv-club">{q.club}</i></div>
+              <div className="pv-cell pv-left pv-th" style={{ height: pt(13), ...edges({ t: THIN_W, b: THIN_W, l: THIN_W }) }}>Pair / Club</div>
+              <div className="pv-cell pv-left pv-sy-names" style={edges({ b: THIN_W, l: THIN_W })}><b>{n2 ? `${n1} &` : n1}</b>{n2 && <b>{n2}</b>}<i className="pv-club">{q.club}</i></div>
             </div>
             <div className="pv-sy-lv">
-              <div className="pv-cell pv-th" style={{ height: pt(13) }}>Level</div>
-              <div className="pv-cell pv-sy-level"><b className="pv-lv">{q.level}</b></div>
+              <div className="pv-cell pv-th" style={{ height: pt(13), ...edges({ t: THIN_W, b: THIN_W, l: THIN_W }) }}>Level</div>
+              <div className="pv-cell pv-sy-level" style={edges({ b: THIN_W, l: THIN_W })}><b className="pv-lv">{q.level}</b></div>
             </div>
             <div className="pv-sy-grid">
-              {row(pg.row1, true, 13)}{row(pg.row1, false, 22)}{row(pg.row2, true, 13)}{row(pg.row2, false, 22)}
+              {row(pg.row1, true, 13, true)}{row(pg.row1, false, 22, false)}{row(pg.row2, true, 13, false)}{row(pg.row2, false, 22, false)}
             </div>
           </div>
         );

@@ -6,6 +6,17 @@
 export const LETTER = { w: 612, h: 792 } as const;
 export const MARGIN = 36;
 
+/**
+ * How the heavy "entered in ScoreFlippers" boxes are drawn (Julia picks; flip this one constant).
+ *  'A': heavy vertical sides, top and bottom edges the normal row-line thickness.
+ *  'B': all four sides heavy, each shared edge drawn once.
+ * Default B until she chooses. Every line is drawn once either way (see docs/notes.md, "Heavy boxes").
+ */
+export type HeavyBoxStyle = 'A' | 'B';
+export const HEAVY_BOX_STYLE: HeavyBoxStyle = 'B';
+/** The level divide on every scorecard and the synchro sheet: two rules of `line` pt with a white channel of `gap` pt between. */
+export const LEVEL_RULE = { line: 1.3, gap: 1.3 } as const;
+
 export const HEAVY_KEY = 'Heavy boxes are the scores entered in ScoreFlippers.';
 export const SITE = 'unitedclubgymnastics.org';
 export const BRAND_NAME = 'United Club Gymnastics';
