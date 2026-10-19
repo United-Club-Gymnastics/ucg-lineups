@@ -182,3 +182,5 @@
 - Julia chose heavy-box variant B (all four sides heavy) on 2026-10-18.
 
 - Clubs & email (Julia 2026-10-18): Check all / Uncheck all on the reminder list (with an "N of M ticked" count); Preview on a club line jumps down to the email preview (focus moves to its heading); Copy and Regenerate link sit at the lower right of each club row and never wrap.
+
+- Admin tabs (Julia 2026-10-18): Artistic Squads, T&T Squads, Exports, Clubs & Emails, Import; the admin lands on Artistic Squads.

@@ -19,16 +19,17 @@ import './admin.css';
 type Tab = 'import' | 'clubs' | 'squads' | 'tnt' | 'exports';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'import', label: 'Import' },
-  { id: 'clubs', label: 'Clubs & email' },
-  { id: 'squads', label: 'Squads' },
-  { id: 'tnt', label: 'T&T' },
+  // Order and names per Julia 2026-10-18; the admin lands on Artistic Squads.
+  { id: 'squads', label: 'Artistic Squads' },
+  { id: 'tnt', label: 'T&T Squads' },
   { id: 'exports', label: 'Exports' },
+  { id: 'clubs', label: 'Clubs & Emails' },
+  { id: 'import', label: 'Import' },
 ];
 
 export default function AdminLanding() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
-  const [tab, setTab] = useState<Tab>('import');
+  const [tab, setTab] = useState<Tab>('squads');
   const [error, setError] = useState('');
   const [meets, setMeets] = useState<MeetInfo[] | null>(null);
   const [meetsError, setMeetsError] = useState('');

@@ -37,7 +37,12 @@ describe('admin shell', () => {
   it('shows tabs for admins and a preview for a dropped athletes file', async () => {
     currentUser = { email: 'julia@unitedclubgymnastics.org', emailVerified: true };
     const { container } = render(<AdminLanding />);
-    expect(await screen.findByRole('button', { name: 'Squads' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Artistic Squads' })).toBeInTheDocument();
+    // Tabs run Artistic Squads, T&T Squads, Exports, Clubs & Emails, Import; the admin lands on Artistic Squads.
+    expect(screen.getAllByRole('button').map((b) => b.textContent).filter((x) => ['Artistic Squads', 'T&T Squads', 'Exports', 'Clubs & Emails', 'Import'].includes(x ?? '')))
+      .toEqual(['Artistic Squads', 'T&T Squads', 'Exports', 'Clubs & Emails', 'Import']);
+    expect(screen.getByRole('button', { name: 'Artistic Squads' })).toHaveClass('active');
+    await userEvent.click(screen.getByRole('button', { name: 'Import' }));
     const buf = await makeWorkbook({
       Sheet: [ATH_HEADERS, athRow({ bib: '1', first: 'Ada', last: 'Test', level: 'Platinum', short: 'XP', type: 'WAG', club: 'Alpha Gymnastics', session: 'Session 1 - Orange' })],
     });
@@ -47,7 +52,7 @@ describe('admin shell', () => {
     expect(await screen.findByText(/Athletes export · 1 rows/)).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: /Load stored data/ }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Apply import' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Clubs & email' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Clubs & Emails' }));
     expect(await screen.findByText(/Loading clubs, orders and the send log/)).toBeInTheDocument();
   });
 });
