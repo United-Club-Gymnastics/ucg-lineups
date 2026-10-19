@@ -146,11 +146,11 @@ describe('artistic rotation sheet', () => {
     ]]));
     const rows = p.squads[0].rows;
     expect(rows.map((r) => [r.label, r.names])).toEqual([
-      ['Alpha – Dev', 'Zoe Z'],
-      ['Beta – Dev', 'Al A, Bo B'],
-      ['Gamma – Dev', ''],
+      ['Dev – Alpha', 'Zoe Z'],
+      ['Dev – Beta', 'Al A, Bo B'],
+      ['Dev – Gamma', ''],
       // consecutive independents of one level merge into one row, named in full whatever the count
-      ['Independent Community Athlete – Int', 'Fay F, Gus G, Hal H, Ira I'],
+      ['Int – Independent Community Athlete', 'Fay F, Gus G, Hal H, Ira I'],
     ]);
     // rows with names are taller, and the page height accounts for them
     expect(p.units).toBeGreaterThan(1.5 + 4 + 0.8);
@@ -185,9 +185,9 @@ describe('artistic rotation sheet', () => {
   it('rows are Club – Level (+ · Group B), with routine counts per apparatus', () => {
     const a = group('Alpha Gymnastics', 'Dev', ['x', 'y', 'z'], { routines: { FX: 3, PH: 2, SR: 0, VT: 3, PB: 1, HB: 3 }, groupCount: 2, groupIndex: 1 });
     const b = group('Beta', 'Dev', ['q']);
-    expect(groupLabel(a)).toBe('Alpha Gymnastics – Dev · Group B');
+    expect(groupLabel(a)).toBe('Dev – Alpha Gymnastics · Group B');
     const [p] = artisticRotationPages(input('MAG', 'one', [[a, b]]));
-    expect(p.squads[0].rows.map((r) => r.label)).toEqual(['Alpha Gymnastics – Dev · Group B', 'Beta – Dev']);
+    expect(p.squads[0].rows.map((r) => r.label)).toEqual(['Dev – Alpha Gymnastics · Group B', 'Dev – Beta']);
     expect(p.squads[0].rows[0].counts).toEqual([3, 2, 0, 3, 1, 3]);
   });
 
@@ -201,7 +201,7 @@ describe('artistic rotation sheet', () => {
     const i1 = group('Independent Community Athlete', 'Int', ['a'], { independent: true, routines: { FX: 1, HB: 1 } });
     const i2 = group('Independent Community Athlete', 'Int', ['b'], { independent: true, routines: { FX: 1, VT: 1 } });
     const [p] = artisticRotationPages(input('MAG', 'one', [[group('Club', 'Int', ['c']), i1, i2]]));
-    expect(p.squads[0].rows.map((r) => r.label)).toEqual(['Club – Int', 'Independent Community Athlete – Int']);
+    expect(p.squads[0].rows.map((r) => r.label)).toEqual(['Int – Club', 'Int – Independent Community Athlete']);
     expect(p.squads[0].rows[1].counts).toEqual([2, 0, 0, 1, 0, 1]);
   });
 

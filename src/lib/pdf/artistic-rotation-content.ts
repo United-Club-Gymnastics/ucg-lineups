@@ -13,7 +13,8 @@ export const HEADER_UNITS = 1.5;
 export const GAP_UNITS = 0.8;
 
 export const groupLabel = (g: ArtisticGroupInput): string =>
-  `${g.clubName} – ${g.levelCode}${!g.independent && g.groupCount > 1 ? ` · Group ${String.fromCharCode(65 + g.groupIndex)}` : ''}`;
+  // Level code first (Julia 2026-10-19): `Dev – Alpha Gymnastics · Group B`.
+  `${g.levelCode} – ${g.clubName}${!g.independent && g.groupCount > 1 ? ` · Group ${String.fromCharCode(65 + g.groupIndex)}` : ''}`;
 
 interface Merged { label: string; levelCode: string; routines: Record<string, number>; athletes: string[]; indep: boolean }
 

@@ -238,3 +238,5 @@
 - No T&T import (Julia 2026-10-19): when a meet has no T&T sessions the **T&T Squads** tab is hidden (checked with a one-document query on each tab change, so it appears right after a T&T import) and Exports neither reads the Synchro tool nor shows synchro warnings (`synchroPairs` is `[]`, not the "unreadable" `null`).
 
 - Rotation sheet names (Julia 2026-10-19): a row with 1 or 2 athletes, and every independent row, lists the athletes (A–Z) on a smaller second line under "Club – Level". Those rows are 1.6 layout units tall, counted in the page-split so a long session still breaks at a squad boundary.
+
+- Rotation sheet rows lead with the level code: `Dev – Alpha Gymnastics · Group B` (Julia 2026-10-19).
