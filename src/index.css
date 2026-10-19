@@ -178,7 +178,10 @@ option { color: var(--ink); background: #fff; }
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 3px 9px;
-  border-radius: 99px;
+  /* Rounded rectangle, not a full pill: some badges wrap onto two lines (e.g. "Mixed levels: …" on squad cards) and a
+     99px radius turned those into ovals (Julia 2026-10-18). */
+  border-radius: var(--radius-sm);
+  line-height: 1.35;
   white-space: nowrap;
 }
 .badge.ok { background: var(--purple); color: var(--navy-800); }

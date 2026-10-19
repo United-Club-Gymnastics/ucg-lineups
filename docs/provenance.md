@@ -35,3 +35,5 @@ Config copied and simplified (not provenance-tracked code): `tsconfig*.json`, `e
 ## Not copied
 
 Fonts: the licensed woff2 files are never committed; `@font-face` rules point at the platform's public `brand` bucket.
+
+- `src/index.css` `.badge`: radius changed from 99px to `var(--radius-sm)` and `line-height: 1.35` added (2026-10-18), because wrapped badges looked like ovals.
