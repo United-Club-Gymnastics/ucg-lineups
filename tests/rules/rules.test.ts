@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, documentId, getDoc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, Timestamp, updateDoc, writeBatch } from 'firebase/firestore';
 
 let env: RulesTestEnvironment;
 
@@ -292,5 +292,57 @@ describe('admin-only collections (all under meets/{meetId}/)', () => {
     await assertSucceeds(getDoc(doc(listedAdminDb(), m(M1, 'athletes/WAG_0001'))));
     await assertSucceeds(setDoc(doc(listedAdminDb(), 'admins/another@gmail.com'), { added: true }));
     await assertFails(setDoc(doc(outsiderDb(), 'admins/someone@gmail.com'), { added: true }));
+  });
+});
+
+describe('bring in earlier data (admin copy from the old top-level paths into a meet)', () => {
+  const OLD = ['settings/meet', 'athletes/WAG_0001', 'clubs/club-a', 'sessions/s1-green', 'squads/s1-green', 'synchroSessions/main', 'emailSettings/main', 'emailLog/x'];
+  const LINK = 'tokenLEGACYAAAAAAAAAAAA';
+  beforeEach(async () => {
+    await seed();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      for (const p of OLD) await setDoc(doc(db, p), { x: 1 });
+      await setDoc(doc(db, `clubLinks/${LINK}`), { clubId: 'club-a', clubName: 'Club A', sessions: [], levelKeys: [LEVEL] });
+      await setDoc(doc(db, `clubOrders/${LINK}/levels/${LEVEL}`), { groups: [], sections: {}, splitDecided: false });
+    });
+  });
+
+  test('an admin can page-read every old collection and clubLinks, copy into a meet and attach a link, in a batch', async () => {
+    const db = domainAdminDb();
+    for (const c of ['athletes', 'clubs', 'sessions', 'squads', 'synchroSessions', 'emailSettings', 'emailLog', 'clubLinks']) {
+      await assertSucceeds(getDocs(query(collection(db, c), orderBy(documentId()), limit(5))));
+    }
+    await assertSucceeds(getDoc(doc(db, 'settings/meet')));
+    await assertSucceeds(getDocs(query(collection(db, 'athletes'), limit(1))));
+
+    const batch = writeBatch(db);
+    for (const p of OLD) batch.set(doc(db, `meets/${M2}/${p}`), { x: 1 });
+    batch.set(doc(db, `meets/${M2}/settings/meet`), { meetDate: '2026-07-01' }, { merge: true });
+    batch.set(doc(db, `clubLinks/${LINK}`), { meetId: M2 }, { merge: true });
+    await assertSucceeds(batch.commit());
+    expect((await getDoc(doc(db, `clubLinks/${LINK}`))).data()).toMatchObject({ meetId: M2, clubId: 'club-a' });
+    // The originals are still there.
+    for (const p of OLD) expect((await getDoc(doc(db, p))).exists()).toBe(true);
+  });
+
+  test('once attached, the link works again for the club: it reads its saved order and, before the deadline, writes', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `clubLinks/${LINK}`), { meetId: M2 }, { merge: true });
+    });
+    await assertSucceeds(getDoc(orderRef(publicDb(), LINK)));
+    await assertSucceeds(setDoc(orderRef(publicDb(), LINK), order()));
+  });
+
+  test('a non-admin and a signed-out visitor can do none of it', async () => {
+    for (const db of [outsiderDb(), publicDb(), unverifiedDomainDb()]) {
+      for (const c of ['athletes', 'clubs', 'sessions', 'squads', 'emailLog', 'clubLinks']) {
+        await assertFails(getDocs(query(collection(db, c), limit(1))));
+      }
+      await assertFails(getDoc(doc(db, 'settings/meet')));
+      await assertFails(setDoc(doc(db, `meets/${M2}/athletes/WAG_0009`), { x: 1 }));
+      await assertFails(setDoc(doc(db, `clubLinks/${LINK}`), { meetId: M2 }, { merge: true }));
+      await assertFails(updateDoc(doc(db, `clubLinks/${LINK}`), { meetId: M2 }));
+    }
   });
 });

@@ -5,7 +5,7 @@ import type { MeetInfo } from '../lib/data/meet-store';
 type Dialog = null | 'new' | 'rename' | 'archive';
 
 /** Meet dropdown plus New / Rename / Archive. Presentational: the page owns the data. */
-export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, onRename, onArchive }: {
+export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, onRename, onArchive, onBringInData }: {
   /** Visible (not archived) meets, newest first. */
   meets: MeetInfo[];
   selectedId: string;
@@ -13,6 +13,8 @@ export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, on
   onCreate: (name: string) => Promise<void>;
   onRename: (name: string) => Promise<void>;
   onArchive: () => Promise<void>;
+  /** Given only when earlier (pre-meets) data still exists: shows "Bring in earlier data". */
+  onBringInData?: () => void;
 }) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [name, setName] = useState('');
@@ -43,6 +45,7 @@ export default function MeetSwitcher({ meets, selectedId, onSelect, onCreate, on
         <button className="btn ghost small" type="button" onClick={() => open('new')}>New meet</button>
         <button className="btn ghost small" type="button" onClick={() => open('rename')}>Rename</button>
         <button className="btn ghost small" type="button" onClick={() => open('archive')}>Archive</button>
+        {onBringInData && <button className="btn ghost small" type="button" onClick={onBringInData}>Bring in earlier data</button>}
       </div>
 
       {(dialog === 'new' || dialog === 'rename') && (

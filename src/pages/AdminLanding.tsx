@@ -4,6 +4,8 @@ import { isDomainAdmin, onUser, signInAdmin, signOutAdmin } from '../lib/firebas
 import { Tabs } from '../components/ui';
 import MeetSwitcher, { FirstMeet } from '../components/MeetSwitcher';
 import { db } from '../lib/firebase';
+import LegacyCopyDialog from '../components/LegacyCopyDialog';
+import { applyLegacyOps, hasLegacyData, loadLegacy, loadMeetState } from '../lib/data/legacy-store';
 import { createMeet, listMeets, renameMeet, setMeetArchived, type MeetInfo } from '../lib/data/meet-store';
 import { pickMeet, readSelectedMeet, visibleMeets, writeSelectedMeet } from '../lib/selected-meet';
 // Lazy: pulls in ExcelJS, which is large and only admins need.
@@ -31,6 +33,8 @@ export default function AdminLanding() {
   const [meets, setMeets] = useState<MeetInfo[] | null>(null);
   const [meetsError, setMeetsError] = useState('');
   const [meetId, setMeetId] = useState<string | null>(null);
+  const [legacy, setLegacy] = useState(false);
+  const [legacyOpen, setLegacyOpen] = useState(false);
 
   useEffect(() => onUser(setUser), []);
 
@@ -45,6 +49,8 @@ export default function AdminLanding() {
     setMeetsError(e instanceof Error ? e.message : 'Could not load the meets.');
   }), []);
   useEffect(() => { if (isAdmin) void loadMeets(); }, [isAdmin, loadMeets]);
+  // Cheap existence check; the button only shows when there is earlier data to bring in.
+  useEffect(() => { if (isAdmin) void hasLegacyData(db).then(setLegacy); }, [isAdmin]);
 
   function selectMeet(id: string) {
     setMeetId(id);
@@ -107,6 +113,23 @@ export default function AdminLanding() {
       )}
       {!meetsError && meets === null && <p role="status">Loading meets…</p>}
       {meets && visibleMeets(meets).length === 0 && <FirstMeet onCreate={onCreateMeet} />}
+      {meets && visibleMeets(meets).length === 0 && legacy && (
+        <p><button className="btn ghost" type="button" onClick={() => setLegacyOpen(true)}>Bring in earlier data</button></p>
+      )}
+      {meets && legacyOpen && (
+        <LegacyCopyDialog
+          meets={visibleMeets(meets)}
+          defaultMeetId={meetId}
+          api={{
+            load: () => loadLegacy(db),
+            loadMeet: (id) => loadMeetState(db, id),
+            createMeet: (name) => createMeet(db, name),
+            apply: (ops, onProgress) => applyLegacyOps(db, ops, onProgress),
+          }}
+          onClose={() => setLegacyOpen(false)}
+          onDone={(id) => { setLegacyOpen(false); void loadMeets(id); }}
+        />
+      )}
       {meets && meetId && (
         <>
           <MeetSwitcher
@@ -116,6 +139,7 @@ export default function AdminLanding() {
             onCreate={onCreateMeet}
             onRename={async (name) => { await renameMeet(db, meetId, name); await loadMeets(meetId); }}
             onArchive={async () => { await setMeetArchived(db, meetId, true); await loadMeets(null); }}
+            onBringInData={legacy ? () => setLegacyOpen(true) : undefined}
           />
           <nav aria-label="Admin sections" className="adm-tabs">
             <Tabs tabs={TABS} active={tab} onChange={setTab} />
