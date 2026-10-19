@@ -334,3 +334,35 @@ describe('Live updates', () => {
     expect(screen.getByRole('button', { name: 'Still A–Z (0)' })).toBeInTheDocument();
   });
 });
+
+describe('Clubs & email: list conveniences (Julia 2026-10-18)', () => {
+  beforeEach(() => { live.handlers = null; });
+
+  it('Uncheck all and Check all tick every club on the current list', async () => {
+    const user = await open();
+    const box = screen.getByRole('checkbox', { name: 'Alpha Gymnastics' });
+    expect(screen.getByRole('button', { name: 'Check all' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Uncheck all' }));
+    expect(box).not.toBeChecked();
+    expect(screen.getByText('0 of 1 ticked')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Uncheck all' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Check all' }));
+    expect(box).toBeChecked();
+    expect(screen.getByText('1 of 1 ticked')).toBeInTheDocument();
+  });
+
+  it('Preview on a club line jumps down to the email preview and moves focus there', async () => {
+    const spy = vi.fn();
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = spy;
+    try {
+      const user = await open();
+      await user.click(screen.getByRole('button', { name: 'Preview Alpha Gymnastics' }));
+      const heading = screen.getByRole('heading', { name: 'Preview' });
+      await waitFor(() => expect(spy.mock.contexts).toContain(heading));
+      expect(heading).toHaveFocus();
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
+  });
+});

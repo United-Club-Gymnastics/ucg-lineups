@@ -42,6 +42,15 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
   const [tplState, setTplState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [previewId, setPreviewId] = useState('');
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  // "Preview" on a club line shows that club's message and jumps down to it (focus moves there for keyboard users).
+  const showPreview = (clubId: string) => {
+    setPreviewId(clubId);
+    requestAnimationFrame(() => {
+      const h = document.getElementById('cl-prev-h');
+      h?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      h?.focus({ preventScroll: true });
+    });
+  };
   const [skipToday, setSkipToday] = useState(true);
   const [who, setWho] = useState<TestWho>('jz');
   const [gmailToken, setGmailToken] = useState<string | null>(null);
@@ -162,6 +171,14 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         {list.length === 0 ? (
           <p className="adm-muted">No clubs on this list.</p>
         ) : (
+          <>
+          <div className="cl-all">
+            <span className="adm-muted">{list.length - list.filter((e) => excluded.has(e.clubId)).length} of {list.length} ticked</span>
+            <button type="button" className="btn ghost small" disabled={!!frozen || list.every((e) => !excluded.has(e.clubId))}
+              onClick={() => setExcluded((prev) => { const n = new Set(prev); for (const e of list) n.delete(e.clubId); return n; })}>Check all</button>
+            <button type="button" className="btn ghost small" disabled={!!frozen || list.every((e) => excluded.has(e.clubId))}
+              onClick={() => setExcluded((prev) => { const n = new Set(prev); for (const e of list) n.add(e.clubId); return n; })}>Uncheck all</button>
+          </div>
           <ul className="cl-recips" aria-label={`Clubs to send the ${REMINDER_LABEL[kind]} reminder to`}>
             {list.map((e) => (
               <li key={e.clubId}>
@@ -177,10 +194,11 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
                   {kind === 'split' ? e.levels.map((l) => `${l.levelName} (${l.count})`).join(', ') : e.sessions.map((s) => s.label).join(', ')}
                   {sentToday.has(e.clubId) && <em> · sent today</em>}
                 </span>
-                <button type="button" className="btn ghost small" aria-pressed={preview?.clubId === e.clubId} onClick={() => setPreviewId(e.clubId)} aria-label={`Preview ${e.clubName}`}>Preview</button>
+                <button type="button" className="btn ghost small" aria-pressed={preview?.clubId === e.clubId} onClick={() => showPreview(e.clubId)} aria-label={`Preview ${e.clubName}`}>Preview</button>
               </li>
             ))}
           </ul>
+          </>
         )}
       </section>
 
@@ -204,7 +222,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
       </section>
 
       <section className="adm-card" aria-labelledby="cl-prev-h">
-        <h2 className="display" id="cl-prev-h">Preview</h2>
+        <h2 className="display" id="cl-prev-h" tabIndex={-1}>Preview</h2>
         {!preview || !rendered ? (
           <p className="adm-muted">No clubs on this list.</p>
         ) : (
