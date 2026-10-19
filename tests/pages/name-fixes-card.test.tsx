@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,30 +23,12 @@ beforeEach(() => {
 });
 
 describe('Name fixes card', () => {
-  it('lists suggestions with the athlete count, leaves McDonald out, and accepting saves and says which pages were republished', async () => {
+  it('shows no suggestions, only the fixes Julia adds (2026-10-19: inner-capital names are correct)', async () => {
     render(<NameFixesCard meetId="m1" />);
-    const accept = await screen.findByRole('button', { name: 'Accept MurrayMetzger as Murray Metzger' });
-    const item = accept.closest('li')!;
-    expect(item).toHaveTextContent('Last name');
-    expect(item).toHaveTextContent('2 athletes');
-    expect(screen.queryByText('McDonald')).toBeNull();
-    await userEvent.click(accept);
-    expect(h.save).toHaveBeenCalledWith({}, 'm1', [], [{ field: 'last', from: 'MurrayMetzger', to: 'Murray Metzger' }]);
-    expect(await screen.findByText(/Republished 2 club pages: Club A, Club B/)).toBeInTheDocument();
-    // Accepted: it moves from the suggestions to the current fixes, with its count and a Remove button.
-    const list = await screen.findByRole('list', { name: /Name fixes for this meet/ });
-    expect(list).toHaveTextContent('MurrayMetzger');
-    expect(list).toHaveTextContent('2 athletes');
-    expect(within(list).getByRole('button', { name: /Remove the fix for MurrayMetzger/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Accept MurrayMetzger as Murray Metzger' })).toBeNull();
-  });
-
-  it('Edit pre-fills the form without saving', async () => {
-    render(<NameFixesCard meetId="m1" />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit the fix for StPierre' }));
-    expect(screen.getByLabelText('As in the export')).toHaveValue('StPierre');
-    expect(screen.getByLabelText('Show as')).toHaveValue('St Pierre');
-    expect(h.save).not.toHaveBeenCalled();
+    expect(await screen.findByRole('heading', { name: 'Add a fix' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Suggestions' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Accept / })).toBeNull();
+    expect(screen.getByText('No fixes yet.')).toBeInTheDocument();
   });
 
   it('adds a typed fix, shows how many athletes it changes, and refuses different letters', async () => {
@@ -77,7 +59,9 @@ describe('Name fixes card', () => {
     h.save.mockResolvedValue({ republished: [], publishError: 'offline' });
     h.publish.mockResolvedValue(7);
     render(<NameFixesCard meetId="m1" />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Accept StPierre as St Pierre' }));
+    await userEvent.type(await screen.findByLabelText('As in the export'), 'StPierre');
+    await userEvent.type(screen.getByLabelText('Show as'), 'St Pierre');
+    await userEvent.click(screen.getByRole('button', { name: 'Add fix' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/saved, but publishing the club pages failed: offline/);
     await userEvent.click(screen.getByRole('button', { name: 'Republish club pages' }));
     expect(await screen.findByText('Republished 7 club pages.')).toBeInTheDocument();
