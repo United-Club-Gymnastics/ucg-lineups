@@ -255,3 +255,6 @@
 ## Removed "Bring in earlier data"; club page meet dropdown (2026-10-19)
 - Julia ran "Bring in earlier data" once and asked to hide it. The button, dialog, planner and store (`LegacyCopyDialog`, `legacy-copy.ts`, `legacy-store.ts`) and their unit tests are deleted. The old top-level data is untouched; the admin-only rule still covers it (its rules test stays).
 - The club page meet picker is always the styled `Select` when a club is in more than one meet (the pills for up to four meets are gone). One meet still shows just its name.
+
+## Scorecard page numbers by apparatus and squad (2026-10-20)
+- Artistic scorecards keep their print order (apparatus in Olympic order, squads in arrival order) but each page's number is fixed by apparatus then squad letter: MAG Floor A = 1, Floor B = 2 … Pommel Horse A = 7; WAG Vault A = 1 … Bars A = 9. "of m" is apparatus count × squad count. A squad with nobody on an apparatus leaves its number unused. Set in `artistic-scorecards-content.ts`; `numberPages` keeps a number a content module fixed. Rotation sheets and T&T are still numbered 1..N.

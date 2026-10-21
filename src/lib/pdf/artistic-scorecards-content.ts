@@ -1,5 +1,7 @@
 // Pure: artistic (MAG/WAG) scorecards. Landscape, one page per squad per apparatus, apparatus in Olympic order, squads in the
 // order they arrive. Exactly 15 rows. Spec §6.
+// Page numbers follow apparatus then squad letter, whatever the print order (Julia 2026-10-20): MAG Floor A is page 1, Floor B
+// page 2 … Pommel Horse A page 7; WAG Vault A page 1 … Bars A page 9. A squad with nobody on an apparatus leaves its number unused.
 import { locationLabel, sessionLocation, sessionTitle } from '../session-names';
 import { APPARATUS } from '../apparatus';
 import { arrivalOrder, columnCode, columnLabel, patternDef, rotationFor, slotOf } from '../rotation';
@@ -31,7 +33,9 @@ export const INFINITY_COLUMNS: Column[] = [
 export function artisticScorecardPages(input: ArtisticSessionInput): Unnumbered<ArtisticScorecardPage>[] {
   const { session, pattern, meet } = input;
   const pages: Unnumbered<ArtisticScorecardPage>[] = [];
-  for (const { code, name } of APPARATUS[session.discipline]) {
+  const apparatus = APPARATUS[session.discipline];
+  const of = apparatus.length * input.squads.length;
+  for (const [ax, { code, name }] of apparatus.entries()) {
     for (const i of arrivalOrder(code, pattern, session.discipline)) {
       const squad = input.squads[i];
       if (!squad) continue;
@@ -70,6 +74,7 @@ export function artisticScorecardPages(input: ArtisticSessionInput): Unnumbered<
         rows,
         key: HEAVY_KEY,
         jump: { group: code, label: squad.letter },
+        page: { n: ax * input.squads.length + i + 1, of },
       });
     }
   }

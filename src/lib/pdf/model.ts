@@ -230,8 +230,9 @@ export function jumpGroups(pages: Page[]): { group: string; items: { index: numb
   return out;
 }
 
-/** What a content module returns: the page without its document-level numbering. */
-export type Unnumbered<T extends BasePage> = Omit<T, 'page' | 'printedOn'>;
+/** What a content module returns: the page without its document-level numbering. A module may fix a page's own number
+ * (artistic scorecards: by apparatus and squad); `numberPages` keeps it. */
+export type Unnumbered<T extends BasePage> = Omit<T, 'page' | 'printedOn'> & { page?: PageNumber };
 
 /** Widths of `columns` across `total`, in proportion to their weights. */
 export function columnWidths(columns: Pick<Column, 'weight'>[], total: number): number[] {
@@ -243,9 +244,9 @@ export function columnWidths(columns: Pick<Column, 'weight'>[], total: number): 
 export type UnnumberedPage =
   | Unnumbered<ArtisticScorecardPage> | Unnumbered<TntScorecardPage> | Unnumbered<SynchroPage> | Unnumbered<ArtisticRotationPage> | Unnumbered<TntRotationPage>;
 
-/** Number pages 1..N within one document and stamp the print date. */
+/** Number pages 1..N within one document (unless the content module fixed a page's number) and stamp the print date. */
 export function numberPages(pages: UnnumberedPage[], printedOn: string): Page[] {
-  return pages.map((p, i) => ({ ...p, page: { n: i + 1, of: pages.length }, printedOn }) as Page);
+  return pages.map((p, i) => ({ ...p, page: p.page ?? { n: i + 1, of: pages.length }, printedOn }) as Page);
 }
 
 // --- shared geometry (points): the renderer and the preview size rows the same way ---------------------------------------

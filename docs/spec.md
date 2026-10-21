@@ -197,6 +197,7 @@ Collation for all sessions: **scorecards by location** (the meet's location orde
 **rotation sheets by session name** (natural order; every location's Session 1, then Session 2…) then location order.
 
 ### Artistic scorecards (landscape, one page per squad per apparatus)
+- Page numbers go by apparatus then squad letter, not print position: MAG Floor A = page 1, Floor B = 2 … Pommel Horse A = 7; WAG Vault A = 1 … Bars A = 9 (Julia 2026-10-20). The print order is unchanged.
 - Pages per apparatus in Olympic order; within an apparatus, squads **in the order they compete on
   it** (one flight MAG floor: A, F, E, D, C, B; WAG 7 squads vault: A, B, F, G, D, E, C, by
   timeline slot, VT-Platform and VT-Ground pages mixed in that order).

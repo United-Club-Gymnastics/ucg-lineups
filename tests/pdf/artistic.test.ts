@@ -53,6 +53,31 @@ describe('artistic scorecards', () => {
     }
   });
 
+  it('page numbers go by apparatus then squad letter, while the print order stays arrival order (Julia 2026-10-20)', () => {
+    const mag = numberPages(artisticScorecardPages(input('MAG', 'one', everySquad('MAG', 'one'))), 'today');
+    const num = (pages: typeof mag, code: string, letter: string) => {
+      const p = pages.find((x) => x.kind === 'artistic-scorecard' && x.band.code === code && x.band.squad === letter);
+      return p?.page;
+    };
+    expect(mag.slice(0, 6).map((p) => p.kind === 'artistic-scorecard' && p.band.squad)).toEqual(['A', 'F', 'E', 'D', 'C', 'B']);
+    expect(mag.slice(0, 6).map((p) => p.page.n)).toEqual([1, 6, 5, 4, 3, 2]);
+    expect(num(mag, 'FX', 'B')).toEqual({ n: 2, of: 36 });
+    expect(num(mag, 'PH', 'A')).toEqual({ n: 7, of: 36 });
+    expect(num(mag, 'HB', 'F')).toEqual({ n: 36, of: 36 });
+    const wag = numberPages(artisticScorecardPages(input('WAG', 'parallel', everySquad('WAG', 'parallel'))), 'today');
+    expect(num(wag, 'VT', 'B')).toEqual({ n: 2, of: 32 });
+    expect(num(wag, 'UB', 'A')).toEqual({ n: 9, of: 32 });
+    expect(new Set(wag.map((p) => p.page.n)).size).toBe(32);
+    // A squad with nobody on an apparatus leaves its number unused; the others keep theirs.
+    const gaps = everySquad('MAG', 'one');
+    gaps[1] = [];
+    const g = numberPages(artisticScorecardPages(input('MAG', 'one', gaps)), 'today');
+    expect(num(g, 'FX', 'C')).toEqual({ n: 3, of: 36 });
+    // Rotation sheets are still numbered 1..N in order.
+    const rot = numberPages(artisticRotationPages(input('MAG', 'one', everySquad('MAG', 'one'))), 'today');
+    expect(rot.map((p) => p.page.n)).toEqual(rot.map((_, i) => i + 1));
+  });
+
   it('names header, gym, session and A/B equipment (VT-A) in the band', () => {
     const pages = artisticScorecardPages(input('WAG', 'parallel', everySquad('WAG', 'parallel')));
     expect(pages[0]).toMatchObject({ gym: 'Orange Gym', session: 'Session 1 – Orange', meet: MEET });
