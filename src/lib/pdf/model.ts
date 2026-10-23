@@ -39,6 +39,8 @@ export interface Column {
   heavy: boolean;
   /** Relative width (text columns share what the boxes leave). */
   weight: number;
+  /** T&T: one box even when the athlete's row has two lines (High Flyers trampoline Final). */
+  single?: boolean;
 }
 
 /** Where the page sits in the preview's jump bar: one row per `group` (apparatus / event), one button per page. */
@@ -96,6 +98,8 @@ export interface TntRow {
   level: string;
   blank: boolean;
   levelBreak: boolean;
+  /** Lines in this athlete's score boxes when it differs from the page's `passes` (High Flyers trampoline: 2 routines). */
+  passes?: 1 | 2;
 }
 
 export interface TntScorecardPage extends BasePage {

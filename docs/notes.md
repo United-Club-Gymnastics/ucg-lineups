@@ -258,3 +258,6 @@
 
 ## Scorecard page numbers by apparatus and squad (2026-10-20)
 - Artistic scorecards keep their print order (apparatus in Olympic order, squads in arrival order) but each page's number is fixed by apparatus then squad letter: MAG Floor A = 1, Floor B = 2 … Pommel Horse A = 7; WAG Vault A = 1 … Bars A = 9. "of m" is apparatus count × squad count. A squad with nobody on an apparatus leaves its number unused. Set in `artistic-scorecards-content.ts`; `numberPages` keeps a number a content module fixed. Rotation sheets and T&T are still numbered 1..N.
+
+## High Flyers trampoline: two routine lines (2026-10-23)
+- On trampoline scorecards a High Flyer's E1, E2, HD, SJ and ND boxes have two lines (one per routine); Final stays one box because only one score is entered. Other levels keep one line. Blank rows get two lines when the squad has a High Flyer on trampoline, so a late High Flyer still fits. The key adds "High Flyers: one line per routine." Row height is unchanged. Per-row `passes` on `TntRow`, `single` on the Final column; drawn by `render.ts` and `PdfPreview.tsx`. Double Mini and Tumbling are unchanged.

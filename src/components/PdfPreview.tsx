@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { MARK_PATHS, MARK_SIZE } from '../lib/pdf/logo-mark';
 import {
   BRAND_NAME, HEAVY_BOX_STYLE, LETTER, MARGIN, SITE, TIMELINE_ROW_UNITS, artisticRotationUnit, artisticRowHeight, columnWidths, isLandscape, tntAthleteHeight, tntRotationUnit,
-  type ArtisticRotationPage, type ArtisticScorecardPage, type Column, type Page, type SynchroPage, type TntRotationPage, type TntScorecardPage,
+  type ArtisticRotationPage, type ArtisticScorecardPage, type Column, type Page, type SynchroPage, type TntRotationPage, type TntRow, type TntScorecardPage,
 } from '../lib/pdf/model';
 import { pageLabel } from '../lib/pdf/labels';
 import { splitPair } from '../lib/pdf/pair';
@@ -116,6 +116,9 @@ function SheetHeader({ title, subtitle, meet, printedOn }: { title: string; subt
   );
 }
 
+/** Lines in one score box: the row's own count (High Flyers trampoline: 2), else the page's; a `single` column is always one. */
+const linesOf = (c: Column, r: TntRow, pg: TntScorecardPage): number => (c.single ? 1 : r.passes ?? pg.passes);
+
 function TntScorecard({ pg }: { pg: TntScorecardPage }) {
   const h = tntAthleteHeight(pg.rows.length);
   const grid = cols(pg.columns, LETTER.h - 2 * MARGIN);
@@ -129,8 +132,8 @@ function TntScorecard({ pg }: { pg: TntScorecardPage }) {
         <div key={i} className={`pv-grid pv-row pv-tnt-row${r.levelBreak ? ' pv-break' : ''}`} style={{ gridTemplateColumns: grid, height: pt(h) }}>
           {pg.columns.map((c, ci) => c.kind === 'box' ? (
             <div key={c.id} className="pv-passes">
-              {Array.from({ length: pg.passes }, (_, k) => (
-                <div key={k} className={boxClass()} style={edges({ b: k === pg.passes - 1 && pg.rows[i + 1]?.levelBreak ? 0 : horizW(c.heavy), r: rightOf(pg.columns, ci) })} />
+              {Array.from({ length: linesOf(c, r, pg) }, (_, k) => (
+                <div key={k} className={boxClass()} style={edges({ b: k === linesOf(c, r, pg) - 1 && pg.rows[i + 1]?.levelBreak ? 0 : horizW(c.heavy), r: rightOf(pg.columns, ci) })} />
               ))}
             </div>
           ) : (

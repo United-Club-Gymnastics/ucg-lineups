@@ -14,8 +14,11 @@ const box = (id: string, header: string, heavy: boolean): Column => ({ id, heade
 const CHECK: Column = { id: 'scratch', header: 'Scratch?', kind: 'check', heavy: false, weight: 0.9 };
 const IDENTITY: Column[] = [CHECK, text('name', 'Name / Club', 4.2), text('level', 'Level', 0.7)];
 
-/** Trampoline: E1 E2 HD SJ ND are entered in ScoreFlippers, Final is not. */
-export const TR_COLUMNS: Column[] = [...IDENTITY, box('e1', 'E1', true), box('e2', 'E2', true), box('hd', 'HD', true), box('sj', 'SJ', true), box('nd', 'ND', true), box('final', 'Final', false)];
+/** Trampoline: E1 E2 HD SJ ND are entered in ScoreFlippers, Final is not. Final stays one box for a High Flyer's two routines. */
+export const TR_COLUMNS: Column[] = [...IDENTITY, box('e1', 'E1', true), box('e2', 'E2', true), box('hd', 'HD', true), box('sj', 'SJ', true), box('nd', 'ND', true), { ...box('final', 'Final', false), single: true }];
+/** High Flyers compete two trampoline routines (only one score is entered): their score boxes get a line each (Julia 2026-10-23). */
+export const TR_TWO_ROUTINES = 'HF';
+const TR_KEY_TWO = ' High Flyers: one line per routine.';
 /** Double Mini and Tumbling: E1 E2 E3 SJ ND, two rows per athlete (one per pass). */
 export const PASS_COLUMNS: Column[] = [...IDENTITY, box('e1', 'E1', true), box('e2', 'E2', true), box('e3', 'E3', true), box('sj', 'SJ', true), box('nd', 'ND', true), box('final', 'Final', false)];
 
@@ -48,6 +51,9 @@ export function tntScorecardPages(input: TntSessionInput): Unnumbered<TntScoreca
       if (!squad) continue;
       const chunks = paginate<TntPerson>(squad.order[event]);
       const rotation = rotationFor(s).indexOf(event) + 1;
+      // Trampoline blank rows get two lines when the squad has a High Flyer, so a late High Flyer still has room.
+      const twoOnTr = event === 'TR' && squad.order.TR.some((a) => a.levels.TR === TR_TWO_ROUTINES);
+      const trPasses = (a: TntPerson | null): 1 | 2 => ((a ? a.levels.TR === TR_TWO_ROUTINES : twoOnTr) ? 2 : 1);
       chunks.forEach((chunk, p) => {
         const rows: TntRow[] = chunk.map((a, ix) => ({
           name: a?.name ?? '',
@@ -55,6 +61,7 @@ export function tntScorecardPages(input: TntSessionInput): Unnumbered<TntScoreca
           level: a?.levels[event] ?? '',
           blank: !a,
           levelBreak: !!a && ix > 0 && !!chunk[ix - 1] && chunk[ix - 1]!.levels[event] !== a.levels[event],
+          ...(event === 'TR' && trPasses(a) === 2 ? { passes: 2 as const } : {}),
         }));
         const letter = squadLetter(s);
         pages.push({
@@ -68,7 +75,7 @@ export function tntScorecardPages(input: TntSessionInput): Unnumbered<TntScoreca
           passes: event === 'TR' ? 1 : 2,
           columns: event === 'TR' ? TR_COLUMNS : PASS_COLUMNS,
           rows,
-          key: HEAVY_KEY + (event === 'TR' ? '' : ' Two rows per athlete: one per pass.'),
+          key: HEAVY_KEY + (event === 'TR' ? (twoOnTr ? TR_KEY_TWO : '') : ' Two rows per athlete: one per pass.'),
           jump: { group: event, label: chunks.length > 1 ? `${letter}${p + 1}` : letter },
         });
       });

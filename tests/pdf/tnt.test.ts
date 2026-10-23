@@ -81,6 +81,22 @@ describe('T&T scorecards', () => {
     expect(p.passes).toBe(1);
   });
 
+  it('High Flyers get two trampoline routine lines (Final stays one box); blanks too when the squad has a High Flyer (Julia 2026-10-23)', () => {
+    const pages = tntScorecardPages(input([[...all(1, 'HF', 'H'), ...all(1, 'IF', 'I')], all(2, 'NF'), []]));
+    const trA = pages.find((p) => p.event === 'TR' && p.squad === 'A')!;
+    expect(trA.rows.map((r) => r.passes ?? trA.passes)).toEqual([2, 1, 2, 2, 2, 2, 2]);
+    expect(trA.columns.find((c) => c.id === 'final')!.single).toBe(true);
+    expect(trA.columns.filter((c) => c.kind === 'box' && !c.single).map((c) => c.id)).toEqual(['e1', 'e2', 'hd', 'sj', 'nd']);
+    expect(trA.key).toMatch(/High Flyers: one line per routine/);
+    // No High Flyer in the squad: one line everywhere, no note.
+    const trB = pages.find((p) => p.event === 'TR' && p.squad === 'B')!;
+    expect(trB.rows.every((r) => (r.passes ?? trB.passes) === 1)).toBe(true);
+    expect(trB.key).not.toMatch(/High Flyers/);
+    // Double Mini and Tumbling are unchanged: two passes for everyone.
+    const dmA = pages.find((p) => p.event === 'DM' && p.squad === 'A')!;
+    expect(dmA.rows.every((r) => r.passes === undefined) && dmA.passes === 2).toBe(true);
+  });
+
   it('DM and TU columns: E1 E2 E3 SJ ND heavy, Final not; two rows per athlete', () => {
     const pages = tntScorecardPages(input([all(2), [], []]));
     const dm = pages.find((p) => p.event === 'DM')!;

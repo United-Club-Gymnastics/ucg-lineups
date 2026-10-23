@@ -277,13 +277,14 @@ function drawTntScorecard(p: Pen, pg: TntScorecardPage, W: number, H: number) {
   const headH = 20;
   const n = pg.rows.length;
   const athleteH = tntAthleteHeight(n);
-  const subH = athleteH / pg.passes;
   const widths = columnWidths(pg.columns, CW);
   const xs = xsOf(widths, L);
   const cells: BoxCell[] = pg.columns.map((c, i) => ({ x: xs[i], y: top, w: widths[i], h: headH, heavy: c.heavy }));
-  pg.rows.forEach((_r, ri) => pg.columns.forEach((c, i) => {
+  pg.rows.forEach((r, ri) => pg.columns.forEach((c, i) => {
     const y = top + headH + ri * athleteH;
-    if (c.kind === 'box') for (let k = 0; k < pg.passes; k++) cells.push({ x: xs[i], y: y + k * subH, w: widths[i], h: subH, heavy: c.heavy });
+    const lines = c.single ? 1 : r.passes ?? pg.passes;
+    const subH = athleteH / lines;
+    if (c.kind === 'box') for (let k = 0; k < lines; k++) cells.push({ x: xs[i], y: y + k * subH, w: widths[i], h: subH, heavy: c.heavy });
     else cells.push({ x: xs[i], y, w: widths[i], h: athleteH, heavy: false });
   }));
   p.boxes(cells, pg.rows.flatMap((r, ri) => (r.levelBreak ? [top + headH + ri * athleteH] : [])));

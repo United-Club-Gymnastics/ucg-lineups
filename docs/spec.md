@@ -224,6 +224,7 @@ Collation for all sessions: **scorecards by location** (the meet's location orde
 
 ### T&T scorecards (landscape, 10 rows a page)
 - Per event (TR, DM, TU), squads in arrival order (TR: A, C, B); pages `page n of m`.
+- Trampoline: High Flyers get two lines in E1/E2/HD/SJ/ND (two routines; one score entered), Final stays one box; blank rows get two lines when the squad has a High Flyer (Julia 2026-10-23).
 - Columns: Scratch?, Name/Club, Level, then TR **E1 E2 HD SJ ND** Final; DM/TU **E1 E2 E3 SJ ND**
   Final with **two rows per athlete** (one per pass). Heavy = E-scores, HD, SJ, ND (not Final).
 - **5 blank rows** at the end of each squad list, kept together on its last page with ≥1 athlete
