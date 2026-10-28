@@ -16,6 +16,8 @@ import { restoreTntSquads } from '../tnt-squads';
 import type { Meet } from './model';
 
 export interface SessionMeta {
+  /** The session's id (printed in the scorecards' QR links). */
+  id?: string;
   name: string;
   location: string;
   levelCodes: string[];
@@ -77,7 +79,7 @@ export function buildArtisticSessionInput(input: {
   // An id that is not a pattern of this discipline prints as the discipline's default (the Squads screen says so).
   const pattern: RotationPattern = readPattern(stored?.pattern, session.discipline)?.pattern ?? defaultPattern(session.discipline);
   const count = squadCountFor(pattern, session.discipline);
-  const meta = { name: sessionName(session), location: sessionLocation(session), levelCodes: session.levelCodes, discipline: session.discipline };
+  const meta = { id: session.id, name: sessionName(session), location: sessionLocation(session), levelCodes: session.levelCodes, discipline: session.discipline };
   const empty: ArtisticSquadInput[] = Array.from({ length: count }, (_, i) => ({ index: i, letter: artisticLetter(i), groups: [] }));
   if (!stored) {
     return { meet, session: meta, pattern, schedule: EMPTY_SCHEDULE, athleteCount: d.athleteCount, squads: empty, unplaced: d.athleteCount, noSquads: true };
@@ -220,7 +222,7 @@ export function buildTntSessionInput(input: {
   }
   return {
     meet,
-    session: { name: sessionName(session), location: sessionLocation(session), levelCodes: session.levelCodes },
+    session: { id: session.id, name: sessionName(session), location: sessionLocation(session), levelCodes: session.levelCodes },
     competitionTime: session.competitionTime ?? '',
     squads,
     synchroOnly: data.synchroOnly.map((a) => person(a.id)),

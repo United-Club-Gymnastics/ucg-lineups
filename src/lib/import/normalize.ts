@@ -1,4 +1,5 @@
 import { APPARATUS } from '../apparatus';
+import { sortLevelCodes } from '../level-order';
 import { parseSessionString, sessionIdFor, sessionTitle, slug, sortByName, type ParsedSession } from '../session-names';
 import {
   DEFAULT_GYM_ORDER,
@@ -267,7 +268,7 @@ export function normalizeImport(input: ImportInput): ImportModel {
       const discs = (['WAG', 'MAG', 'TNT'] as Discipline[]).filter((d) => counts[d] > 0);
       s.discipline = discs.sort((a, b) => counts[b] - counts[a])[0];
       if (discs.length > 1) warn('mixed-session', `${sessionTitle(s)} has more than one discipline (${discs.map((d) => names[d]).join(', ')}).`);
-      s.levelCodes = [...levels].sort();
+      s.levelCodes = sortLevelCodes([...levels]);
       return s;
     }),
     gymOrder,

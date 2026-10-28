@@ -22,6 +22,8 @@ export const SITE = 'unitedclubgymnastics.org';
 export const BRAND_NAME = 'United Club Gymnastics';
 
 export interface Meet {
+  /** The meet's id: printed in each scorecard's QR link (src/lib/pdf/sheet-qr.ts). */
+  id?: string;
   name: string;
   /** Shown as typed (e.g. "October 22–25, 2026"). */
   date: string;
@@ -59,6 +61,8 @@ export interface BasePage {
   jump: JumpTarget;
   /** Footer "Page n of m"; set by `numberPages`. */
   page: PageNumber;
+  /** Scorecards and synchro sheets: the link naming this exact sheet, printed as a QR code (src/lib/pdf/sheet-qr.ts). */
+  qr?: string;
   printedOn: string;
 }
 

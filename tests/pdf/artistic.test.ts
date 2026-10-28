@@ -78,6 +78,16 @@ describe('artistic scorecards', () => {
     expect(rot.map((p) => p.page.n)).toEqual(rot.map((_, i) => i + 1));
   });
 
+  it('each scorecard carries the link to that exact sheet when the meet and session ids are known (QR, Julia 2026-10-28)', () => {
+    const noIds = artisticScorecardPages(input('MAG', 'one', everySquad('MAG', 'one')));
+    expect(noIds.every((p) => p.qr === undefined)).toBe(true);
+    const base = input('MAG', 'one', everySquad('MAG', 'one'));
+    const pages = artisticScorecardPages({ ...base, meet: { ...MEET, id: 'meet1' }, session: { ...base.session, id: 's1-orange' } });
+    const ph = pages.find((p) => p.band.code === 'PH' && p.band.squad === 'C')!;
+    expect(ph.qr).toBe('https://scorecards.unitedclubgymnastics.org/#/s/meet1/s1-orange/PH/C/1');
+    expect(new Set(pages.map((p) => p.qr)).size).toBe(pages.length);
+  });
+
   it('names header, gym, session and A/B equipment (VT-A) in the band', () => {
     const pages = artisticScorecardPages(input('WAG', 'parallel', everySquad('WAG', 'parallel')));
     expect(pages[0]).toMatchObject({ gym: 'Orange Gym', session: 'Session 1 – Orange', meet: MEET });
@@ -124,7 +134,7 @@ describe('artistic scorecards', () => {
     const [p] = artisticScorecardPages(input('MAG', 'one', [[group('A', 'Dev', ['x'])]]));
     expect(p.infinity).toBe(false);
     expect(p.columns).toBe(STANDARD_COLUMNS);
-    expect(p.columns.map((c) => c.header)).toEqual(['Level', 'Athlete', 'Club', 'SV', 'ND', 'J1 Score', 'J2 Score', 'Final Score', 'Scratch?']);
+    expect(p.columns.map((c) => c.header)).toEqual(['Scratch?', 'Level', 'Athlete', 'Club', 'SV', 'ND', 'J1 Score', 'J2 Score', 'Final Score']);
     expect(p.columns.filter((c) => c.heavy).map((c) => c.header)).toEqual(['SV', 'Final Score']);
     expect(p.columns.filter((c) => c.sub).map((c) => [c.header, c.sub])).toEqual([['J1 Score', 'incl. ND'], ['J2 Score', 'incl. ND']]);
   });
@@ -132,7 +142,7 @@ describe('artistic scorecards', () => {
   it('Infinity columns: SV (10 + D-score), E-score (incl. ND), ND, Final Score; SV and Final heavy', () => {
     const [p] = artisticScorecardPages(input('WAG', 'one', [[group('A', 'Inf', ['x'], {}, WAG)]]));
     expect(p.columns).toBe(INFINITY_COLUMNS);
-    expect(p.columns.map((c) => c.header)).toEqual(['Level', 'Athlete', 'Club', 'SV', 'E-score', 'ND', 'Final Score', 'Scratch?']);
+    expect(p.columns.map((c) => c.header)).toEqual(['Scratch?', 'Level', 'Athlete', 'Club', 'SV', 'E-score', 'ND', 'Final Score']);
     expect(p.columns.find((c) => c.id === 'sv')!.sub).toBe('10 + D-score');
     expect(p.columns.find((c) => c.id === 'e')!.sub).toBe('incl. ND');
     expect(p.columns.filter((c) => c.heavy).map((c) => c.header)).toEqual(['SV', 'Final Score']);

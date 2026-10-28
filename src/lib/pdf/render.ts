@@ -9,6 +9,7 @@ import {
 import { splitPair } from './pair';
 import { rowUnits } from './artistic-rotation-content';
 import { parsePath } from './svg-path';
+import { QR_SIZE, qrModules } from './sheet-qr';
 
 /** One cell of a scorecard grid. Cells that touch share their edge: it is drawn once (see `Pen.boxes`). */
 export interface BoxCell { x: number; y: number; w: number; h: number; heavy: boolean }
@@ -155,6 +156,23 @@ class Pen {
     }
   }
 
+  /** A QR code `size` pt square with its top-left at (x, y): black modules, one filled run per row (no quiet zone drawn; the
+   * page around it is white). */
+  qr(text: string, x: number, y: number, size: number) {
+    const m = qrModules(text);
+    const k = size / m.length;
+    this.doc.setFillColor(0, 0, 0);
+    m.forEach((row, r) => {
+      for (let c = 0; c < row.length; c++) {
+        if (!row[c]) continue;
+        let e = c;
+        while (e + 1 < row.length && row[e + 1]) e++;
+        this.doc.rect(x + c * k, y + r * k, (e - c + 1) * k, k, 'F');
+        c = e;
+      }
+    });
+  }
+
   /** Mark + "United Club / Gymnastics" lockup anchored at its left (or right) edge. Returns its width. */
   lockup(x: number, y: number, size: number, align: 'left' | 'right' = 'left'): number {
     const words = BRAND_NAME.split(' ');
@@ -203,9 +221,11 @@ function drawArtisticScorecard(p: Pen, pg: ArtisticScorecardPage, W: number, H: 
   const L = MARGIN;
   const R = W - MARGIN;
   const CW = R - L;
-  // header: date left, meet centre, logo + gym + session right
-  p.text(pg.meet.date, L, L + 6, { size: 8.5 });
-  p.text(`Printed ${pg.printedOn}`, L, L + 17, { size: 7.5, style: 'italic', gray: GREY_TEXT });
+  // header: QR + date left, meet centre, logo + gym + session right
+  if (pg.qr) p.qr(pg.qr, L, L - 4, QR_SIZE);
+  const dx = pg.qr ? L + QR_SIZE + 8 : L;
+  p.text(pg.meet.date, dx, L + 6, { size: 8.5 });
+  p.text(`Printed ${pg.printedOn}`, dx, L + 17, { size: 7.5, style: 'italic', gray: GREY_TEXT });
   p.text(pg.meet.name, W / 2, L + 8, { size: 12, style: 'bold', align: 'center', maxW: CW * 0.5 });
   p.lockup(R, L - 4, 26, 'right');
   p.text(pg.gym, R, L + 30, { size: 10, style: 'bolditalic', align: 'right' });
@@ -257,10 +277,11 @@ function drawArtisticScorecard(p: Pen, pg: ArtisticScorecardPage, W: number, H: 
 
 // --- T&T scorecard ----------------------------------------------------------------------------------------------------
 
-function sheetHeader(p: Pen, title: string, subtitle: string, meetName: string, meetDate: string, printedOn: string, W: number) {
+function sheetHeader(p: Pen, title: string, subtitle: string, meetName: string, meetDate: string, printedOn: string, W: number, qr?: string) {
   const L = MARGIN;
   const R = W - MARGIN;
-  p.lockup(L, L - 4, 28);
+  if (qr) p.qr(qr, L, L - 6, QR_SIZE);
+  p.lockup(qr ? L + QR_SIZE + 8 : L, L - 4, 28);
   p.text(title, W / 2, L + 8, { size: 18, style: 'bold', align: 'center', maxW: (R - L) * 0.55 });
   p.text(subtitle, W / 2, L + 26, { size: 10, style: 'bold', align: 'center', maxW: (R - L) * 0.6 });
   p.text(meetName, R, L + 4, { size: 9, style: 'bold', align: 'right', maxW: (R - L) * 0.25 });
@@ -272,7 +293,7 @@ function drawTntScorecard(p: Pen, pg: TntScorecardPage, W: number, H: number) {
   const L = MARGIN;
   const R = W - MARGIN;
   const CW = R - L;
-  sheetHeader(p, pg.title, pg.subtitle, pg.meet.name, pg.meet.date, pg.printedOn, W);
+  sheetHeader(p, pg.title, pg.subtitle, pg.meet.name, pg.meet.date, pg.printedOn, W, pg.qr);
   const top = L + 50;
   const headH = 20;
   const n = pg.rows.length;
@@ -314,7 +335,7 @@ function drawSynchro(p: Pen, pg: SynchroPage, W: number, H: number) {
   const L = MARGIN;
   const R = W - MARGIN;
   const CW = R - L;
-  sheetHeader(p, pg.title, pg.subtitle, pg.meet.name, pg.meet.date, pg.printedOn, W);
+  sheetHeader(p, pg.title, pg.subtitle, pg.meet.name, pg.meet.date, pg.printedOn, W, pg.qr);
   const top = L + 62;
   p.text('Scratch?', L, top - 8, { size: 7.5 });
   const chkW = 34;

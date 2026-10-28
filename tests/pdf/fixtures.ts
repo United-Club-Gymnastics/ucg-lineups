@@ -54,7 +54,7 @@ export function placeArtistic(session: ArtisticSession, athletes: StoredAthlete[
   return { session, athletes, ordersByClub, stored };
 }
 
-export const MEET = { name: 'UCG Nationals 2026 (sample)', date: 'October 22–25, 2026' };
+export const MEET = { id: 'sampleMeet01', name: 'UCG Nationals 2026 (sample)', date: 'October 22–25, 2026' };
 
 export function magFixture(): ArtisticFixture {
   resetNames();

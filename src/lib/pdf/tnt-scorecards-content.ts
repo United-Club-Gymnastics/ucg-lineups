@@ -4,6 +4,7 @@ import { sessionTitle } from '../session-names';
 import { TNT_EVENT_NAME, TNT_EVENTS, rotationFor, squadLetter, type TntEvent } from '../tnt-squads';
 import { HEAVY_KEY, type Column, type TntRow, type TntScorecardPage, type Unnumbered } from './model';
 import type { TntPerson, TntSessionInput } from './session-input';
+import { sheetQr } from './sheet-qr';
 
 export const TNT_PAGE_ROWS = 10;
 export const TNT_BLANKS = 5;
@@ -77,6 +78,7 @@ export function tntScorecardPages(input: TntSessionInput): Unnumbered<TntScoreca
           rows,
           key: HEAVY_KEY + (event === 'TR' ? (twoOnTr ? TR_KEY_TWO : '') : ' Two rows per athlete: one per pass.'),
           jump: { group: event, label: chunks.length > 1 ? `${letter}${p + 1}` : letter },
+          qr: sheetQr(meet.id, session.id, event, letter, p + 1),
         });
       });
     }

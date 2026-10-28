@@ -3,6 +3,7 @@
 import { sessionTitle } from '../session-names';
 import { HEAVY_KEY, type Column, type SynchroPage, type Unnumbered } from './model';
 import type { TntSessionInput } from './session-input';
+import { sheetQr } from './sheet-qr';
 
 export const SYNCHRO_PAIRS_PER_PAGE = 7;
 
@@ -31,6 +32,7 @@ export function synchroPages(input: TntSessionInput): Unnumbered<SynchroPage>[] 
         })),
         key: HEAVY_KEY,
         jump: { group: 'SY', label: n > 1 ? `${flight.name}${p + 1}` : flight.name || String(fi + 1) },
+        qr: sheetQr(meet.id, session.id, 'SY', flight.name || String(fi + 1), p + 1),
       });
     }
   }

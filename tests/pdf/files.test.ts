@@ -49,7 +49,7 @@ describe('buildExportSessions', () => {
     const get = (id: string) => b.sessions.find((x) => x.id === id)!.input;
     const orange = get('s1-orange');
     expect(orange.type === 'artistic' && orange.input.schedule).toEqual({ stretch: '6:45 AM', warmups: '7:00 AM', competition: '7:30 AM' });
-    expect(orange.input.meet).toEqual({ name: MEET.name, date: 'October 22, 2026' });
+    expect(orange.input.meet).toEqual({ id: MEET.id, name: MEET.name, date: 'October 22, 2026' });
     const purple = get('s1-purple');
     expect(purple.type === 'tnt' && purple.input.competitionTime).toBe('Thursday 9:00 AM'); // override wins for competition only
     expect(purple.input.meet.date).toBe('October 22, 2026'); // ...and the date still comes from the row

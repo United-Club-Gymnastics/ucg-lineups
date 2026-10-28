@@ -105,7 +105,7 @@ export function applySchedules(
 ): ExportSession[] {
   return sessions.map((s) => {
     const r = resolveSchedule(scheduleKey(s.session), o.rows, o.overrides?.[s.id] ?? s.session.scheduleOverride, o.meet.date);
-    const meet: Meet = { name: o.meet.name, date: formatDate(r.date) };
+    const meet: Meet = { id: o.meet.id, name: o.meet.name, date: formatDate(r.date) };
     const inner = s.input;
     if (inner.type === 'artistic') {
       return { ...s, input: { ...inner, input: { ...inner.input, meet, schedule: { stretch: r.stretch, warmups: r.warmups, competition: r.competition } } } };

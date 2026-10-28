@@ -9,6 +9,7 @@ import {
 } from '../lib/pdf/model';
 import { pageLabel } from '../lib/pdf/labels';
 import { splitPair } from '../lib/pdf/pair';
+import { QR_SIZE, qrModules } from '../lib/pdf/sheet-qr';
 import './pdf-preview.css';
 
 const pt = (n: number) => `${n}pt`;
@@ -73,7 +74,7 @@ function ArtisticScorecard({ pg }: { pg: ArtisticScorecardPage }) {
   return (
     <>
       <div className="pv-head3">
-        <div className="pv-small">{pg.meet.date}<br /><i className="pv-grey">Printed {pg.printedOn}</i></div>
+        <div className="pv-qrlock">{pg.qr && <Qr text={pg.qr} />}<div className="pv-small">{pg.meet.date}<br /><i className="pv-grey">Printed {pg.printedOn}</i></div></div>
         <div className="pv-meet">{pg.meet.name}</div>
         <div className="pv-right"><Lockup size={26} right /><b><i>{pg.gym}<br />{pg.session}</i></b></div>
       </div>
@@ -106,10 +107,20 @@ function ArtisticScorecard({ pg }: { pg: ArtisticScorecardPage }) {
   );
 }
 
-function SheetHeader({ title, subtitle, meet, printedOn }: { title: string; subtitle: string; meet: { name: string; date: string }; printedOn: string }) {
+/** The sheet's QR code (same modules as the PDF), labelled for screen readers by what it links to. */
+function Qr({ text }: { text: string }) {
+  const m = qrModules(text);
+  return (
+    <svg className="pv-qr" viewBox={`0 0 ${m.length} ${m.length}`} width={pt(QR_SIZE)} height={pt(QR_SIZE)} role="img" aria-label={`QR code: ${text}`} shapeRendering="crispEdges">
+      <path d={m.flatMap((row, r) => row.map((on, c) => (on ? `M${c} ${r}h1v1h-1z` : ''))).join('')} fill="#000" />
+    </svg>
+  );
+}
+
+function SheetHeader({ title, subtitle, meet, printedOn, qr }: { title: string; subtitle: string; meet: { name: string; date: string }; printedOn: string; qr?: string }) {
   return (
     <div className="pv-head3 pv-sheethead">
-      <Lockup size={28} />
+      <div className="pv-qrlock">{qr && <Qr text={qr} />}<Lockup size={28} /></div>
       <div><div className="pv-title">{title}</div><div className="pv-sub">{subtitle}</div></div>
       <div className="pv-right pv-small"><b>{meet.name}</b><br />{meet.date}<br /><i className="pv-grey">Printed {printedOn}</i></div>
     </div>
@@ -124,7 +135,7 @@ function TntScorecard({ pg }: { pg: TntScorecardPage }) {
   const grid = cols(pg.columns, LETTER.h - 2 * MARGIN);
   return (
     <>
-      <SheetHeader title={pg.title} subtitle={pg.subtitle} meet={pg.meet} printedOn={pg.printedOn} />
+      <SheetHeader title={pg.title} subtitle={pg.subtitle} meet={pg.meet} printedOn={pg.printedOn} qr={pg.qr} />
       <div className="pv-grid pv-headrow pv-tnt-head" style={{ gridTemplateColumns: grid, height: pt(20) }}>
         {pg.columns.map((c, i) => <div key={c.id} className={`${boxClass()} pv-th${c.id === 'name' ? ' pv-left' : ''}`} style={edges({ t: horizW(c.heavy), b: horizW(c.heavy), r: rightOf(pg.columns, i), l: i === 0 ? vertW(c.heavy) : 0 })}>{c.header}</div>)}
       </div>
@@ -158,7 +169,7 @@ function Synchro({ pg }: { pg: SynchroPage }) {
   );
   return (
     <>
-      <SheetHeader title={pg.title} subtitle={pg.subtitle} meet={pg.meet} printedOn={pg.printedOn} />
+      <SheetHeader title={pg.title} subtitle={pg.subtitle} meet={pg.meet} printedOn={pg.printedOn} qr={pg.qr} />
       <div className="pv-small pv-sy-scratch">Scratch?</div>
       {pg.pairs.map((q, i) => {
         const [n1, n2] = splitPair(q.names);

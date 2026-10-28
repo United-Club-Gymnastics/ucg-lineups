@@ -2,6 +2,7 @@ import { collection, deleteField, doc, getDoc, getDocs, limit, query, where, wri
 import type { StoredAthlete } from '../import/diff';
 import type { ImportModel, Session } from '../import/types';
 import { buildClubLinks } from '../club-links';
+import { sortLevelCodes } from '../level-order';
 import { applyNameFixesToAthletes, clubsAffectedByChange, type NameFix } from '../name-fixes';
 import { ensureClubTokens, loadClubTokens } from './club-tokens';
 import { parseMeet } from './meet-store';
@@ -16,12 +17,13 @@ export const toStoredClub = (id: string, data: DocumentData): StoredClub => {
   // The token lives in clubTokens/{clubId} (one per club across meets), not on the meet's club document.
   return { id, name: x.name ?? '', emails: x.emails ?? [], token: '' };
 };
-/** Sessions stored before names existed have `number` + `gym` only: they read as `Session <number>` at `<gym>`. */
+/** Sessions stored before names existed have `number` + `gym` only: they read as `Session <number>` at `<gym>`. Levels read in
+ * competitive order (meets imported before 2026-10-28 stored them A–Z). */
 export const toStoredSession = (id: string, data: DocumentData): Session => {
   const raw = data as Partial<Session>;
   const location = typeof raw.location === 'string' ? raw.location : (raw.gym ?? '');
   const name = typeof raw.name === 'string' && raw.name ? raw.name : raw.number !== undefined ? `Session ${raw.number}` : '';
-  return { ...(raw as Session), id, name, location, gym: location };
+  return { ...(raw as Session), id, name, location, gym: location, levelCodes: sortLevelCodes(raw.levelCodes ?? []) };
 };
 
 export async function loadAthletes(db: Firestore, meetId: string): Promise<StoredAthlete[]> {

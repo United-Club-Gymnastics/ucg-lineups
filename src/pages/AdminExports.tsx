@@ -51,7 +51,7 @@ export default function AdminExports({ meetId }: { meetId: string }) {
 }
 
 export function ExportsScreen({ meetId, input, onReload }: { meetId: string; input: ExportsInput; onReload: () => void }) {
-  const built = useMemo(() => buildExportSessions({ ...input, meet: { name: input.meet.meetName, date: input.meet.meetDate }, schedule: input.meet.schedule }), [input]);
+  const built = useMemo(() => buildExportSessions({ ...input, meet: { id: meetId, name: input.meet.meetName, date: input.meet.meetDate }, schedule: input.meet.schedule }), [input, meetId]);
 
   // Meet name/date and a T&T competition time: typed here, shown in the sheets at once, saved with the Save buttons.
   const [name, setName] = useState(input.meet.meetName);
@@ -82,8 +82,8 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
   );
 
   const sessions = useMemo(
-    () => applySchedules(built.sessions, { meet: { name: name.trim(), date: date.trim() }, rows: draftRows, overrides: draftOver }),
-    [built, name, date, draftRows, draftOver],
+    () => applySchedules(built.sessions, { meet: { id: meetId, name: name.trim(), date: date.trim() }, rows: draftRows, overrides: draftOver }),
+    [built, meetId, name, date, draftRows, draftOver],
   );
   const [sessionId, setSessionId] = useState(sessions[0]?.id ?? '');
   const [kind, setKind] = useState<ExportKind>('scorecards');

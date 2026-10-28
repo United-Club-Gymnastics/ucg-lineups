@@ -7,6 +7,7 @@ import { APPARATUS } from '../apparatus';
 import { arrivalOrder, columnCode, columnLabel, patternDef, rotationFor, slotOf } from '../rotation';
 import { HEAVY_KEY, type ArtisticScorecardPage, type Column, type ScoreRow, type Unnumbered } from './model';
 import type { ArtisticSessionInput } from './session-input';
+import { sheetQr } from './sheet-qr';
 
 export const SCORECARD_ROWS = 15;
 export const INFINITY_CODE = 'Inf';
@@ -17,17 +18,16 @@ const SCRATCH: Column = { id: 'scratch', header: 'Scratch?', kind: 'check', heav
 const IDENTITY: Column[] = [text('level', 'Level', 0.6), text('athlete', 'Athlete', 3), text('club', 'Club', 3.2)];
 
 /** SV and Final Score are entered in ScoreFlippers. */
+// Scratch? is the far-left column, as on the T&T sheets (Julia 2026-10-28).
 export const STANDARD_COLUMNS: Column[] = [
-  ...IDENTITY,
+  SCRATCH, ...IDENTITY,
   box('sv', 'SV', true), box('nd', 'ND', false), box('j1', 'J1 Score', false, 'incl. ND'), box('j2', 'J2 Score', false, 'incl. ND'), box('final', 'Final Score', true),
-  SCRATCH,
 ];
 
 /** Infinity: SV is 10 + D-score. */
 export const INFINITY_COLUMNS: Column[] = [
-  ...IDENTITY,
+  SCRATCH, ...IDENTITY,
   box('sv', 'SV', true, '10 + D-score'), box('e', 'E-score', false, 'incl. ND'), box('nd', 'ND', false), box('final', 'Final Score', true),
-  SCRATCH,
 ];
 
 export function artisticScorecardPages(input: ArtisticSessionInput): Unnumbered<ArtisticScorecardPage>[] {
@@ -75,6 +75,7 @@ export function artisticScorecardPages(input: ArtisticSessionInput): Unnumbered<
         key: HEAVY_KEY,
         jump: { group: code, label: squad.letter },
         page: { n: ax * input.squads.length + i + 1, of },
+        qr: sheetQr(meet.id, session.id, code, squad.letter, 1),
       });
     }
   }

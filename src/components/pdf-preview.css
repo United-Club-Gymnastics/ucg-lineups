@@ -16,6 +16,9 @@
 .pv-meet { font-weight: 700; font-size: 12pt; text-align: center; padding-top: 2pt; }
 .pv-sheethead { grid-template-columns: auto 1fr auto; gap: 10pt; height: 50pt; }
 .pv-sheethead > div:nth-child(2) { text-align: center; }
+/* The sheet's QR code sits at the top left, before the date (artistic) or the logo (T&T, synchro). */
+.pv-qrlock { display: flex; align-items: flex-start; gap: 8pt; margin-top: -4pt; }
+.pv-qr { flex: none; display: block; }
 .pv-title { font-size: 18pt; font-weight: 700; line-height: 1.1; }
 .pv-sub { font-size: 10pt; font-weight: 700; margin-top: 4pt; }
 .pv-band { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 36pt; border: 2.4pt solid #000; padding: 0 12pt; box-sizing: border-box; margin-bottom: 6pt; }
