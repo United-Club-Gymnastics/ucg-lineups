@@ -52,9 +52,13 @@ export function parseSheetUrl(text: string): SheetKey | null {
 export const sheetQr = (meetId: string | undefined, sessionId: string | undefined, event: string, squad: string, page: number): string | undefined =>
   meetId && sessionId ? sheetUrl({ meetId, sessionId, event, squad, page }) : undefined;
 
+const moduleCache = new Map<string, boolean[][]>();
+
 /** The QR's dark modules (row-major, square): error correction M, or L when M would need more than version 5. No quiet zone:
  * the renderer leaves the margin. */
 export function qrModules(text: string): boolean[][] {
+  const hit = moduleCache.get(text);
+  if (hit) return hit;
   const make = (level: 'M' | 'L') => {
     const q = qrcode(0, level);
     q.addData(text, 'Byte');
@@ -64,7 +68,10 @@ export function qrModules(text: string): boolean[][] {
   let q = make('M');
   if ((q.getModuleCount() - 17) / 4 > QR_MAX_VERSION) q = make('L');
   const n = q.getModuleCount();
-  return Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => q.isDark(r, c)));
+  const grid = Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => q.isDark(r, c)));
+  if (moduleCache.size > 500) moduleCache.clear();
+  moduleCache.set(text, grid);
+  return grid;
 }
 
 // --- drawing: the UCG dot/eye style, black only (copied from ucg-platform src/lib/page-qr-matrix.ts pageQrShapes /
@@ -137,3 +144,26 @@ export function qrShapePath(s: QrShape): string {
   if (tl) d += ` C ${P(x, y + tl - K * tl, x + tl - K * tl, y, x + tl, y)}`;
   return `${d} Z`;
 }
+
+/**
+ * The whole code as a few SVG paths for the on-screen preview, in paint order: consecutive shapes of one colour joined into one
+ * path (dots and eye rings in black, the eye holes in white, the pupils in black). Hundreds of separate shapes per code, on
+ * every page of a meet's preview, made the page crawl. Cached by text: the preview draws the same codes on every re-render.
+ */
+export function qrPathLayers(text: string): { d: string; ink: boolean }[] {
+  const hit = layerCache.get(text);
+  if (hit) return hit;
+  const layers: { d: string; ink: boolean }[] = [];
+  // Rings never overlap another eye's hole or pupil, so all holes can follow all rings, and all pupils the holes.
+  const pass = (s: QrShape) => (s.ink ? (s.w === 3 && s.h === 3 ? 2 : 0) : 1);
+  const shapes = qrShapes(qrModules(text), QR_BLEED).sort((a, b) => pass(a) - pass(b));
+  for (const s of shapes) {
+    const last = layers[layers.length - 1];
+    if (last && last.ink === s.ink) last.d += ` ${qrShapePath(s)}`;
+    else layers.push({ d: qrShapePath(s), ink: s.ink });
+  }
+  if (layerCache.size > 500) layerCache.clear();
+  layerCache.set(text, layers);
+  return layers;
+}
+const layerCache = new Map<string, { d: string; ink: boolean }[]>();
