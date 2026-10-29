@@ -12,10 +12,11 @@ export const SCORECARDS_ORIGIN = 'https://scorecards.unitedclubgymnastics.org';
 export const QR_SIZE = 48;
 
 /**
- * Densest code the printed size allows: version 5 (37 modules). Same rule as the UCG platform's scorecard page QR
- * (ucg-platform src/lib/page-qr-matrix.ts): plain black on white, error correction M (survives glare, a crease, moiré) while
- * that keeps the code at version 5 or lower; otherwise L (holds 106 bytes at version 5), so the squares stay as big as they can.
- * Not branded (no logo, dots or gradient): a branded code does not read from a photo at this size.
+ * Densest code the printed size allows: version 5 (37 modules). Same rules as the UCG platform's scorecard page QR
+ * (ucg-platform src/lib/page-qr-matrix.ts): error correction M (survives glare, a crease, moiré) while that keeps the code at
+ * version 5 or lower, otherwise L (holds 106 bytes at version 5), so the squares stay as big as they can; drawn in the UCG QR
+ * style (rounded dots that merge with their neighbours, pointed eyes) but black only: no logo, gradient, frame or text (those do
+ * not read from a photo of the sheet at this size).
  */
 export const QR_MAX_VERSION = 5;
 
@@ -64,4 +65,75 @@ export function qrModules(text: string): boolean[][] {
   if ((q.getModuleCount() - 17) / 4 > QR_MAX_VERSION) q = make('L');
   const n = q.getModuleCount();
   return Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => q.isDark(r, c)));
+}
+
+// --- drawing: the UCG dot/eye style, black only (copied from ucg-platform src/lib/page-qr-matrix.ts pageQrShapes /
+// pageQrShapePath — keep in sync by hand; changed: works on qrModules' boolean grid) ------------------------------------------
+
+/** One filled rounded rectangle of the drawn code, in module units (module = 1, origin top-left of the code). */
+export interface QrShape {
+  x: number; y: number; w: number; h: number;
+  /** Corner radii: top-left, top-right, bottom-right, bottom-left. */
+  r: [number, number, number, number];
+  /** true = black ink; false = paper (the white hole inside a finder eye). */
+  ink: boolean;
+}
+
+/** Corner radius of a dot's rounded corners, in modules (0.5 = a lone dot is a full circle). */
+export const QR_DOT_RADIUS = 0.5;
+/** Finder eye radii (ring, hole, pupil) in modules. */
+export const QR_EYE_RADII = { ring: 1.8, hole: 1.1, pupil: 0.8 } as const;
+/** How far a dot reaches into a dark right / lower neighbour (modules), so no viewer or printer shows a hairline seam. */
+export const QR_BLEED = 0.04;
+
+const inFinder = (n: number, r: number, c: number) => (r < 7 && c < 7) || (r < 7 && c >= n - 7) || (r >= n - 7 && c < 7);
+
+/**
+ * The shapes to draw, in paint order: every dark module outside the three 7×7 finder zones as a 1×1 dot (a corner is round only
+ * when both its adjacent sides have no dark neighbour, so touching dots merge into waves), then each finder as an eye (ring,
+ * paper hole, pupil; the corner facing the code centre is sharp). `bleed` lengthens a dot towards a dark right / lower neighbour.
+ */
+export function qrShapes(m: boolean[][], bleed = 0): QrShape[] {
+  const n = m.length;
+  const on = (r: number, c: number) => r >= 0 && c >= 0 && r < n && c < n && m[r][c] && !inFinder(n, r, c);
+  const D = QR_DOT_RADIUS;
+  const out: QrShape[] = [];
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (!on(r, c)) continue;
+      const up = on(r - 1, c), dn = on(r + 1, c), lf = on(r, c - 1), rt = on(r, c + 1);
+      out.push({
+        x: c, y: r, w: 1 + (rt ? bleed : 0), h: 1 + (dn ? bleed : 0),
+        r: [!up && !lf ? D : 0, !up && !rt ? D : 0, !dn && !rt ? D : 0, !dn && !lf ? D : 0], ink: true,
+      });
+    }
+  }
+  for (const corner of ['tl', 'tr', 'bl'] as const) {
+    const x0 = corner === 'tr' ? n - 7 : 0;
+    const y0 = corner === 'bl' ? n - 7 : 0;
+    const radii = (v: number): [number, number, number, number] => (corner === 'tl' ? [v, v, 0, v] : corner === 'tr' ? [v, v, v, 0] : [v, 0, v, v]);
+    out.push({ x: x0, y: y0, w: 7, h: 7, r: radii(QR_EYE_RADII.ring), ink: true });
+    out.push({ x: x0 + 1, y: y0 + 1, w: 5, h: 5, r: radii(QR_EYE_RADII.hole), ink: false });
+    out.push({ x: x0 + 2, y: y0 + 2, w: 3, h: 3, r: radii(QR_EYE_RADII.pupil), ink: true });
+  }
+  return out;
+}
+
+const K = 0.5523; // quarter circle as a cubic Bezier
+const num = (v: number) => String(Number(v.toFixed(4)));
+
+/** One shape as an SVG path `d` in module units, using only absolute M, L, C, Z (the subset `svg-path.ts` parses; no arcs). */
+export function qrShapePath(s: QrShape): string {
+  const [tl, tr, br, bl] = s.r;
+  const { x, y, w, h } = s;
+  const P = (...v: number[]) => v.map(num).join(' ');
+  let d = `M ${P(x + tl, y)} L ${P(x + w - tr, y)}`;
+  if (tr) d += ` C ${P(x + w - tr + K * tr, y, x + w, y + tr - K * tr, x + w, y + tr)}`;
+  d += ` L ${P(x + w, y + h - br)}`;
+  if (br) d += ` C ${P(x + w, y + h - br + K * br, x + w - br + K * br, y + h, x + w - br, y + h)}`;
+  d += ` L ${P(x + bl, y + h)}`;
+  if (bl) d += ` C ${P(x + bl - K * bl, y + h, x, y + h - bl + K * bl, x, y + h - bl)}`;
+  d += ` L ${P(x, y + tl)}`;
+  if (tl) d += ` C ${P(x, y + tl - K * tl, x + tl - K * tl, y, x + tl, y)}`;
+  return `${d} Z`;
 }
