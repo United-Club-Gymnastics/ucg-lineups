@@ -9,7 +9,7 @@ import {
 } from '../lib/pdf/model';
 import { pageLabel } from '../lib/pdf/labels';
 import { splitPair } from '../lib/pdf/pair';
-import { QR_BLEED, QR_SIZE, qrModules, qrShapePath, qrShapes } from '../lib/pdf/sheet-qr';
+import { QR_SIZE, qrModules, qrPathLayers } from '../lib/pdf/sheet-qr';
 import './pdf-preview.css';
 
 const pt = (n: number) => `${n}pt`;
@@ -112,7 +112,7 @@ function Qr({ text }: { text: string }) {
   const m = qrModules(text);
   return (
     <svg className="pv-qr" viewBox={`0 0 ${m.length} ${m.length}`} width={pt(QR_SIZE)} height={pt(QR_SIZE)} role="img" aria-label={`QR code: ${text}`}>
-      {qrShapes(m, QR_BLEED).map((s, i) => <path key={i} d={qrShapePath(s)} fill={s.ink ? '#000' : '#fff'} />)}
+      {qrPathLayers(text).map((l, i) => <path key={i} d={l.d} fill={l.ink ? '#000' : '#fff'} />)}
     </svg>
   );
 }

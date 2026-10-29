@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QR_DOT_RADIUS as D, QR_EYE_RADII as E, parseSheetUrl, qrModules, qrShapePath, qrShapes, sheetQr, sheetUrl, type QrShape } from '../../src/lib/pdf/sheet-qr';
+import { QR_DOT_RADIUS as D, QR_EYE_RADII as E, parseSheetUrl, qrModules, qrPathLayers, qrShapePath, qrShapes, sheetQr, sheetUrl, type QrShape } from '../../src/lib/pdf/sheet-qr';
 import { parsePath } from '../../src/lib/pdf/svg-path';
 
 describe('scorecard QR links', () => {
@@ -78,5 +78,17 @@ describe('QR drawing: rounded dots and pointed eyes, black only', () => {
       expect(steps[0].op).toBe('M');
       expect(steps.at(-1)?.op).toBe('Z');
     }
+  });
+});
+
+describe('QR preview layers', () => {
+  it('joins the shapes into three paths in paint order: black dots and rings, white holes, black pupils', () => {
+    const text = sheetUrl({ meetId: 'm', sessionId: 's1-green', event: 'FX', squad: 'A', page: 1 });
+    const layers = qrPathLayers(text);
+    expect(layers.map((l) => l.ink)).toEqual([true, false, true]);
+    // Every shape is still there: one closed sub-path each.
+    const shapes = qrShapes(qrModules(text), 0.04);
+    expect(layers.reduce((n, l) => n + (l.d.match(/Z/g) ?? []).length, 0)).toBe(shapes.length);
+    expect(qrPathLayers(text)).toBe(layers);
   });
 });
