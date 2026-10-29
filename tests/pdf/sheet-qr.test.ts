@@ -19,11 +19,21 @@ describe('scorecard QR links', () => {
     expect(sheetQr('m', '', 'FX', 'A', 1)).toBeUndefined();
   });
 
-  it('a square module grid small enough to print at 48 pt (at most 41 modules for a typical link)', () => {
+  it('a square module grid small enough to print at 48 pt: version 5 (37 modules) for a typical link', () => {
     const m = qrModules(sheetUrl({ meetId: 'x'.repeat(20), sessionId: 'xcel-platinum-finals-orange', event: 'FX', squad: 'A', page: 1 }));
-    expect(m.length).toBeLessThanOrEqual(41);
+    expect(m.length).toBe(37);
     expect(m.every((r) => r.length === m.length)).toBe(true);
     // Finder pattern corner is dark.
     expect(m[0][0] && m[0][6] && m[6][0]).toBe(true);
+  });
+
+  it('uses error correction M while that fits version 5, then L (same rule as the platform scorecard QR)', () => {
+    // 84 bytes is M's version-5 limit; 85 to 106 drop to L at version 5; longer goes denser rather than failing.
+    expect(qrModules('x'.repeat(84)).length).toBe(37);
+    expect(qrModules('x'.repeat(85)).length).toBe(37);
+    expect(qrModules('x'.repeat(106)).length).toBe(37);
+    expect(qrModules('x'.repeat(107)).length).toBe(41);
+    // A short link keeps M: at L the same text would fit a smaller version.
+    expect(qrModules('x'.repeat(40)).length).toBe(29);
   });
 });
