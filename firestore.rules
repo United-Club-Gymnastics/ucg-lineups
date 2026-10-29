@@ -25,6 +25,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // The scorecard sheets each session prints (meets/{meetId}/sheetLists/{sessionId}: session name, location, discipline,
+    // event/squad/page keys; no athlete data). The scorecard photo app reads it by the ids in a scanned QR link, and its Storage
+    // rules accept a photo only for a listed key. `get` is open, `list` is not. Written by the Exports screen (admins).
+    match /meets/{meetId}/sheetLists/{sessionId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
     // One document per club, named by the club's secret token (ONE link across all meets). The token is the only credential:
     // `get` is open, `list` is not, so links cannot be enumerated. Written by admins only.
     // { clubId, clubName, meets: { <meetId>: { meetName, createdAt, sessions, levelKeys } } }: names and roster per session

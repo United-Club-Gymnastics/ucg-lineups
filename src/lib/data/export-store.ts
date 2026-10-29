@@ -1,11 +1,13 @@
 // Firestore access for the admin Exports screen (admins only; see firestore.rules). Reads everything the sheets need and writes
-// only the meet name/date (meets/{id}/settings/meet) and session schedule overrides (meets/{id}/sessions/{id}), all admin-write.
+// only the meet name/date (meets/{id}/settings/meet), session schedule overrides (meets/{id}/sessions/{id}) and the sessions' sheet
+// lists for the scorecard photo app (meets/{id}/sheetLists/{id}), all admin-write.
 import { collection, deleteField, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
 import { DEFAULT_GYM_ORDER } from '../import/types';
 import { parseRows, type MigrationPlan, type ScheduleFields, type ScheduleRows } from '../schedule';
 import { fetchSynchroPairs, type SynchroPair } from '../synchro-source';
 import { loadSynchroDoc } from './synchro-store';
 import type { SynchroAssignments, SynchroScratched } from '../synchro-flights';
+import { sameSheetList, type SheetListDoc } from '../pdf/sheet-list';
 import { meetPaths } from './meet-paths';
 import { loadSquadsInput, type SquadsInput } from './squad-store';
 
@@ -36,6 +38,24 @@ export async function saveMeetNameDate(db: Firestore, meetId: string, value: { m
   batch.set(doc(db, p.settings), { meetName, meetDate: value.meetDate.trim() }, { merge: true });
   if (meetName) batch.set(doc(db, p.root), { name: meetName }, { merge: true });
   await batch.commit();
+}
+
+/**
+ * Save each session's sheet list where it differs from the saved one (so opening Exports writes nothing when no squad changed).
+ * Returns how many were written. A session that no longer exists keeps its old list: nothing prints for it, so no QR points there.
+ */
+export async function saveSheetLists(db: Firestore, meetId: string, lists: Record<string, SheetListDoc>): Promise<number> {
+  const p = meetPaths(meetId);
+  const changed: string[] = [];
+  await Promise.all(Object.entries(lists).map(async ([id, list]) => {
+    const snap = await getDoc(doc(db, p.sheetList(id)));
+    if (!snap.exists() || !sameSheetList(snap.data(), list)) changed.push(id);
+  }));
+  if (changed.length === 0) return 0;
+  const batch = writeBatch(db);
+  for (const id of changed) batch.set(doc(db, p.sheetList(id)), lists[id]);
+  await batch.commit();
+  return changed.length;
 }
 
 /** Merge one session name's row into `meets/{id}/settings/meet.schedule` (other rows are untouched, so two admins don't overwrite each other). */

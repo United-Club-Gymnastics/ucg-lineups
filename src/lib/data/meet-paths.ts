@@ -26,6 +26,8 @@ export interface MeetPaths {
   emailSettings: string;
   /** `meets/{id}/nameFixes/main`: `{ fixes: [{ field, from, to }], updatedAt }`. Admin-only (never in the public settings/meet). */
   nameFixes: string;
+  /** `meets/{id}/sheetLists/{sessionId}`: the scorecard sheets a session prints, for the scorecard photo app. Public `get`, no `list`. */
+  sheetList: (sessionId: string) => string;
 }
 
 export function meetPaths(meetId: string): MeetPaths {
@@ -45,6 +47,7 @@ export function meetPaths(meetId: string): MeetPaths {
     emailLog: `${root}/emailLog`,
     emailSettings: `${root}/emailSettings/main`,
     nameFixes: `${root}/nameFixes/main`,
+    sheetList: (id) => `${root}/sheetLists/${id}`,
   };
 }
 
