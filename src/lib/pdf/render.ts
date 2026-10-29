@@ -157,18 +157,19 @@ class Pen {
   }
 
   /** A QR code `size` pt square with its top-left at (x, y): black modules, one filled run per row (no quiet zone drawn; the
-   * page around it is white). */
+   * page around it is white). Each run overlaps its neighbours by a hair so no viewer or printer shows a seam between them. */
   qr(text: string, x: number, y: number, size: number) {
     const m = qrModules(text);
     const k = size / m.length;
+    const e = k * 0.04;
     this.doc.setFillColor(0, 0, 0);
     m.forEach((row, r) => {
       for (let c = 0; c < row.length; c++) {
         if (!row[c]) continue;
-        let e = c;
-        while (e + 1 < row.length && row[e + 1]) e++;
-        this.doc.rect(x + c * k, y + r * k, (e - c + 1) * k, k, 'F');
-        c = e;
+        let end = c;
+        while (end + 1 < row.length && row[end + 1]) end++;
+        this.doc.rect(x + c * k, y + r * k, (end - c + 1) * k + e, k + e, 'F');
+        c = end;
       }
     });
   }
