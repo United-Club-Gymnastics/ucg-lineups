@@ -2,7 +2,7 @@
 // rotation sheets, club pages) follows it.
 //   WAG: Xcel Silver, Gold, Platinum, Diamond, Sapphire, (Level N), UCG Infinity.
 //   MAG: Developmental, Intermediate, Advanced.   T&T: New, Intermediate, High Flyers.
-// Level 9 is not in Julia's list: it sits after Sapphire and before Infinity (flagged to her). Unknown levels go last, A–Z.
+// Level 9 sits after Sapphire and before Infinity (Julia confirmed 2026-10-28). Unknown levels go last, A–Z.
 
 /** Codes ScoreFlippers uses (its "level short name") and the ones this app gives when there is none. */
 const BY_CODE: Record<string, number> = {
