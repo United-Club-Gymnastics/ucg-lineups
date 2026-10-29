@@ -9,7 +9,7 @@ import {
 import { splitPair } from './pair';
 import { rowUnits } from './artistic-rotation-content';
 import { parsePath } from './svg-path';
-import { QR_SIZE, qrModules } from './sheet-qr';
+import { QR_BLEED, QR_SIZE, qrModules, qrShapePath, qrShapes } from './sheet-qr';
 
 /** One cell of a scorecard grid. Cells that touch share their edge: it is drawn once (see `Pen.boxes`). */
 export interface BoxCell { x: number; y: number; w: number; h: number; heavy: boolean }
@@ -156,22 +156,26 @@ class Pen {
     }
   }
 
-  /** A QR code `size` pt square with its top-left at (x, y): black modules, one filled run per row (no quiet zone drawn; the
-   * page around it is white). Each run overlaps its neighbours by a hair so no viewer or printer shows a seam between them. */
+  /** A QR code `size` pt square with its top-left at (x, y), as vectors in the UCG dot/eye style, black only (no quiet zone
+   * drawn; the page around it is white). The eye holes are filled white over their black ring. */
   qr(text: string, x: number, y: number, size: number) {
     const m = qrModules(text);
     const k = size / m.length;
-    const e = k * 0.04;
-    this.doc.setFillColor(0, 0, 0);
-    m.forEach((row, r) => {
-      for (let c = 0; c < row.length; c++) {
-        if (!row[c]) continue;
-        let end = c;
-        while (end + 1 < row.length && row[end + 1]) end++;
-        this.doc.rect(x + c * k, y + r * k, (end - c + 1) * k + e, k + e, 'F');
-        c = end;
+    for (const s of qrShapes(m, QR_BLEED)) {
+      if (s.ink) this.doc.setFillColor(0, 0, 0); else this.doc.setFillColor(255, 255, 255);
+      const lines: number[][] = [];
+      let sx = 0, sy = 0, px = 0, py = 0;
+      for (const st of parsePath(qrShapePath(s))) {
+        if (st.op === 'M') { sx = x + st.x * k; sy = y + st.y * k; px = sx; py = sy; }
+        else if (st.op === 'L') { const nx = x + st.x * k, ny = y + st.y * k; lines.push([nx - px, ny - py]); px = nx; py = ny; }
+        else if (st.op === 'C') {
+          const c = [x + st.x1 * k, y + st.y1 * k, x + st.x2 * k, y + st.y2 * k, x + st.x * k, y + st.y * k];
+          lines.push([c[0] - px, c[1] - py, c[2] - px, c[3] - py, c[4] - px, c[5] - py]); px = c[4]; py = c[5];
+        }
       }
-    });
+      this.doc.lines(lines, sx, sy, [1, 1], 'F', true);
+    }
+    this.doc.setFillColor(0, 0, 0);
   }
 
   /** Mark + "United Club / Gymnastics" lockup anchored at its left (or right) edge. Returns its width. */

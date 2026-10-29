@@ -9,7 +9,7 @@ import {
 } from '../lib/pdf/model';
 import { pageLabel } from '../lib/pdf/labels';
 import { splitPair } from '../lib/pdf/pair';
-import { QR_SIZE, qrModules } from '../lib/pdf/sheet-qr';
+import { QR_BLEED, QR_SIZE, qrModules, qrShapePath, qrShapes } from '../lib/pdf/sheet-qr';
 import './pdf-preview.css';
 
 const pt = (n: number) => `${n}pt`;
@@ -107,12 +107,12 @@ function ArtisticScorecard({ pg }: { pg: ArtisticScorecardPage }) {
   );
 }
 
-/** The sheet's QR code (same modules as the PDF), labelled for screen readers by what it links to. */
+/** The sheet's QR code (same shapes as the PDF: UCG dots and eyes, black only), labelled for screen readers by what it links to. */
 function Qr({ text }: { text: string }) {
   const m = qrModules(text);
   return (
-    <svg className="pv-qr" viewBox={`0 0 ${m.length} ${m.length}`} width={pt(QR_SIZE)} height={pt(QR_SIZE)} role="img" aria-label={`QR code: ${text}`} shapeRendering="crispEdges">
-      <path d={m.flatMap((row, r) => row.map((on, c) => (on ? `M${c} ${r}h1v1h-1z` : ''))).join('')} fill="#000" />
+    <svg className="pv-qr" viewBox={`0 0 ${m.length} ${m.length}`} width={pt(QR_SIZE)} height={pt(QR_SIZE)} role="img" aria-label={`QR code: ${text}`}>
+      {qrShapes(m, QR_BLEED).map((s, i) => <path key={i} d={qrShapePath(s)} fill={s.ink ? '#000' : '#fff'} />)}
     </svg>
   );
 }
