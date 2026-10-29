@@ -199,6 +199,7 @@ Collation for all sessions: **scorecards by location** (the meet's location orde
 ### Artistic scorecards (landscape, one page per squad per apparatus)
 - Scratch? is the first column (Julia 2026-10-28). Levels follow the competitive order: WAG Xcel Silver, Gold, Platinum, Diamond, Sapphire, (Level N), UCG Infinity; MAG Developmental, Intermediate, Advanced (same on rotation sheets).
 - Every scorecard and synchro sheet carries a QR code linking to that exact sheet: `https://scorecards.unitedclubgymnastics.org/#/s/<meetId>/<sessionId>/<event>/<squad>/<page>` (for the scorecard photo app).
+- **Sheet lists (Julia 2026-10-28):** whenever the Exports screen builds the sheets it saves each session's list of QR sheets to `meets/{meetId}/sheetLists/{sessionId}` (only when it changed): session name, location, discipline, and each sheet's event, squad, page and page count, plus its `<event>/<squad>/<page>` key (URL-encoded as in the link). Public `get` (no `list`), admin write. The photo app reads it to name the scanned sheet, its Storage rules accept a photo only for a listed key, and admins see which sheets have no photo. No athlete data.
 - Page numbers go by apparatus then squad letter, not print position: MAG Floor A = page 1, Floor B = 2 … Pommel Horse A = 7; WAG Vault A = 1 … Bars A = 9 (Julia 2026-10-20). The print order is unchanged.
 - Pages per apparatus in Olympic order; within an apparatus, squads **in the order they compete on
   it** (one flight MAG floor: A, F, E, D, C, B; WAG 7 squads vault: A, B, F, G, D, E, C, by
@@ -316,6 +317,7 @@ Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[
 | `meets/{meetId}/clubs/{clubId}` | admin | full name, contact emails (the token is NOT here any more: see `clubTokens`) |
 | `meets/{meetId}/squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |
 | `meets/{meetId}/synchroSessions/main` | admin | `{ assignments: { <pairId>: <sessionId> } }`: the host's session choice per synchro pair |
+| `meets/{meetId}/sheetLists/{sessionId}` | admin write, **public get** (no list) | `{ name, location, discipline, sheets: [{ event, squad, page, pages }], keys: ['<event>/<squad>/<page>'] }`: the session's QR sheets for the scorecard photo app (§6) |
 | `meets/{meetId}/nameFixes/main` | admin (catch-all; not in the public settings) | `{ fixes: [{ field: 'first'\|'last', from, to }], updatedAt }`: display-only name fixes (spec §2) |
 | `meets/{meetId}/emailLog/{id}` | admin | one row per message sent: `{ template: 'az'\|'split', clubId, club, to (the test alias), subject, at, by (admin email), mode: 'test' }` |
 | `meets/{meetId}/emailSettings/main` | admin | `{ templates: { az: { subject, body }, split: { subject, body } } }` |

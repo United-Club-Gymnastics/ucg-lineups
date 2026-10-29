@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExportsInput } from '../../src/lib/data/export-store';
 
 vi.mock('../../src/lib/firebase', () => ({ db: {} }));
-const store = vi.hoisted(() => ({ loadExportsInput: vi.fn(), saveMeetNameDate: vi.fn(), saveScheduleRow: vi.fn(), saveScheduleOverride: vi.fn(), runScheduleMigration: vi.fn() }));
+const store = vi.hoisted(() => ({ loadExportsInput: vi.fn(), saveMeetNameDate: vi.fn(), saveScheduleRow: vi.fn(), saveScheduleOverride: vi.fn(), runScheduleMigration: vi.fn(), saveSheetLists: vi.fn() }));
 vi.mock('../../src/lib/data/export-store', () => store);
 const files = vi.hoisted(() => ({ sessionPdf: vi.fn(), allSessionsPdf: vi.fn(), allSessionsZip: vi.fn() }));
 vi.mock('../../src/lib/pdf/files', () => files);
@@ -43,6 +43,7 @@ beforeEach(() => {
   store.saveScheduleRow.mockResolvedValue(undefined);
   store.saveScheduleOverride.mockResolvedValue(undefined);
   store.runScheduleMigration.mockResolvedValue(undefined);
+  store.saveSheetLists.mockResolvedValue(0);
   files.sessionPdf.mockResolvedValue({ name: 'Session 1 - Orange - Scorecards.pdf', bytes: new ArrayBuffer(8) });
   files.allSessionsPdf.mockResolvedValue({ name: 'All Sessions - Scorecards.pdf', bytes: new ArrayBuffer(8) });
   files.allSessionsZip.mockResolvedValue({ name: 'All Sessions - Scorecards.zip', bytes: new Blob(['z']) });
@@ -62,6 +63,26 @@ describe('Exports screen', () => {
     const pages = screen.getAllByRole('region', { name: /^Page \d+ of \d+:/ });
     expect(pages.length).toBeGreaterThan(10);
     expect(pages[0].getAttribute('aria-label')).toMatch(/^Page 1 of \d+: Vault, Squad A$/);
+  });
+
+  it('saves each session\'s sheet list for the scorecard photo app', async () => {
+    await open();
+    await waitFor(() => expect(store.saveSheetLists).toHaveBeenCalledTimes(1));
+    const [, meetId, lists] = store.saveSheetLists.mock.calls[0];
+    expect(meetId).toBe('m1');
+    expect(Object.keys(lists).sort()).toEqual(['s1-orange', 's1-purple', 's2-green', 's3-red'].sort());
+    const mag = lists['s1-orange'];
+    expect(mag).toMatchObject({ name: 'Session 1', location: 'Orange', discipline: 'MAG' });
+    expect(mag.sheets.length).toBeGreaterThan(0);
+    expect(mag.keys[0]).toMatch(/^[A-Z]{2}\/[A-Z]\/1$/);
+    expect(lists['s3-red'].sheets).toEqual([]);
+    expect(screen.queryByText(/Could not save the sheet list/)).toBeNull();
+  });
+
+  it('says when the sheet list could not be saved', async () => {
+    store.saveSheetLists.mockRejectedValue(new Error('offline'));
+    await open();
+    expect(await screen.findByText(/Could not save the sheet list/)).toBeInTheDocument();
   });
 
   it('shows the meet name and date in the pages, and Save writes them', async () => {

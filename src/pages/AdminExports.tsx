@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Select from '../components/Select';
 import { db } from '../lib/firebase';
 import { PagePreview } from '../components/PdfPreview';
-import { loadExportsInput, runScheduleMigration, saveMeetNameDate, saveScheduleOverride, saveScheduleRow, type ExportsInput } from '../lib/data/export-store';
+import { loadExportsInput, runScheduleMigration, saveMeetNameDate, saveScheduleOverride, saveScheduleRow, saveSheetLists, type ExportsInput } from '../lib/data/export-store';
 import { sessionFileName, sessionPages, type ExportKind } from '../lib/pdf/collate';
 import { applySchedules, buildExportSessions } from '../lib/pdf/export-all';
+import { sheetListDoc } from '../lib/pdf/sheet-list';
 import { scheduleKey, scheduleRows, sessionLocation, sortByLocation } from '../lib/session-names';
 import { EMPTY_FIELDS, SCHEDULE_KEYS, collectLegacy, formatTime, parseFields, planMigration, resolveSchedule, type ScheduleFields, type ScheduleRows } from '../lib/schedule';
 import { allSessionsPdf, allSessionsZip, sessionPdf } from '../lib/pdf/files';
@@ -52,6 +53,14 @@ export default function AdminExports({ meetId }: { meetId: string }) {
 
 export function ExportsScreen({ meetId, input, onReload }: { meetId: string; input: ExportsInput; onReload: () => void }) {
   const built = useMemo(() => buildExportSessions({ ...input, meet: { id: meetId, name: input.meet.meetName, date: input.meet.meetDate }, schedule: input.meet.schedule }), [input, meetId]);
+
+  // The scorecard photo app reads each session's sheet list (which sheets its QR codes name). Kept in step whenever the sheets
+  // are built here; the schedule does not change which sheets print, so the built input is enough.
+  const [sheetListError, setSheetListError] = useState(false);
+  useEffect(() => {
+    const lists = Object.fromEntries(built.sessions.map((s) => [s.id, sheetListDoc({ name: s.input.name, location: s.input.location, discipline: s.session.discipline }, sessionPages('scorecards', s.input, ''))]));
+    saveSheetLists(db, meetId, lists).then(() => setSheetListError(false), () => setSheetListError(true));
+  }, [built, meetId]);
 
   // Meet name/date and a T&T competition time: typed here, shown in the sheets at once, saved with the Save buttons.
   const [name, setName] = useState(input.meet.meetName);
@@ -239,6 +248,12 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
           </div>
         )}
       </section>
+
+      {sheetListError && (
+        <div className="adm-banner warn" role="status">
+          Could not save the sheet list for the scorecard photo app: photos of these scorecards may be refused. Reload this page to try again.
+        </div>
+      )}
 
       {built.warnings.length > 0 && (
         <section className="adm-card" aria-labelledby="ex-warn">

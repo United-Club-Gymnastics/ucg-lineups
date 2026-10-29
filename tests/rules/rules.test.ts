@@ -569,3 +569,30 @@ describe('one link across meets, end to end (real store code against these rules
     await assertSucceeds(setDoc(orderRef(publicDb(), 'brandNewTokenBBBBBBBBB', 'f-s1__XP', F), order()));
   });
 });
+
+describe('sheet lists (scorecard photo app)', () => {
+  beforeEach(() => seed());
+  const list = { name: 'Session 1', location: 'Green', discipline: 'WAG', sheets: [{ event: 'VT', squad: 'A', page: 1, pages: 1 }], keys: ['VT/A/1'] };
+  const ref = (db: ReturnType<typeof publicDb>, session = 's1-green') => doc(db, m(M1, `sheetLists/${session}`));
+
+  test('anyone can get a session\'s list by id; nobody but admins can list them', async () => {
+    await assertSucceeds(setDoc(ref(domainAdminDb()), list));
+    await assertSucceeds(getDoc(ref(publicDb())));
+    await assertFails(getDocs(collection(publicDb(), m(M1, 'sheetLists'))));
+    await assertFails(getDocs(collection(outsiderDb(), m(M1, 'sheetLists'))));
+    await assertSucceeds(getDocs(collection(listedAdminDb(), m(M1, 'sheetLists'))));
+  });
+
+  test('only admins write them', async () => {
+    await assertFails(setDoc(ref(publicDb()), list));
+    await assertFails(setDoc(ref(outsiderDb()), list));
+    await assertFails(setDoc(ref(unverifiedDomainDb()), list));
+    await assertSucceeds(setDoc(ref(listedAdminDb()), list));
+    await assertFails(deleteDoc(ref(publicDb())));
+  });
+
+  test('a public get of a sheet list does not open the session or squads', async () => {
+    await assertFails(getDoc(doc(publicDb(), m(M1, 'sessions/s1-green'))));
+    await assertFails(getDoc(doc(publicDb(), m(M1, 'squads/s1-green'))));
+  });
+});
