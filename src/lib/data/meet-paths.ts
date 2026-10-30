@@ -28,6 +28,8 @@ export interface MeetPaths {
   nameFixes: string;
   /** `meets/{id}/sheetLists/{sessionId}`: the scorecard sheets a session prints, for the scorecard photo app. Public `get`, no `list`. */
   sheetList: (sessionId: string) => string;
+  publicSheets: string;
+  publicSheet: (sessionId: string) => string;
 }
 
 export function meetPaths(meetId: string): MeetPaths {
@@ -48,6 +50,8 @@ export function meetPaths(meetId: string): MeetPaths {
     emailSettings: `${root}/emailSettings/main`,
     nameFixes: `${root}/nameFixes/main`,
     sheetList: (id) => `${root}/sheetLists/${id}`,
+    publicSheets: `${root}/publicSheets`,
+    publicSheet: (id) => `${root}/publicSheets/${id}`,
   };
 }
 

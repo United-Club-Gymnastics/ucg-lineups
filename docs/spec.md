@@ -240,6 +240,12 @@ Collation for all sessions: **scorecards by location** (the meet's location orde
 - `T&T Session 1 – Purple · Thursday 7:30 AM`; per squad `Squad A: Trampoline > Double Mini >
   Tumbling`, rows Athlete | Club | Squad | TR DM TU SY levels; then Synchro only; then flights.
 
+### Public sheets page (Julia 2026-10-30)
+
+- **Publish sheets** on the Exports screen writes one document per session, `meets/{id}/publicSheets/{sessionId}`: the session's export input exactly as built there (`src/lib/public-sheets.ts`), stamped with the time. It is refused if anything in it looks like an email address. **Publish sheets again** after squads, orders or the schedule change; it waits while the meet name or schedule has unsaved edits. **Unpublish** (asks first) deletes them all.
+- **The page:** `#/sheets/<meetId>/<sessionId>?doc=rotation|scorecards`, no sign-in. It shows the meet name, the session, its date and times, when it was last published, a Rotation sheet / Scorecards switch, the same paper previews as Exports, and **Download PDF** (the same file as "Download this session"). A session that is not published says "These sheets aren't published yet". The Session details email (§7) links here.
+- **Who sees what:** anyone with the link sees that session's names, full club names, levels, squads and order (Julia's choice over a per-club view). Rules: `get` only, no `list`; admins write.
+
 ## 7. Clubs & email (admin)
 
 The **Clubs & email** tab works on the selected meet (§7a).
@@ -323,6 +329,7 @@ Firestore has no nested arrays, so `string[][]` is stored as `{ ids: string[] }[
 | `meets/{meetId}/squads/{sessionId}` | admin | artistic plan (squad → card keys) or T&T squads + per-event orders + synchro flights |
 | `meets/{meetId}/synchroSessions/main` | admin | `{ assignments: { <pairId>: <sessionId> } }`: the host's session choice per synchro pair |
 | `meets/{meetId}/sheetLists/{sessionId}` | admin write, **public get** (no list) | `{ name, location, discipline, sheets: [{ event, squad, page, pages }], keys: ['<event>/<squad>/<page>'] }`: the session's QR sheets for the scorecard photo app (§6) |
+| `meets/{meetId}/publicSheets/{sessionId}` | admin write, **public get** (no list) | `{ v: 1, title, input (the session's export input as JSON), publishedAt }`: the public sheets page (§6) |
 | `meets/{meetId}/nameFixes/main` | admin (catch-all; not in the public settings) | `{ fixes: [{ field: 'first'\|'last', from, to }], updatedAt }`: display-only name fixes (spec §2) |
 | `meets/{meetId}/emailLog/{id}` | admin | one row per message sent: `{ template: 'az'\|'split'\|'session', clubId, club, to (the test alias), subject, at, by (admin email), mode: 'test', sessionId?, recipientKey? }` |
 | `meets/{meetId}/emailSettings/main` | admin | `{ templates: { az: { subject, body }, split: { subject, body } }, sessionTemplate?, coachRoles? }` |

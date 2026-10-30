@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExportsInput } from '../../src/lib/data/export-store';
 
 vi.mock('../../src/lib/firebase', () => ({ db: {} }));
-const store = vi.hoisted(() => ({ loadExportsInput: vi.fn(), saveMeetNameDate: vi.fn(), saveScheduleRow: vi.fn(), saveScheduleOverride: vi.fn(), runScheduleMigration: vi.fn(), saveSheetLists: vi.fn() }));
+const store = vi.hoisted(() => ({ loadExportsInput: vi.fn(), saveMeetNameDate: vi.fn(), saveScheduleRow: vi.fn(), saveScheduleOverride: vi.fn(), runScheduleMigration: vi.fn(), saveSheetLists: vi.fn(), loadPublishedSheets: vi.fn(), publishSheets: vi.fn(), unpublishSheets: vi.fn() }));
 vi.mock('../../src/lib/data/export-store', () => store);
 const files = vi.hoisted(() => ({ sessionPdf: vi.fn(), allSessionsPdf: vi.fn(), allSessionsZip: vi.fn() }));
 vi.mock('../../src/lib/pdf/files', () => files);
@@ -44,6 +44,9 @@ beforeEach(() => {
   store.saveScheduleOverride.mockResolvedValue(undefined);
   store.runScheduleMigration.mockResolvedValue(undefined);
   store.saveSheetLists.mockResolvedValue(0);
+  store.loadPublishedSheets.mockResolvedValue({});
+  store.publishSheets.mockResolvedValue(undefined);
+  store.unpublishSheets.mockResolvedValue(4);
   files.sessionPdf.mockResolvedValue({ name: 'Session 1 - Orange - Scorecards.pdf', bytes: new ArrayBuffer(8) });
   files.allSessionsPdf.mockResolvedValue({ name: 'All Sessions - Scorecards.pdf', bytes: new ArrayBuffer(8) });
   files.allSessionsZip.mockResolvedValue({ name: 'All Sessions - Scorecards.zip', bytes: new Blob(['z']) });
@@ -244,5 +247,41 @@ describe('Exports screen', () => {
     store.loadExportsInput.mockResolvedValue(input());
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('heading', { name: 'Meet' })).toBeInTheDocument();
+  });
+});
+
+describe('Publish sheets (the public sheets page)', () => {
+  it('publishes one document per session from what is saved; Unpublish asks first', async () => {
+    const user = await open();
+    expect(await screen.findByText('Not published.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Publish sheets' }));
+    await waitFor(() => expect(store.publishSheets).toHaveBeenCalledTimes(1));
+    const [, meetId, docs] = store.publishSheets.mock.calls[0];
+    expect(meetId).toBe('m1');
+    expect(Object.keys(docs).sort()).toEqual(['s1-orange', 's1-purple', 's2-green', 's3-red'].sort());
+    expect(docs['s1-orange']).toMatchObject({ v: 1, title: 'Session 1 – Orange' });
+    expect(JSON.parse(docs['s1-orange'].input).type).toBe('artistic');
+    expect(await screen.findByText('Published 4 sessions.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /page$/ })).toHaveAttribute('href', expect.stringMatching(/#\/sheets\/m1\/[^?]+\?doc=scorecards$/));
+
+    await user.click(screen.getByRole('button', { name: 'Unpublish' }));
+    expect(store.unpublishSheets).not.toHaveBeenCalled();
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Unpublish' }));
+    await waitFor(() => expect(store.unpublishSheets).toHaveBeenCalledWith({}, 'm1'));
+    expect(await screen.findByText(/Unpublished 4 sessions/)).toBeInTheDocument();
+  });
+
+  it('waits for unsaved meet or schedule changes', async () => {
+    const user = await open();
+    await user.type(screen.getByLabelText('Meet name'), ' 2027');
+    expect(screen.getByRole('button', { name: 'Publish sheets' })).toBeDisabled();
+    expect(screen.getByText(/Save the meet name and schedule above first/)).toBeInTheDocument();
+  });
+
+  it('says what is already published', async () => {
+    store.loadPublishedSheets.mockResolvedValue({ 's1-orange': new Date('2027-04-01T16:00:00Z'), 's2-green': null });
+    await open();
+    expect(await screen.findByText(/^Published: 2 of 4 sessions, last Apr 1, 9:00 AM PT\.$/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publish sheets again' })).toBeEnabled();
   });
 });

@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Select from '../components/Select';
 import { db } from '../lib/firebase';
 import { PagePreview } from '../components/PdfPreview';
-import { loadExportsInput, runScheduleMigration, saveMeetNameDate, saveScheduleOverride, saveScheduleRow, saveSheetLists, type ExportsInput } from '../lib/data/export-store';
+import { loadExportsInput, loadPublishedSheets, publishSheets, runScheduleMigration, saveMeetNameDate, saveScheduleOverride, saveScheduleRow, saveSheetLists, unpublishSheets, type ExportsInput } from '../lib/data/export-store';
+import { publicSheetDoc } from '../lib/public-sheets';
+import { publicSheetUrl } from '../lib/session-details';
+import { formatWhen } from '../lib/pacific';
 import { sessionFileName, sessionPages, type ExportKind } from '../lib/pdf/collate';
 import { applySchedules, buildExportSessions } from '../lib/pdf/export-all';
 import { sheetListDoc } from '../lib/pdf/sheet-list';
@@ -154,6 +157,42 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
     try { await runScheduleMigration(db, meetId, migration); onReload(); } catch { setMigState('error'); }
   }
 
+  // Publish sheets: the public page the Session details email links to. Publishes what is saved, so the schedule must be saved first.
+  const [published, setPublished] = useState<Record<string, Date | null> | null>(null);
+  const [pubState, setPubState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'err'; text?: string }>({ kind: 'idle' });
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => loadPublishedSheets(db, meetId)).then((x) => { if (!off) setPublished(x); }, () => { if (!off) setPublished(null); });
+    return () => { off = true; };
+  }, [meetId]);
+  const unsaved = meetDirty || dirtyRows.length > 0 || dirtyOver.length > 0;
+  const publishedCount = published ? Object.keys(published).length : 0;
+  const lastPublished = published ? Object.values(published).reduce<Date | null>((a, d) => (d && (!a || d > a) ? d : a), null) : null;
+  async function publish() {
+    setPubState({ kind: 'busy' });
+    try {
+      await publishSheets(db, meetId, Object.fromEntries(sessions.map((s) => [s.id, publicSheetDoc(s.title, s.input)])));
+      const now = new Date();
+      setPublished(Object.fromEntries(sessions.map((s) => [s.id, now])));
+      setPubState({ kind: 'ok', text: `Published ${sessions.length} session${sessions.length === 1 ? '' : 's'}.` });
+    } catch (e) {
+      setPubState({ kind: 'err', text: `Could not publish: ${e instanceof Error ? e.message : 'try again'}` });
+    }
+  }
+  async function unpublish() {
+    setConfirmUnpublish(false);
+    setPubState({ kind: 'busy' });
+    try {
+      const n = await unpublishSheets(db, meetId);
+      setPublished({});
+      setPubState({ kind: 'ok', text: `Unpublished ${n} session${n === 1 ? '' : 's'}. Their links now say the sheets aren't published.` });
+    } catch (e) {
+      setPubState({ kind: 'err', text: `Could not unpublish: ${e instanceof Error ? e.message : 'try again'}` });
+    }
+  }
+  const pageBase = `${window.location.origin}${window.location.pathname}`;
+
   const goTo = (index: number) => {
     const el = pageRefs.current[index];
     if (!el) return;
@@ -264,6 +303,38 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
           </ul>
         </section>
       )}
+
+      <section className="adm-card" aria-labelledby="ex-pub">
+        <h2 id="ex-pub" className="display">Public sheets page</h2>
+        <p className="adm-muted">
+          The Session details email links to a page per session showing its rotation sheet and scorecards, with Download PDF. Anyone with the link can see every club&rsquo;s athletes and order in that session.
+          It shows what was published: <b>publish again after squads, orders or the schedule change.</b>
+        </p>
+        <p className="ex-state" role="status">
+          {published === null ? 'Checking what is published…' : publishedCount === 0 ? 'Not published.' : `Published: ${publishedCount} of ${sessions.length} session${sessions.length === 1 ? '' : 's'}${lastPublished ? `, last ${formatWhen(lastPublished)}` : ''}.`}
+        </p>
+        <div className="adm-actions">
+          <button type="button" className="btn primary" disabled={sessions.length === 0 || unsaved || pubState.kind === 'busy'} onClick={() => void publish()}>
+            {pubState.kind === 'busy' ? 'Working…' : publishedCount > 0 ? 'Publish sheets again' : 'Publish sheets'}
+          </button>
+          {publishedCount > 0 && <button type="button" className="btn ghost" disabled={pubState.kind === 'busy'} onClick={() => setConfirmUnpublish(true)}>Unpublish</button>}
+          {selected && published?.[selected.id] !== undefined && (
+            <a className="btn ghost" href={publicSheetUrl(pageBase, meetId, selected.id, kind === 'rotation' ? 'rotation' : 'scorecards')} target="_blank" rel="noopener noreferrer">Open {selected.title}&rsquo;s page</a>
+          )}
+        </div>
+        {unsaved && <p className="adm-muted">Save the meet name and schedule above first: the page shows what is saved.</p>}
+        {pubState.kind === 'ok' && <div className="adm-banner ok" role="status">{pubState.text}</div>}
+        {pubState.kind === 'err' && <div className="adm-banner err" role="alert">{pubState.text}</div>}
+        {confirmUnpublish && (
+          <div className="adm-banner warn" role="alertdialog" aria-label="Unpublish the sheets?">
+            <p>Unpublish every session? Links already emailed will say the sheets aren&rsquo;t published until you publish again.</p>
+            <div className="adm-actions">
+              <button type="button" className="btn ghost small" onClick={() => setConfirmUnpublish(false)}>Cancel</button>
+              <button type="button" className="btn small" onClick={() => void unpublish()}>Unpublish</button>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="adm-card">
         <div className="ex-row">

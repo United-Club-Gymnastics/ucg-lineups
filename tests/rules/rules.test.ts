@@ -596,3 +596,35 @@ describe('sheet lists (scorecard photo app)', () => {
     await assertFails(getDoc(doc(publicDb(), m(M1, 'squads/s1-green'))));
   });
 });
+
+describe('public sheets (Publish sheets)', () => {
+  beforeEach(() => seed());
+  const sheet = { v: 1, title: 'Session 1 – Green', input: '{"type":"artistic"}' };
+  const ref = (db: ReturnType<typeof publicDb>, session = 's1-green') => doc(db, m(M1, `publicSheets/${session}`));
+
+  test('anyone can get a published session by id; nobody but admins can list them', async () => {
+    await assertSucceeds(setDoc(ref(domainAdminDb()), sheet));
+    await assertSucceeds(getDoc(ref(publicDb())));
+    await assertSucceeds(getDoc(ref(publicDb(), 'not-published')));
+    await assertFails(getDocs(collection(publicDb(), m(M1, 'publicSheets'))));
+    await assertFails(getDocs(collection(outsiderDb(), m(M1, 'publicSheets'))));
+    await assertSucceeds(getDocs(collection(listedAdminDb(), m(M1, 'publicSheets'))));
+  });
+
+  test('only admins publish and unpublish', async () => {
+    await assertFails(setDoc(ref(publicDb()), sheet));
+    await assertFails(setDoc(ref(outsiderDb()), sheet));
+    await assertFails(setDoc(ref(unverifiedDomainDb()), sheet));
+    await assertSucceeds(setDoc(ref(listedAdminDb()), sheet));
+    await assertFails(deleteDoc(ref(publicDb())));
+    await assertFails(deleteDoc(ref(outsiderDb())));
+    await assertSucceeds(deleteDoc(ref(listedAdminDb())));
+  });
+
+  test('a published sheet does not open the athletes, clubs or email settings', async () => {
+    await assertSucceeds(setDoc(ref(domainAdminDb()), sheet));
+    await assertFails(getDoc(doc(publicDb(), m(M1, 'athletes/WAG_x'))));
+    await assertFails(getDocs(collection(publicDb(), m(M1, 'clubs'))));
+    await assertFails(getDoc(doc(publicDb(), m(M1, 'emailSettings/main'))));
+  });
+});

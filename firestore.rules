@@ -34,6 +34,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // The public sheets page (meets/{meetId}/publicSheets/{sessionId}): a session's rotation sheet and scorecards as printed (names,
+    // full club names, levels, squads, order, date and times; no emails, birth dates or contacts), written by "Publish sheets" on
+    // the Exports screen and deleted by Unpublish. The Session details email links to it. `get` is open, `list` is not.
+    match /meets/{meetId}/publicSheets/{sessionId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
     // One document per club, named by the club's secret token (ONE link across all meets). The token is the only credential:
     // `get` is open, `list` is not, so links cannot be enumerated. Written by admins only.
     // { clubId, clubName, meets: { <meetId>: { meetName, createdAt, sessions, levelKeys } } }: names and roster per session
