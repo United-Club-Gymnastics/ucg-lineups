@@ -39,3 +39,13 @@ Fonts: the licensed woff2 files are never committed; `@font-face` rules point at
 - `src/index.css` `.badge`: radius changed from 99px to `var(--radius-sm)` and `line-height: 1.35` added (2026-10-18), because wrapped badges looked like ovals.
 
 - `public/favicon.svg`: white mark paths from ucg-platform `src/assets/brand/mark-white.svg` (@32fb372, public artwork) on a #184b56 circle; PNG icons resized from Julia's supplied image (2026-10-19).
+
+## Session reminder email (ucg-platform `5824208e`, 2026-10-30)
+
+| Platform path @ 5824208e | Local path | What changed |
+|---|---|---|
+| `supabase/functions/_shared/session-reminder-email.ts` | `src/lib/email/session-reminder-email.ts` | Header only |
+| `supabase/functions/_shared/email-layout.ts` | `src/lib/email/email-layout.ts` | Header only |
+| `supabase/functions/_shared/session-time.ts` | `src/lib/email/session-time.ts` | Header only |
+| `supabase/functions/_shared/session-date.ts` | `src/lib/email/session-date.ts` | Header only |
+| `tests/session-reminder-email.test.ts` | `tests/lib/session-reminder-email.test.ts` | Header; import path |

@@ -1,15 +1,37 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Select from '../Select';
 import { Modal } from '../ui';
 import { connectGmail, db } from '../../lib/firebase';
 import type { ClubRow } from '../../lib/club-overview';
-import { addEmailLog, saveEmailTemplates, type EmailLogEntry } from '../../lib/data/email-store';
+import { addEmailLog, saveEmailTemplates, type EmailLogEntry, type LogTemplate } from '../../lib/data/email-store';
+import type { StoredClub } from '../../lib/data/plan';
+import type { StoredAthlete } from '../../lib/import/diff';
+import type { Session } from '../../lib/import/types';
+import type { ReminderTemplate } from '../../lib/email/session-reminder-email';
+import type { ScheduleRows } from '../../lib/schedule';
+import { LINEUPS_SESSION_TEMPLATE } from '../../lib/session-details';
+import SessionDetailsPanel from './SessionDetailsPanel';
 import { clubLinkUrl, DEFAULT_TEMPLATES, PLACEHOLDERS, renderReminder, type MessageContext, type Templates } from '../../lib/email-templates';
 import { FROM, sendTestBatch, SEND_MODE, testAlias, type FetchLike, type SendResult, type TestWho } from '../../lib/email-send';
 import { formatDeadline, formatWhen, pacificDay } from '../../lib/pacific';
 import { buildReminders, REMINDER_LABEL, type ReminderEntry, type ReminderKind } from '../../lib/reminders';
 
 const KINDS: ReminderKind[] = ['az', 'split'];
+/** The two club reminders plus the per-person "Session details" email (Julia 2026-10-30). */
+type MessageKind = ReminderKind | 'session';
+const LOG_LABEL: Record<LogTemplate, string> = { ...REMINDER_LABEL, session: 'Session details' };
+
+/** What the Session details email needs beyond the club rows. Optional so older callers (and tests) still render. */
+export interface SessionDetailsData {
+  sessions: Session[];
+  athletes: StoredAthlete[];
+  clubs: StoredClub[];
+  gymOrder: string[];
+  schedule?: ScheduleRows;
+  meetDate?: string;
+  sessionTemplate?: ReminderTemplate;
+  coachRoles?: string[] | null;
+}
 
 /** Dev builds only (stripped from production): lets the browser check skip Google's consent popup. Never set by the app. */
 function devGmailToken(): string | undefined {
@@ -19,7 +41,8 @@ function devGmailToken(): string | undefined {
 /** The page's three pills (Julia 2026-10-18). The panel stays mounted across them so ticks, choice and preview survive. */
 export type ClubsView = 'clubs' | 'email' | 'message';
 
-export default function ReminderPanel({ meetId, rows: liveRows, templates: savedTemplates, meetName, deadline, linkBase, adminEmail, log: liveLog, onLogged, pauseMs, view = 'email', onView }: {
+export default function ReminderPanel({ meetId, rows: liveRows, templates: savedTemplates, meetName, deadline, linkBase, adminEmail, log: liveLog, onLogged, pauseMs, view = 'email', onView, details }: {
+  details?: SessionDetailsData;
   /** Which pill is showing: 'email' shows the lists, Send and the log; 'message' the wording and preview. */
   view?: ClubsView;
   onView?: (v: ClubsView) => void;
@@ -42,7 +65,10 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
   const reminders = useMemo(() => buildReminders(rows), [rows]);
   const rowById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
 
-  const [kind, setKind] = useState<ReminderKind>('az');
+  const [messageKind, setMessageKind] = useState<MessageKind>('az');
+  const isSession = messageKind === 'session';
+  // The club reminder whose list and wording show (its cards are hidden while Session details is chosen).
+  const kind: ReminderKind = messageKind === 'session' ? 'az' : messageKind;
   const [templates, setTemplates] = useState<Templates>(savedTemplates);
   const [stored, setStored] = useState<Templates>(savedTemplates);
   const [tplState, setTplState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -51,10 +77,13 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
   // "Preview" on a club line shows that club's message and jumps down to it (focus moves there for keyboard users).
   const showPreview = (clubId: string) => {
     setPreviewId(clubId);
+    jumpToPreview('cl-prev-h');
+  };
+  const jumpToPreview = (headingId: string) => {
     onView?.('message');
     // Two frames: the Message & preview pill has to be shown before it can scroll into view.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const h = document.getElementById('cl-prev-h');
+      const h = document.getElementById(headingId);
       h?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
       h?.focus({ preventScroll: true });
     }));
@@ -148,21 +177,25 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
   }
 
   const logRows = log.slice(0, 200);
+  const switcher = (label: string): ReactNode => (
+    <div className="cl-seg" role="group" aria-label={label}>
+      {KINDS.map((k) => (
+        <button key={k} type="button" aria-pressed={messageKind === k} onClick={() => { setMessageKind(k); setPreviewId(''); setSummary(null); }}>
+          {REMINDER_LABEL[k]} ({reminders[k].length})
+        </button>
+      ))}
+      {details && <button type="button" aria-pressed={isSession} onClick={() => { setMessageKind('session'); setSummary(null); }}>Session details</button>}
+    </div>
+  );
 
   return (
     <>
-      <section className="adm-card" aria-labelledby="cl-rem-h" hidden={view !== 'email'}>
+      <section className="adm-card" aria-labelledby="cl-rem-h" hidden={isSession || view !== 'email'}>
         <div className="cl-head">
           <h2 className="display" id="cl-rem-h">Reminders</h2>
           <span className="badge warn">Test mode: real club addresses are off</span>
         </div>
-        <div className="cl-seg" role="group" aria-label="Which reminder">
-          {KINDS.map((k) => (
-            <button key={k} type="button" aria-pressed={kind === k} onClick={() => { setKind(k); setPreviewId(''); setSummary(null); }}>
-              {REMINDER_LABEL[k]} ({reminders[k].length})
-            </button>
-          ))}
-        </div>
+        {switcher('Which reminder')}
         <p className="adm-muted">
           {kind === 'split'
             ? "Clubs with more athletes at a level than fit in one squad that haven't kept or changed the suggested split. They get this message instead of the A–Z reminder."
@@ -210,16 +243,10 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-tpl-h" hidden={view !== 'message'}>
+      <section className="adm-card" aria-labelledby="cl-tpl-h" hidden={isSession || view !== 'message'}>
         <h2 className="display" id="cl-tpl-h">Message: {REMINDER_LABEL[kind]}</h2>
-        {/* The same reminder switch as on "Who to email", so both messages can be edited and previewed here. */}
-        <div className="cl-seg" role="group" aria-label="Which message">
-          {KINDS.map((k) => (
-            <button key={k} type="button" aria-pressed={kind === k} onClick={() => { setKind(k); setPreviewId(''); setSummary(null); }}>
-              {REMINDER_LABEL[k]} ({reminders[k].length})
-            </button>
-          ))}
-        </div>
+        {/* The same switch as on "Who to email", so every message can be edited and previewed here. */}
+        {switcher('Which message')}
         <p className="adm-muted">Placeholders: {PLACEHOLDERS.map((p) => <code key={p} className="cl-ph">{p}</code>)}. <code className="cl-ph">{'{sessions}'}</code> becomes a bulleted list. Blank line = new paragraph; <code className="cl-ph">**bold**</code>.</p>
         <label className="cl-field">
           <span>Subject</span>
@@ -237,7 +264,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         </div>
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-prev-h" hidden={view !== 'message'}>
+      <section className="adm-card" aria-labelledby="cl-prev-h" hidden={isSession || view !== 'message'}>
         <h2 className="display" id="cl-prev-h" tabIndex={-1}>Preview</h2>
         {!preview || !rendered ? (
           <p className="adm-muted">No clubs on this list.</p>
@@ -267,7 +294,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-send-h" hidden={view !== 'email'}>
+      <section className="adm-card" aria-labelledby="cl-send-h" hidden={isSession || view !== 'email'}>
         <h2 className="display" id="cl-send-h">Send</h2>
         <div className="adm-banner warn" role="note">
           <strong>Test mode.</strong> Every message goes to a test alias, never to a club. Sent from your Gmail as {FROM.address}.
@@ -312,6 +339,22 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
+      {details && isSession && (
+        <SessionDetailsPanel
+          view={view}
+          switcher={switcher(view === 'message' ? 'Which message' : 'Which reminder')}
+          meetId={meetId} meetName={meetName} linkBase={linkBase} adminEmail={adminEmail}
+          sessions={details.sessions} athletes={details.athletes} clubs={details.clubs} gymOrder={details.gymOrder}
+          schedule={details.schedule ?? {}} meetDate={details.meetDate ?? ''}
+          template={details.sessionTemplate ?? LINEUPS_SESSION_TEMPLATE} coachRoles={details.coachRoles ?? null}
+          log={liveLog} onLogged={onLogged}
+          who={who} onWho={setWho}
+          gmailToken={gmailToken} gmailError={gmailError} onConnect={() => void connect()} onExpired={() => setGmailToken(null)}
+          onPreview={() => jumpToPreview('sd-prev-h')}
+          pauseMs={pauseMs}
+        />
+      )}
+
       <section className="adm-card" aria-labelledby="cl-log-h" hidden={view !== 'email'}>
         <h2 className="display" id="cl-log-h">Send log</h2>
         {logRows.length === 0 ? <p className="adm-muted">Nothing sent yet.</p> : (
@@ -321,7 +364,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
               {logRows.map((e) => (
                 <tr key={e.id}>
                   <td data-label="When">{e.at ? formatWhen(e.at) : '—'}</td>
-                  <td data-label="Reminder">{REMINDER_LABEL[e.template]}</td>
+                  <td data-label="Reminder">{LOG_LABEL[e.template]}</td>
                   <th scope="row" data-label="Club" className="cl-name">{e.club}</th>
                   <td data-label="Sent to" className="cl-wrap">{e.to}</td>
                   <td data-label="By" className="cl-wrap">{e.by}</td>

@@ -216,6 +216,7 @@ export function normalizeImport(input: ImportInput): ImportModel {
       if (disc === 'TNT') tnt = {};
     }
 
+    const email = splitEmails(g(r, 'athlete_email'))[0];
     athletes.push({
       id,
       discipline: disc,
@@ -230,8 +231,12 @@ export function normalizeImport(input: ImportInput): ImportModel {
       apparatus,
       ...(disc === 'TNT' ? { tnt } : {}),
       competes: apparatus.length > 0,
+      ...(email ? { email } : {}),
     });
   });
+  const withEmailColumn = input.athletes.some((r) => 'athlete_email' in r);
+  const noEmail = athletes.filter((a) => !a.email).length;
+  if (withEmailColumn && noEmail > 0) warn('no-athlete-email', `${noEmail} athlete${noEmail === 1 ? ' has' : 's have'} no email: they get no session detail email.`);
 
   for (const d of ['WAG', 'MAG', 'TNT'] as Discipline[]) {
     const ex = exports[d];
@@ -286,13 +291,20 @@ export function normalizeImport(input: ImportInput): ImportModel {
       const name = g(r, 'club');
       if (!name) continue;
       // Club_Emails.xlsx has an Email column; the League Communications export has Contact + Role
-      // ("Club Email") instead, and only email roles count.
+      // ("Club Email") instead. Email roles are the club's contact addresses; any other role with an address (exported "with all
+      // roles", Julia 2026-10-30) is a contact the session detail emails may send to.
       const role = g(r, 'role');
-      if (role && !/e-?mail/i.test(role)) continue;
       const cell = g(r, 'email') || g(r, 'contact');
       const club = clubs.get(slug(name));
       if (!club) {
         continue; // clubs in the email list with no athletes here are expected (not competing)
+      }
+      if (role && !/e-?mail/i.test(role)) {
+        const contacts = (club.contacts ??= []);
+        for (const e of splitEmails(cell)) {
+          if (!contacts.some((c) => c.email === e && c.role === role)) contacts.push({ name: g(r, 'name'), email: e, role });
+        }
+        continue;
       }
       matched.add(club.id);
       for (const e of splitEmails(cell)) if (!club.emails.includes(e)) club.emails.push(e);

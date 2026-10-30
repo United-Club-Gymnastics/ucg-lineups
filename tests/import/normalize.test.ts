@@ -9,7 +9,7 @@ const a = (o: Partial<Parameters<typeof athRow>[0]> & { bib?: string }) =>
   athRow({ bib: '', first: 'Ada', last: 'Test', level: 'Platinum', short: 'XP', type: 'WAG', club: 'Alpha Gymnastics', session: 'Session 1 - Orange', ...o });
 
 async function run(sheets: {
-  ath: unknown[][]; wag?: unknown[][]; mag?: unknown[][]; tnt?: unknown[][]; emails?: unknown[][]; emailHeaders?: string[];
+  ath: unknown[][]; athHeaders?: string[]; wag?: unknown[][]; mag?: unknown[][]; tnt?: unknown[][]; emails?: unknown[][]; emailHeaders?: string[];
 }) {
   const found: Detected[] = [];
   const add = async (rows?: unknown[][], headers?: string[]) => {
@@ -17,7 +17,7 @@ async function run(sheets: {
     const buf = await makeWorkbook({ Sheet: [headers!, ...rows] as never });
     found.push(detectWorkbook(await readWorkbook(buf))!);
   };
-  await add(sheets.ath, ATH_HEADERS);
+  await add(sheets.ath, sheets.athHeaders ?? ATH_HEADERS);
   await add(sheets.wag, WAG_HEADERS);
   await add(sheets.mag, MAG_HEADERS);
   await add(sheets.tnt, TNT_HEADERS);
@@ -238,6 +238,38 @@ describe('normalizeImport', () => {
     });
     expect(m.clubs[0].emails).toEqual(['alpha@x.org', 'coach@x.org']);
     expect(m.warnings.filter((w) => w.code === 'email-unmatched')).toEqual([]);
+    // Other roles are not contact addresses: they are kept as contacts for the session detail emails.
+    expect(m.clubs[0].contacts).toEqual([{ name: '', email: 'ignore@x.org', role: 'President' }]);
+  });
+
+  it('keeps every League Communications role with an address as a club contact, once per address and role', async () => {
+    const m = await run({
+      ath: [a({ bib: '1' })],
+      emailHeaders: ['', 'Name', 'Club', 'Contact', 'Role', 'Season', 'State'],
+      emails: [
+        ['', 'Casey Coach', 'Alpha Gymnastics', 'Casey@x.org', 'Head Coach', '', 'CO'],
+        ['', 'Casey Coach', 'Alpha Gymnastics', 'casey@x.org', 'Head Coach', '', 'CO'],
+        ['', 'Casey Coach', 'Alpha Gymnastics', 'casey@x.org', 'Treasurer', '', 'CO'],
+        ['', 'Pat Phone', 'Alpha Gymnastics', '555-0100', 'Assistant Coach', '', 'CO'],
+      ],
+    });
+    expect(m.clubs[0].emails).toEqual([]);
+    expect(m.clubs[0].contacts).toEqual([
+      { name: 'Casey Coach', email: 'casey@x.org', role: 'Head Coach' },
+      { name: 'Casey Coach', email: 'casey@x.org', role: 'Treasurer' },
+    ]);
+  });
+
+  it('keeps Athlete_Email (lower-cased) and counts athletes without one', async () => {
+    const m = await run({
+      athHeaders: [...ATH_HEADERS, 'Athlete_Email'],
+      ath: [[...a({ bib: '1', first: 'Ada' }), 'Ada@Example.org'], [...a({ bib: '2', first: 'Bo' }), '']],
+    });
+    expect(m.athletes.map((x) => [x.first, x.email])).toEqual([['Ada', 'ada@example.org'], ['Bo', undefined]]);
+    expect('email' in m.athletes[1]).toBe(false);
+    expect(m.warnings.find((w) => w.code === 'no-athlete-email')?.message).toBe('1 athlete has no email: they get no session detail email.');
+    // An export without the column: no email, no warning.
+    expect((await run({ ath: [a({ bib: '1' })] })).warnings.some((w) => w.code === 'no-athlete-email')).toBe(false);
   });
 
   it('flags unreadable sessions, missing names and unknown types, and sorts sessions by gym order', async () => {

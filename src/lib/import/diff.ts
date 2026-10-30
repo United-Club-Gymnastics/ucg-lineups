@@ -12,7 +12,7 @@ export interface ImportDiff {
 
 const FIELDS: (keyof Athlete)[] = [
   'discipline', 'first', 'last', 'clubId', 'clubName', 'independent', 'levelCode', 'levelName',
-  'sessionId', 'apparatus', 'tnt', 'competes',
+  'sessionId', 'apparatus', 'tnt', 'competes', 'email',
 ];
 
 function canon(v: unknown): string {

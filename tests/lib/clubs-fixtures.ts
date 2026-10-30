@@ -42,11 +42,11 @@ export const ATHLETES: StoredAthlete[] = [
 ];
 
 export const CLUBS: StoredClub[] = [
-  { id: 'alpha-gymnastics', name: 'Alpha Gymnastics', emails: ['coach@alpha.example'], token: 'tokAlpha' },
-  { id: 'bravo-academy', name: 'Bravo Academy', emails: ['bravo@example.org', 'second@example.org'], token: 'tokBravo' },
-  { id: 'charlie-club', name: 'Charlie Club', emails: ['c@charlie.example'], token: 'tokCharlie' },
-  { id: 'delta-gym', name: 'Delta Gym', emails: [], token: 'tokDelta' },
-  { id: 'echo-elite', name: 'Echo Elite', emails: ['echo@example.com'], token: 'tokEcho' },
+  { id: 'alpha-gymnastics', name: 'Alpha Gymnastics', emails: ['coach@alpha.example'], contacts: [], token: 'tokAlpha' },
+  { id: 'bravo-academy', name: 'Bravo Academy', emails: ['bravo@example.org', 'second@example.org'], contacts: [], token: 'tokBravo' },
+  { id: 'charlie-club', name: 'Charlie Club', emails: ['c@charlie.example'], contacts: [], token: 'tokCharlie' },
+  { id: 'delta-gym', name: 'Delta Gym', emails: [], contacts: [], token: 'tokDelta' },
+  { id: 'echo-elite', name: 'Echo Elite', emails: ['echo@example.com'], contacts: [], token: 'tokEcho' },
 ];
 
 /** Alpha has reversed the Vault order of its MAG Dev group, so that session is "Order set". */

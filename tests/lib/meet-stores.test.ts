@@ -113,7 +113,7 @@ describe('data store functions take the meet id', () => {
     fs.batchOps.length = 0;
     await applyImport(db, 'm5', { athletes: [], clubs: [{ id: 'alpha', name: 'Alpha', emails: [] }], sessions: [{ id: 's1-orange', number: 1, gym: 'Orange', discipline: 'WAG', levelCodes: [] }], warnings: [] }, { athletes: [], clubs: [], hasSettings: false });
     expect(fs.batchOps.map((o) => o[0])).toEqual(['meets/m5/sessions/s1-orange', 'meets/m5/clubs/alpha', 'meets/m5/settings/meet']);
-    expect(fs.batchOps[1][1]).toEqual({ name: 'Alpha', emails: [] });
+    expect(fs.batchOps[1][1]).toEqual({ name: 'Alpha', emails: [], contacts: [] });
   });
 
   it('an existing token is reused for another meet, an archived meet publishes nothing, and archiving removes just that meet\'s entry', async () => {

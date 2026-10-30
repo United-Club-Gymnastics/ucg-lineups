@@ -138,6 +138,10 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
         log={log}
         onLogged={(e) => setLog((prev) => [e, ...prev])}
         pauseMs={pauseMs}
+        details={{
+          sessions, athletes, clubs, gymOrder: data.gymOrder,
+          schedule: data.schedule, meetDate: data.meetDate, sessionTemplate: data.sessionTemplate, coachRoles: data.coachRoles,
+        }}
       />
     </div>
   );

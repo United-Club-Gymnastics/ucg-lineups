@@ -1,0 +1,69 @@
+// Copied from ucg-platform@5824208e supabase/functions/_shared/email-layout.ts — keep in sync by hand
+// _shared/email-layout.ts — shared branded HTML wrapper for all outbound emails.
+//
+// Matches the look of Supabase's magic-link sign-in email (dark navy header with
+// the UCG wordmark, white card, orange CTA button, muted footer) so every email
+// the platform sends — Resend or Supabase Auth — reads as one product.
+
+export interface EmailLayoutOptions {
+  /** Card heading, e.g. "Your sign-in link". */
+  heading: string;
+  /** Inner content — plain text or simple inline-styled HTML (paragraphs, tables). */
+  bodyHtml: string;
+  /** Optional single call-to-action button. */
+  cta?: { text: string; href: string };
+  /** Small print under the body/CTA — expiry notes, "ignore if unexpected", etc. */
+  footnoteHtml?: string;
+}
+
+const NAVY = '#1E2B38';
+const NAVY_SUB = '#DBEBEE';
+const ORANGE = '#F4694A';
+const TEXT = '#1E2B38';
+const MUTED = '#5b6b7a';
+// Must stay >=4.5:1 against BG for AA — #9aa7b4 (the original pick) only hit ~2.2:1.
+const FOOTER_MUTED = '#5b6b7a';
+const BG = '#eef1f4';
+
+/** The call-to-action button markup `renderEmail` appends under the body.
+ *  Exported so an email that needs a button MID-body (the Phase 2 owner email)
+ *  renders the exact same button. `text`/`href` are inserted as given — the
+ *  caller escapes them (same contract as `renderEmail`'s `cta`). Button text is navy on coral (~5:1, AA); white on coral was ~2.9:1. */
+export function emailButtonHtml(cta: { text: string; href: string }): string {
+  return `<div style="margin:24px 0 4px;">
+<a href="${cta.href}" style="display:inline-block;background:${ORANGE};color:${NAVY};font-weight:700;font-size:15px;text-decoration:none;padding:14px 26px;border-radius:8px;">${cta.text}</a>
+</div>`;
+}
+
+/** A red call-out banner for mid-body use (e.g. "Please reply to this email so
+ *  we know you received it!"). White on #B14943 is ~5.5:1 (WCAG AA). The text
+ *  is HTML-escaped here, so pass PLAIN text. */
+export function emailBannerHtml(text: string): string {
+  const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return `<div style="background:#B14943;color:#ffffff;font-weight:700;font-size:15px;line-height:1.5;padding:12px 16px;border-radius:8px;margin:18px 0;">${safe}</div>`;
+}
+
+export function renderEmail({ heading, bodyHtml, cta, footnoteHtml }: EmailLayoutOptions): string {
+  const ctaHtml = cta ? emailButtonHtml(cta) : '';
+  const footnote = footnoteHtml
+    ? `<p style="color:${MUTED};font-size:12px;line-height:1.5;margin:20px 0 0;">${footnoteHtml}</p>`
+    : '';
+  return `<div style="background:${BG};padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" style="max-width:560px;margin:0 auto;border-collapse:collapse;background:#ffffff;border-radius:10px;overflow:hidden;">
+<tr><td style="background:${NAVY};padding:28px 32px;">
+<div style="color:#ffffff;font-size:22px;font-weight:800;letter-spacing:0.3px;">UCG<span style="color:${ORANGE};">.</span></div>
+<div style="color:${NAVY_SUB};font-size:11px;font-weight:600;letter-spacing:1.5px;margin-top:4px;">UNITED CLUB GYMNASTICS</div>
+</td></tr>
+<tr><td style="padding:32px;">
+<h1 style="color:${TEXT};font-size:19px;font-weight:700;margin:0 0 12px;">${heading}</h1>
+<div style="color:${MUTED};font-size:15px;line-height:1.6;">${bodyHtml}</div>
+${ctaHtml}
+${footnote}
+</td></tr>
+</table>
+<p style="text-align:center;color:${FOOTER_MUTED};font-size:12px;margin:20px 0 0;">
+United Club Gymnastics &middot; For the love of the sport.<br>
+<a href="https://www.unitedclubgymnastics.org" style="color:${FOOTER_MUTED};text-decoration:underline;">unitedclubgymnastics.org</a>
+</p>
+</div>`;
+}

@@ -15,8 +15,16 @@ export const toStoredAthlete = (id: string, data: DocumentData): StoredAthlete =
 export const toStoredClub = (id: string, data: DocumentData): StoredClub => {
   const x = data as Partial<StoredClub>;
   // The token lives in clubTokens/{clubId} (one per club across meets), not on the meet's club document.
-  return { id, name: x.name ?? '', emails: x.emails ?? [], token: '' };
+  return { id, name: x.name ?? '', emails: x.emails ?? [], contacts: parseContacts(x.contacts), token: '' };
 };
+const parseContacts = (raw: unknown): StoredClub['contacts'] =>
+  Array.isArray(raw)
+    ? raw.flatMap((c) => {
+      const o = c && typeof c === 'object' ? (c as Record<string, unknown>) : {};
+      const s = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : '');
+      return s('email') ? [{ name: s('name'), email: s('email'), role: s('role') }] : [];
+    })
+    : [];
 /** Sessions stored before names existed have `number` + `gym` only: they read as `Session <number>` at `<gym>`. Levels read in
  * competitive order (meets imported before 2026-10-28 stored them A–Z). */
 export const toStoredSession = (id: string, data: DocumentData): Session => {

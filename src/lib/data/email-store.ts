@@ -7,6 +7,9 @@ import { applyNameFixesToAthletes, parseNameFixes, type NameFix } from '../name-
 import { fromStored } from '../club-order-model';
 import type { SavedLevel } from '../club-overview';
 import { parseTemplates, type Templates } from '../email-templates';
+import type { ReminderTemplate } from '../email/session-reminder-email';
+import { parseRows, type ScheduleRows } from '../schedule';
+import { parseSessionTemplate } from '../session-details';
 import type { StoredAthlete } from '../import/diff';
 import { DEFAULT_GYM_ORDER, type Session } from '../import/types';
 import { newClubToken } from '../import/token';
@@ -118,10 +121,13 @@ export function watchClubsLive(
   return stop;
 }
 
+/** The club reminders plus the per-person "Session details" email. */
+export type LogTemplate = ReminderKind | 'session';
+
 export interface EmailLogEntry {
   id: string;
-  /** 'az' | 'split' */
-  template: ReminderKind;
+  /** 'az' | 'split' | 'session' */
+  template: LogTemplate;
   clubId: string;
   club: string;
   /** The address the message went to: a test alias in test mode. */
@@ -130,13 +136,16 @@ export interface EmailLogEntry {
   at: Date | null;
   by: string;
   mode: 'test';
+  /** Session details only: the session, and the recipient (`a:<athleteId>` / `c:<address>`) with their real address's role. */
+  sessionId?: string;
+  recipientKey?: string;
 }
 
 export function parseLogEntry(id: string, raw: Record<string, unknown>): EmailLogEntry {
   const at = raw.at as { toDate?: () => Date } | undefined;
   return {
     id,
-    template: raw.template === 'split' ? 'split' : 'az',
+    template: raw.template === 'split' || raw.template === 'session' ? raw.template : 'az',
     clubId: typeof raw.clubId === 'string' ? raw.clubId : '',
     club: typeof raw.club === 'string' ? raw.club : '',
     to: typeof raw.to === 'string' ? raw.to : '',
@@ -144,6 +153,8 @@ export function parseLogEntry(id: string, raw: Record<string, unknown>): EmailLo
     at: at && typeof at.toDate === 'function' ? at.toDate() : null,
     by: typeof raw.by === 'string' ? raw.by : '',
     mode: 'test',
+    ...(typeof raw.sessionId === 'string' ? { sessionId: raw.sessionId } : {}),
+    ...(typeof raw.recipientKey === 'string' ? { recipientKey: raw.recipientKey } : {}),
   };
 }
 
@@ -156,6 +167,13 @@ export interface ClubsScreenData {
   meetName: string;
   deadline: Date | null;
   templates: Templates;
+  /** The "Session details" email: the saved template (the default when none), and the contact roles counted as coaches (null
+   *  until the admin saves a choice). */
+  sessionTemplate: ReminderTemplate;
+  coachRoles: string[] | null;
+  /** For the session detail emails' dates and times (the Exports screen's schedule). */
+  schedule: ScheduleRows;
+  meetDate: string;
   log: EmailLogEntry[];
 }
 
@@ -171,12 +189,18 @@ export async function loadClubsScreenData(db: Firestore, meetId: string): Promis
   const s = settingsSnap.exists() ? settingsSnap.data() : {};
   const gym = Array.isArray(s.gymOrder) && s.gymOrder.length > 0 && s.gymOrder.every((x: unknown) => typeof x === 'string') ? (s.gymOrder as string[]) : DEFAULT_GYM_ORDER;
   const dl = s.orderDeadline as { toDate?: () => Date } | null | undefined;
+  const email = emailSnap.exists() ? emailSnap.data() : null;
+  const roles = email?.coachRoles;
   const log = logSnap.docs.map((d) => parseLogEntry(d.id, d.data())).sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0));
   return {
     sessions, athletes, clubs, gymOrder: gym, saved,
     meetName: typeof s.meetName === 'string' ? s.meetName : '',
     deadline: dl && typeof dl.toDate === 'function' ? dl.toDate() : null,
-    templates: parseTemplates(emailSnap.exists() ? emailSnap.data() : null),
+    templates: parseTemplates(email),
+    sessionTemplate: parseSessionTemplate(email?.sessionTemplate),
+    coachRoles: Array.isArray(roles) && roles.every((r: unknown) => typeof r === 'string') ? (roles as string[]) : null,
+    schedule: parseRows(s.schedule),
+    meetDate: typeof s.meetDate === 'string' ? s.meetDate : '',
     log,
   };
 }
@@ -195,8 +219,27 @@ export async function saveEmailTemplates(db: Firestore, meetId: string, template
   await setDoc(doc(db, meetPaths(meetId).emailSettings), { templates }, { merge: true });
 }
 
+export async function saveSessionTemplate(db: Firestore, meetId: string, template: ReminderTemplate): Promise<void> {
+  await setDoc(doc(db, meetPaths(meetId).emailSettings), { sessionTemplate: template }, { merge: true });
+}
+
+export async function saveCoachRoles(db: Firestore, meetId: string, roles: string[]): Promise<void> {
+  await setDoc(doc(db, meetPaths(meetId).emailSettings), { coachRoles: roles }, { merge: true });
+}
+
+/** "Copy text from": the session detail templates other meets have saved, newest meet first. */
+export async function loadOtherSessionTemplates(db: Firestore, meetId: string): Promise<{ meetId: string; meetName: string; template: ReminderTemplate }[]> {
+  const meets = (await listMeets(db)).filter((m) => m.id !== meetId).sort((a, b) => b.createdAt - a.createdAt);
+  const found = await Promise.all(meets.map(async (m) => {
+    const snap = await getDoc(doc(db, meetPaths(m.id).emailSettings));
+    const raw = snap.exists() ? snap.data().sessionTemplate : undefined;
+    return raw ? { meetId: m.id, meetName: m.name || m.id, template: parseSessionTemplate(raw) } : null;
+  }));
+  return found.filter((x): x is NonNullable<typeof x> => x !== null);
+}
+
 /** One row per message sent (test mode only: `mode` is always 'test'). */
-export async function addEmailLog(db: Firestore, meetId: string, e: { template: ReminderKind; clubId: string; club: string; to: string; subject: string; by: string }): Promise<void> {
+export async function addEmailLog(db: Firestore, meetId: string, e: { template: LogTemplate; clubId: string; club: string; to: string; subject: string; by: string; sessionId?: string; recipientKey?: string }): Promise<void> {
   await addDoc(collection(db, meetPaths(meetId).emailLog), { ...e, mode: 'test', at: serverTimestamp() });
 }
 

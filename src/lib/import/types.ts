@@ -26,6 +26,9 @@ export interface Athlete {
   tnt?: TnTLevels;
   /** Has at least one Included apparatus / event. */
   competes: boolean;
+  /** Athletes_Export `Athlete_Email` (lower-cased), for the session detail emails. Admin-only: never copied into a club link
+   *  or a published sheet. Absent when the export has none. */
+  email?: string;
 }
 
 export interface Session {
@@ -47,11 +50,22 @@ export interface Session {
   scheduleOverride?: Partial<Record<'date' | 'stretch' | 'warmups' | 'competition', string>>;
 }
 
+/** A person on the League Communications export with a role other than "Club Email" (a coach, a club officer…). */
+export interface ClubContact {
+  /** As the export has it; '' when blank. */
+  name: string;
+  email: string;
+  role: string;
+}
+
 export interface Club {
   /** Slug of the full club name. */
   id: string;
   name: string;
   emails: string[];
+  /** League Communications rows with a non-"Club Email" role and an address. The session detail emails send to the roles the
+   *  admin counts as coaches. Admin-only. */
+  contacts?: ClubContact[];
 }
 
 export interface ImportWarning {

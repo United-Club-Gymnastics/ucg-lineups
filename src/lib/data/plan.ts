@@ -1,11 +1,13 @@
 import { diffAthletes, type ImportDiff, type StoredAthlete } from '../import/diff';
-import { DEFAULT_GYM_ORDER, type ImportModel } from '../import/types';
+import { DEFAULT_GYM_ORDER, type ClubContact, type ImportModel } from '../import/types';
 import { meetPaths } from './meet-paths';
 
 export interface StoredClub {
   id: string;
   name: string;
   emails: string[];
+  /** League Communications contacts (coaches and other roles); [] when none were imported. */
+  contacts: ClubContact[];
   /** The club's private-link token from `clubTokens/{clubId}`; '' until its link has been published. */
   token: string;
 }
@@ -36,7 +38,7 @@ export interface ImportPlan {
 /**
  * Pure: work out every Firestore write an import needs. Unchanged athletes are not rewritten;
  * athletes missing from the import are flagged `removed: true`, never deleted; existing clubs keep
- * their emails when the import carries none; settings/meet defaults are written only when it does not
+ * their emails (and contacts) when the import carries none; settings/meet defaults are written only when it does not
  * exist yet. Club tokens are NOT part of an import: a club has one token across all meets in
  * `clubTokens/{clubId}`, created the first time its link is published.
  */
@@ -63,7 +65,9 @@ export function planImport(
     const old = prev.get(c.id);
     if (!old) newClubs++;
     const emails = c.emails.length ? c.emails : (old?.emails ?? []);
-    ops.push({ path: p.club(c.id), data: { name: c.name, emails }, merge: true });
+    // Same rule for contacts: an import without the League Communications export (or without its other roles) keeps them.
+    const contacts = c.contacts?.length ? c.contacts : (old?.contacts ?? []);
+    ops.push({ path: p.club(c.id), data: { name: c.name, emails, contacts }, merge: true });
   }
 
   if (!existing.hasSettings) ops.push({ path: p.settings, data: { ...DEFAULT_MEET_SETTINGS }, merge: true });
