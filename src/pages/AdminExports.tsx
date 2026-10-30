@@ -172,10 +172,14 @@ export function ExportsScreen({ meetId, input, onReload }: { meetId: string; inp
   async function publish() {
     setPubState({ kind: 'busy' });
     try {
-      await publishSheets(db, meetId, Object.fromEntries(sessions.map((s) => [s.id, publicSheetDoc(s.title, s.input)])));
-      const now = new Date();
-      setPublished(Object.fromEntries(sessions.map((s) => [s.id, now])));
-      setPubState({ kind: 'ok', text: `Published ${sessions.length} session${sessions.length === 1 ? '' : 's'}.` });
+      // Read everything again first: squads and club orders may have changed since this screen opened. Nothing is unsaved here
+      // (the button waits for that), so the saved schedule is what the screen shows.
+      const fresh = await loadExportsInput(db, meetId);
+      const now = buildExportSessions({ ...fresh, meet: { id: meetId, name: fresh.meet.meetName, date: fresh.meet.meetDate }, schedule: fresh.meet.schedule }).sessions;
+      await publishSheets(db, meetId, Object.fromEntries(now.map((s) => [s.id, publicSheetDoc(s.title, s.input)])));
+      const at = new Date();
+      setPublished(Object.fromEntries(now.map((s) => [s.id, at])));
+      setPubState({ kind: 'ok', text: `Published ${now.length} session${now.length === 1 ? '' : 's'}.` });
     } catch (e) {
       setPubState({ kind: 'err', text: `Could not publish: ${e instanceof Error ? e.message : 'try again'}` });
     }

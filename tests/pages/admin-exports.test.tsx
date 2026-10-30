@@ -254,8 +254,11 @@ describe('Publish sheets (the public sheets page)', () => {
   it('publishes one document per session from what is saved; Unpublish asks first', async () => {
     const user = await open();
     expect(await screen.findByText('Not published.')).toBeInTheDocument();
+    store.loadExportsInput.mockClear();
     await user.click(screen.getByRole('button', { name: 'Publish sheets' }));
     await waitFor(() => expect(store.publishSheets).toHaveBeenCalledTimes(1));
+    // It reads everything again first, so squads or orders changed since the screen opened are included.
+    expect(store.loadExportsInput).toHaveBeenCalledWith({}, 'm1');
     const [, meetId, docs] = store.publishSheets.mock.calls[0];
     expect(meetId).toBe('m1');
     expect(Object.keys(docs).sort()).toEqual(['s1-orange', 's1-purple', 's2-green', 's3-red'].sort());

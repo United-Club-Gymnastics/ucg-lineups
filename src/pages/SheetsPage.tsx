@@ -42,7 +42,16 @@ export default function SheetsPage() {
 
   const sheet = load.kind === 'ready' ? load.sheet : null;
   const printed = printedOn(sheet?.publishedAt ?? null);
-  const pages = useMemo(() => (sheet ? sessionPages(kind, sheet.input, printed) : []), [sheet, kind, printed]);
+  // A document this version cannot draw (shape changed, hand-edited) shows a message instead of a blank page.
+  const drawn = useMemo(() => {
+    if (!sheet) return { pages: [], when: '', broken: false };
+    try {
+      return { pages: sessionPages(kind, sheet.input, printed), when: whenLine(sheet.input), broken: false };
+    } catch {
+      return { pages: [], when: '', broken: true };
+    }
+  }, [sheet, kind, printed]);
+  const pages = drawn.pages;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -89,7 +98,15 @@ export default function SheetsPage() {
 
   const s = load.sheet;
   const inner = s.input.input;
-  const when = whenLine(s.input);
+  const when = drawn.when;
+  if (drawn.broken) {
+    return (
+      <main className="sh">
+        <h1 className="display">These sheets can&rsquo;t be shown</h1>
+        <p>Please ask the meet host to publish them again.</p>
+      </main>
+    );
+  }
 
   return (
     <main className="sh">

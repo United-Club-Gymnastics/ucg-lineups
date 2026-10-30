@@ -65,4 +65,10 @@ describe('public sheets page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('offline');
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
   });
+
+  it('data it cannot draw shows a message, not a blank page', async () => {
+    store.loadPublicSheet.mockResolvedValue({ title: 'Session 1 – Orange', input: { type: 'artistic', id: 'x', name: 'S', location: 'O', input: {} }, publishedAt: null });
+    open('/sheets/nat27/s1-orange');
+    expect(await screen.findByRole('heading', { name: 'These sheets can’t be shown' })).toBeInTheDocument();
+  });
 });

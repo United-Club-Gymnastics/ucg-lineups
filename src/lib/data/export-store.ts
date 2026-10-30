@@ -41,13 +41,20 @@ export async function saveMeetNameDate(db: Firestore, meetId: string, value: { m
   await batch.commit();
 }
 
-/** Publish sheets: one public document per session (replacing what was there), stamped with the time. */
+/**
+ * Publish sheets: one public document per session (replacing what was there), stamped with the time. A published session that
+ * is not in `docs` any more (removed or renamed by a re-import) is deleted, so its old roster does not stay public.
+ */
 export async function publishSheets(db: Firestore, meetId: string, docs: Record<string, PublicSheetDoc>): Promise<void> {
   const p = meetPaths(meetId);
-  const ids = Object.keys(docs);
-  for (let i = 0; i < ids.length; i += 400) {
+  const stale = (await getDocs(collection(db, p.publicSheets))).docs.filter((d) => !(d.id in docs)).map((d) => d.ref);
+  const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [
+    ...Object.keys(docs).map((id) => (b: ReturnType<typeof writeBatch>) => { b.set(doc(db, p.publicSheet(id)), { ...docs[id], publishedAt: serverTimestamp() }); }),
+    ...stale.map((ref) => (b: ReturnType<typeof writeBatch>) => { b.delete(ref); }),
+  ];
+  for (let i = 0; i < ops.length; i += 400) {
     const batch = writeBatch(db);
-    for (const id of ids.slice(i, i + 400)) batch.set(doc(db, p.publicSheet(id)), { ...docs[id], publishedAt: serverTimestamp() });
+    for (const op of ops.slice(i, i + 400)) op(batch);
     await batch.commit();
   }
 }
