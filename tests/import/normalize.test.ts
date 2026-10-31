@@ -260,6 +260,26 @@ describe('normalizeImport', () => {
     ]);
   });
 
+  it('matches Coach rows that name the club "<full name> - <short name>" (a full name may contain " - "); skips Athlete rows', async () => {
+    const m = await run({
+      ath: [a({ bib: '1' }), a({ bib: '2', first: 'Bo', club: 'State University - Northside' })],
+      emailHeaders: ['', 'Name', 'Club', 'Contact', 'Role', 'Season', 'State'],
+      emails: [
+        ['', 'Casey Coach', 'Alpha Gymnastics - Alpha', 'casey@x.org', 'Coach', '', 'CO'],
+        ['', 'Robin Coach', 'State University - Northside - SUN', 'robin@x.org', 'Coach', '', 'CO'],
+        ['', 'Sam Manager', 'State University - Northside', 'sam@x.org', 'Club Manager', 'Approved', 'CO'],
+        ['', 'Gil Ghost', 'Ghost Club - Ghost', 'gil@x.org', 'Coach', '', 'NY'],
+        ['', 'Ada Test', 'Alpha Gymnastics', 'ada@x.org', 'Athlete', '', 'CO'],
+      ],
+    });
+    const by = Object.fromEntries(m.clubs.map((c) => [c.name, c.contacts]));
+    expect(by['Alpha Gymnastics']).toEqual([{ name: 'Casey Coach', email: 'casey@x.org', role: 'Coach' }]);
+    expect(by['State University - Northside']).toEqual([
+      { name: 'Robin Coach', email: 'robin@x.org', role: 'Coach' },
+      { name: 'Sam Manager', email: 'sam@x.org', role: 'Club Manager' },
+    ]);
+  });
+
   it('keeps Athlete_Email (lower-cased) and counts athletes without one', async () => {
     const m = await run({
       athHeaders: [...ATH_HEADERS, 'Athlete_Email'],

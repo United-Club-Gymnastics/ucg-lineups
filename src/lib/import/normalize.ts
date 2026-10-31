@@ -286,6 +286,16 @@ export function normalizeImport(input: ImportInput): ImportModel {
     if (!clubs.has(a.clubId)) clubs.set(a.clubId, { id: a.clubId, name: a.clubName, emails: [] });
   }
   if (input.clubEmails) {
+    // Coach rows name the club `<full name> - <short name>` ("Tech U Club - Tech"); other roles use the full name alone. Try the
+    // whole name first (some names contain " - ", like "State University - Northside"), then without each trailing " - …" part.
+    const clubFor = (name: string): Club | undefined => {
+      const parts = name.split(' - ');
+      for (let n = parts.length; n > 0; n--) {
+        const c = clubs.get(slug(parts.slice(0, n).join(' - ')));
+        if (c) return c;
+      }
+      return undefined;
+    };
     const matched = new Set<string>();
     for (const r of input.clubEmails) {
       const name = g(r, 'club');
@@ -295,10 +305,12 @@ export function normalizeImport(input: ImportInput): ImportModel {
       // roles", Julia 2026-10-30) is a contact the session detail emails may send to.
       const role = g(r, 'role');
       const cell = g(r, 'email') || g(r, 'contact');
-      const club = clubs.get(slug(name));
+      const club = clubFor(name);
       if (!club) {
         continue; // clubs in the email list with no athletes here are expected (not competing)
       }
+      // Athlete rows are skipped: athletes' addresses come from the Athletes export (Athlete_Email).
+      if (/^athletes?$/i.test(role)) continue;
       if (role && !/e-?mail/i.test(role)) {
         const contacts = (club.contacts ??= []);
         for (const e of splitEmails(cell)) {

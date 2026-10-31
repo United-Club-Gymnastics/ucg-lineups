@@ -8,7 +8,7 @@ import { ensureClubTokens, loadClubTokens } from './club-tokens';
 import { parseMeet } from './meet-store';
 import { meetPaths } from './meet-paths';
 import { loadNameFixes, saveNameFixes } from './name-fixes-store';
-import { chunk, planImport, type ImportPlan, type StoredClub } from './plan';
+import { chunk, planImport, runLimited, type ImportPlan, type StoredClub } from './plan';
 
 // One document -> one record; shared by the one-time loaders below and the live listeners (email-store.ts).
 export const toStoredAthlete = (id: string, data: DocumentData): StoredAthlete => ({ ...(data as StoredAthlete), id });
@@ -81,14 +81,23 @@ export async function loadStored(db: Firestore, meetId: string): Promise<StoredS
   return { athletes, clubs, hasSettings };
 }
 
-/** Write an import in batches of at most 450 operations. Call `planImport` first to preview. */
-export async function applyImport(db: Firestore, meetId: string, model: ImportModel, existing: StoredState): Promise<ImportPlan> {
+/** Progress of a long write: `done` of `total` documents saved. */
+export type WriteProgress = (done: number, total: number) => void;
+
+/** Write an import in batches of at most 450 operations, several at once. Call `planImport` first to preview. */
+export async function applyImport(db: Firestore, meetId: string, model: ImportModel, existing: StoredState, onProgress?: WriteProgress): Promise<ImportPlan> {
   const plan = planImport(model, existing, meetId);
-  for (const ops of chunk(plan.ops)) {
+  const parts = chunk(plan.ops);
+  const total = plan.ops.length;
+  let saved = 0;
+  onProgress?.(0, total);
+  await runLimited(parts.map((ops) => async () => {
     const batch = writeBatch(db);
     for (const op of ops) batch.set(doc(db, op.path), op.data, { merge: op.merge });
     await batch.commit();
-  }
+    saved += ops.length;
+    onProgress?.(saved, total);
+  }));
   return plan;
 }
 
@@ -98,7 +107,7 @@ export async function applyImport(db: Firestore, meetId: string, model: ImportMo
  * only `meets.<meetId>` into it (a merge), so the club's other meets are never touched. Defaults to every club of the meet;
  * pass a list to republish just some. An archived meet is not published (use `unpublishMeetFromLinks`).
  */
-export async function publishClubLinks(db: Firestore, meetId: string, clubs?: StoredClub[]): Promise<number> {
+export async function publishClubLinks(db: Firestore, meetId: string, clubs?: StoredClub[], onProgress?: WriteProgress): Promise<number> {
   const [athletes, sessions, allClubs, meetSnap] = await Promise.all([
     loadAthletesForDisplay(db, meetId), loadSessions(db, meetId), loadClubs(db, meetId), getDoc(doc(db, meetPaths(meetId).root)),
   ]);
@@ -107,11 +116,15 @@ export async function publishClubLinks(db: Firestore, meetId: string, clubs?: St
   const want = clubs ?? allClubs;
   const tokens = await ensureClubTokens(db, want.map((c) => c.id));
   const links = buildClubLinks(athletes, sessions, want.map((c) => ({ ...c, token: tokens[c.id] })), undefined, { id: meetId, name: meet.name, createdAt: meet.createdAt });
-  for (const part of chunk(links)) {
+  let saved = 0;
+  onProgress?.(0, links.length);
+  await runLimited(chunk(links).map((part) => async () => {
     const batch = writeBatch(db);
     for (const l of part) batch.set(doc(db, 'clubLinks', l.token), l.doc, { merge: true });
     await batch.commit();
-  }
+    saved += part.length;
+    onProgress?.(saved, links.length);
+  }));
   return links.length;
 }
 

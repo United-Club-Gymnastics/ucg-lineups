@@ -27,6 +27,8 @@ export default function AdminImport({ meetId }: { meetId: string }) {
   const [loadingStored, setLoadingStored] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [applying, setApplying] = useState(false);
+  // What Apply import is doing right now, e.g. `Saving 900 of 2,140…`.
+  const [progress, setProgress] = useState('');
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   // Bumped after an import so the Name fixes card re-reads the athletes (new names to suggest).
   const [importCount, setImportCount] = useState(0);
@@ -93,23 +95,27 @@ export default function AdminImport({ meetId }: { meetId: string }) {
   async function apply() {
     if (!model || !stored) return;
     setApplying(true);
+    const count = (n: number) => n.toLocaleString('en-US');
     try {
-      const done = await applyImport(db, meetId, model, stored);
+      const done = await applyImport(db, meetId, model, stored, (n, total) => setProgress(`Saving ${count(n)} of ${count(total)}…`));
       const summary = `Import applied: ${done.diff.added.length} added, ${done.diff.changed.length} changed, ${done.diff.removed.length} marked removed, ${done.newClubs} new club links.`;
       try {
-        const n = await publishClubLinks(db, meetId);
+        setProgress('Publishing club pages…');
+        const n = await publishClubLinks(db, meetId, undefined, (k, total) => setProgress(`Publishing club pages ${count(k)} of ${count(total)}…`));
         setResult({ ok: true, text: `${summary} Published ${n} club pages.` });
       } catch (e) {
         setResult({ ok: false, text: `${summary} But publishing the club pages failed: ${e instanceof Error ? e.message : 'unknown error'}. Apply the import again to retry.` });
       }
       setConfirm(false);
       setImportCount((n) => n + 1);
+      setProgress('');
       await refreshStored();
     } catch (e) {
       setResult({ ok: false, text: e instanceof Error ? e.message : 'Import failed.' });
       setConfirm(false);
     } finally {
       setApplying(false);
+      setProgress('');
     }
   }
 
@@ -221,13 +227,14 @@ export default function AdminImport({ meetId }: { meetId: string }) {
       <NameFixesCard key={meetId} meetId={meetId} reloadKey={importCount} />
 
       {confirm && plan && (
-        <Modal title="Apply this import?" onClose={() => setConfirm(false)}>
+        <Modal title="Apply this import?" onClose={() => { if (!applying) setConfirm(false); }}>
           <p>
             {plan.diff.added.length} added, {plan.diff.changed.length} changed, {plan.diff.removed.length} marked removed,
             {' '}{plan.newClubs} new clubs. Saved orders and squads are kept.
           </p>
+          {applying && <p className="adm-muted" role="status">{progress || 'Applying…'} Keep this page open until it finishes.</p>}
           <div className="adm-actions">
-            <button className="btn ghost" type="button" onClick={() => setConfirm(false)}>Cancel</button>
+            <button className="btn ghost" type="button" disabled={applying} onClick={() => setConfirm(false)}>Cancel</button>
             <button className="btn primary" type="button" disabled={applying} onClick={() => void apply()}>
               {applying ? 'Applying…' : 'Apply import'}
             </button>

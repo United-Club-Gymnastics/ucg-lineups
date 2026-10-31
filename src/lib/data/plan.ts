@@ -80,3 +80,27 @@ export function chunk<T>(xs: T[], size = MAX_BATCH): T[][] {
   for (let i = 0; i < xs.length; i += size) out.push(xs.slice(i, i + size));
   return out;
 }
+
+/** Commits running at once when writing batches: in parallel they finish several times faster than one after another. */
+export const PARALLEL_COMMITS = 4;
+
+/**
+ * Run `tasks` with at most `limit` going at once. Rejects with the first error once the running tasks settle; tasks not yet
+ * started are skipped.
+ */
+export async function runLimited(tasks: (() => Promise<unknown>)[], limit = PARALLEL_COMMITS): Promise<void> {
+  let next = 0;
+  let failed: unknown = null;
+  async function worker() {
+    while (failed === null && next < tasks.length) {
+      const task = tasks[next++];
+      try {
+        await task();
+      } catch (e) {
+        if (failed === null) failed = e;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  if (failed !== null) throw failed;
+}

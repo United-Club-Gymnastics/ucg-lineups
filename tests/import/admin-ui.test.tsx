@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ATH_HEADERS, athRow, makeWorkbook } from './helpers';
@@ -29,6 +29,7 @@ vi.mock('../../src/lib/data/store', () => ({
 vi.mock('../../src/lib/data/name-fixes-store', () => ({ loadNameFixes: vi.fn(async () => []) }));
 
 import AdminLanding from '../../src/pages/AdminLanding';
+import { applyImport, publishClubLinks } from '../../src/lib/data/store';
 
 beforeEach(() => { currentUser = null; });
 
@@ -60,6 +61,34 @@ describe('admin shell', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Apply import' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: 'Clubs & Emails' }));
     expect(await screen.findByText(/Loading clubs, orders and the send log/)).toBeInTheDocument();
+  });
+
+  it('shows how far Apply import has got, and keeps the dialog open until it finishes', async () => {
+    currentUser = { email: 'julia@unitedclubgymnastics.org', emailVerified: true };
+    let finishSave: () => void = () => {};
+    vi.mocked(applyImport).mockImplementation(async (_db, _m, _model, _stored, onProgress) => {
+      onProgress?.(450, 2140);
+      await new Promise<void>((r) => { finishSave = r; });
+      return { diff: { added: [], changed: [], removed: [] }, ops: [], newClubs: 0 } as never;
+    });
+    vi.mocked(publishClubLinks).mockImplementation(async (_db, _m, _c, onProgress) => { onProgress?.(12, 126); return 126; });
+    const { container } = render(<AdminLanding />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }));
+    const buf = await makeWorkbook({
+      Sheet: [ATH_HEADERS, athRow({ bib: '1', first: 'Ada', last: 'Test', level: 'Platinum', short: 'XP', type: 'WAG', club: 'Alpha Gymnastics', session: 'Session 1 - Orange' })],
+    });
+    await waitFor(() => expect(container.querySelector('input[type=file]')).not.toBeNull());
+    await userEvent.upload(container.querySelector('input[type=file]') as HTMLInputElement, new File([buf as BlobPart], 'Athletes_Export.xlsx'));
+    await userEvent.click(await screen.findByRole('button', { name: /Load stored data/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Apply import' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Apply import' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Apply import' }));
+    expect(await within(dialog).findByText(/Saving 450 of 2,140… Keep this page open/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    finishSave();
+    expect(await screen.findByText(/Published 126 club pages/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('hides the T&T Squads tab when the meet has no T&T sessions (Julia 2026-10-19), and shows it when it does', async () => {
