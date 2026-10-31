@@ -41,5 +41,5 @@ export const KIND_LABEL: Record<ExportKind, string> = {
   wag: 'WAG export',
   mag: 'MAG export',
   tnt: 'T&T export',
-  clubEmails: 'Club emails',
+  clubEmails: 'League Communications',
 };
