@@ -121,3 +121,4 @@
 .sd-cardhead h2 { margin: 0; }
 .sd-note { margin: 0 0 10px; padding: 10px 12px; border-left: 3px solid var(--navy-800); background: var(--ice-100); color: var(--ink); font-size: 13.5px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .sd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.sd-tag { max-width: 360px; }

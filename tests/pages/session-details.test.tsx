@@ -119,8 +119,11 @@ describe('Session details', () => {
     // Roles: "Head Coach" ticked by default, Treasurer not.
     expect(screen.getByRole('checkbox', { name: 'Head Coach (1)' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Treasurer (1)' })).not.toBeChecked();
-    const list = screen.getByRole('list', { name: 'People to send the session details email to' });
-    expect(within(list).getAllByRole('listitem').map((li) => li.querySelector('label')!.textContent)).toEqual(['Casey Coach', 'Ada Test', 'Cy Test']);
+    const people = () => within(screen.getByRole('list', { name: 'People to send the session details email to' })).getAllByRole('listitem').map((li) => li.querySelector('label')!.textContent);
+    // Athletes normally go through iContact: only the coaches are listed until the admin adds them.
+    expect(people()).toEqual(['Casey Coach']);
+    await user.click(screen.getByRole('checkbox', { name: /Also send the athlete emails from here/ }));
+    expect(people()).toEqual(['Casey Coach', 'Ada Test', 'Cy Test']);
     expect(screen.getByText(/No address/).closest('details')).toHaveTextContent('Bea Test (Alpha Gymnastics)');
     expect(screen.getByText(/Bravo Academy: no coach address/)).toBeInTheDocument();
 
@@ -141,6 +144,21 @@ describe('Session details', () => {
     const log = screen.getAllByRole('table').find((t) => !t.closest('[hidden]'))!;
     expect(within(log).getAllByRole('row')).toHaveLength(4);
     expect(log).toHaveTextContent('Casey Coach · Session 1 - Orange (WAG)');
+  });
+
+  it('Athletes for iContact downloads a zip of every session and says how many contacts', async () => {
+    const created: Blob[] = [];
+    const url = Object.assign(URL, { createObjectURL: vi.fn((b: Blob) => { created.push(b); return 'blob:x'; }), revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const user = await open();
+    await pick(user, 'Send');
+    expect(screen.getByRole('textbox', { name: 'First-name merge tag' })).toHaveValue('[fname]');
+    await user.click(screen.getByRole('button', { name: 'Download for iContact (zip)' }));
+    expect(await screen.findByText(/athletes for iContact\.zip: \d+ sessions?, 2 athlete contacts\./)).toBeInTheDocument();
+    expect(url.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(created[0].size).toBeGreaterThan(0);
+    expect(click).toHaveBeenCalled();
+    click.mockRestore();
   });
 
   it('Preview on a person in Send shows their email in Draft email', async () => {

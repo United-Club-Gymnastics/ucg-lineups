@@ -9,12 +9,13 @@ import type { StoredAthlete } from '../../lib/import/diff';
 import type { Session } from '../../lib/import/types';
 import { buildSessionReminderEmail, REMINDER_PLACEHOLDERS, type ReminderTemplate } from '../../lib/email/session-reminder-email';
 import { FROM, sendTestBatch, SEND_MODE, testAlias, type FetchLike, type SendResult, type TestWho } from '../../lib/email-send';
+import { fileSafe, icontactAthleteExport, ICONTACT_FIRST_NAME_TAG } from '../../lib/icontact-export';
 import { formatWhen } from '../../lib/pacific';
 import { resolveSchedule } from '../../lib/schedule';
 import { scheduleKey, sortByName } from '../../lib/session-names';
 import { sessionTitle } from '../../lib/squad-data';
 import {
-  buildSessionRecipients, coachRolesOrDefault, contactRoles, LINEUPS_SESSION_TEMPLATE, sessionEmailContext, sessionEmailLabel, type SessionRecipient,
+  buildSessionRecipients, coachRolesOrDefault, contactRoles, LICENSED_COACH, LINEUPS_SESSION_TEMPLATE, sessionEmailContext, sessionEmailLabel, type SessionRecipient,
 } from '../../lib/session-details';
 import type { ScheduleRows } from '../../lib/schedule';
 
@@ -138,7 +139,9 @@ export default function SessionDetailsPanel(props: {
     () => (session ? buildSessionRecipients({ sessionId: session.id, athletes: props.athletes, clubs: props.clubs, coachRoles }) : null),
     [session, props.athletes, props.clubs, coachRoles],
   );
-  const everyone: SessionRecipient[] = useMemo(() => (recips ? [...recips.coaches, ...recips.athletes] : []), [recips]);
+  // Athletes go through iContact by default (Julia 2026-10-31): Lineups sends the coaches.
+  const [sendAthletes, setSendAthletes] = useState(false);
+  const everyone: SessionRecipient[] = useMemo(() => (recips ? [...recips.coaches, ...(sendAthletes ? recips.athletes : [])] : []), [recips, sendAthletes]);
   const schedule = session ? resolveSchedule(scheduleKey(session), props.schedule, session.scheduleOverride, props.meetDate) : null;
   const sent = useMemo(
     () => new Set(props.log.filter((e) => e.template === 'session' && e.sessionId === session?.id && e.recipientKey).map((e) => e.recipientKey!)),
@@ -209,6 +212,34 @@ export default function SessionDetailsPanel(props: {
       text: `Sent ${ok} of ${messages.length} test email${messages.length === 1 ? '' : 's'}.${expired ? ` Stopped early: ${messages.length - out.length} not tried. Reconnect Gmail and send again (people already sent are skipped).` : ''}${out.some((r) => r.logError) ? ' Some messages were sent but could not be written to the log.' : ''}`,
     });
     if (expired) props.onExpired();
+  }
+
+  // Athletes for iContact: every session's athlete emails as files, one list per session.
+  const [fnameTag, setFnameTag] = useState(ICONTACT_FIRST_NAME_TAG);
+  const [icState, setIcState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'err'; text?: string }>({ kind: 'idle' });
+  async function downloadIcontact() {
+    setIcState({ kind: 'busy' });
+    try {
+      const built = icontactAthleteExport({
+        meetName: props.meetName, meetId, linkBase, athletes: props.athletes, clubs: props.clubs, coachRoles, template, firstNameTag: fnameTag,
+        sessions: sessions.map((s) => ({ session: s, schedule: resolveSchedule(scheduleKey(s), props.schedule, s.scheduleOverride, props.meetDate) })),
+      });
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+      for (const f of built.files) zip.file(f.name, f.content);
+      const name = `${fileSafe(props.meetName) || 'Meet'} - athletes for iContact.zip`;
+      const url = URL.createObjectURL(await zip.generateAsync({ type: 'blob' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setIcState({ kind: 'ok', text: `Downloaded ${name}: ${built.sessions.length} session${built.sessions.length === 1 ? '' : 's'}, ${built.total} athlete contact${built.total === 1 ? '' : 's'}.` });
+    } catch (e) {
+      setIcState({ kind: 'err', text: `Could not make the files: ${e instanceof Error ? e.message : 'try again'}` });
+    }
   }
 
   const sessionPicker = (
@@ -330,11 +361,11 @@ export default function SessionDetailsPanel(props: {
   const whoCard = (
     <section className="adm-card" aria-labelledby="sd-who-h">
       <h2 className="display" id="sd-who-h">Who gets it</h2>
-      <p className="adm-muted">Each athlete in the session gets their own email. Each club’s coaches get one email listing their athletes in the session. Independents get the athlete email only.</p>
+      <p className="adm-muted">Each club’s coaches get one email per session listing their athletes in it. Athletes get their own email, sent through iContact (see Athletes for iContact below); independents get the athlete email only.</p>
       <fieldset className="cl-who sd-roles">
-        <legend>League Communications roles that count as coaches</legend>
+        <legend>Roles that count as coaches</legend>
         {roles.length === 0 ? (
-          <p className="adm-muted sd-none">No contacts imported yet. Re-export League Communications from ScoreFlippers with all roles and import it with the athletes.</p>
+          <p className="adm-muted sd-none">No coaches imported yet. Import the Licensed Coaches export (and League Communications with all roles) with the athletes.</p>
         ) : roles.map((r) => (
           <label key={r.role}>
             <input type="checkbox" checked={coachRoles.includes(r.role)}
@@ -347,7 +378,7 @@ export default function SessionDetailsPanel(props: {
         <div className="adm-actions">
           <button type="button" className="btn" disabled={!rolesDirty || roleState === 'saving'} onClick={() => void saveRoles()}>Save coach roles</button>
           <span className={`cl-state${roleState === 'error' ? ' err' : ''}`} role={roleState === 'error' ? 'alert' : 'status'}>
-            {roleState === 'saving' ? 'Saving…' : roleState === 'saved' ? 'Saved' : roleState === 'error' ? "Couldn't save. Try again." : savedRoles === null ? 'Not saved yet: roles with “coach” in the name are ticked.' : rolesDirty ? 'Unsaved changes (the list below uses what is ticked)' : ''}
+            {roleState === 'saving' ? 'Saving…' : roleState === 'saved' ? 'Saved' : roleState === 'error' ? "Couldn't save. Try again." : savedRoles === null ? (roles.some((r) => r.role === LICENSED_COACH) ? 'Not saved yet: Licensed Coach is ticked.' : 'Not saved yet: roles with “coach” in the name are ticked.') : rolesDirty ? 'Unsaved changes (the list below uses what is ticked)' : ''}
           </span>
         </div>
       )}
@@ -356,7 +387,7 @@ export default function SessionDetailsPanel(props: {
           {sessionPicker}
           {recips && (
             <p className="cl-count">
-              {recips.athleteCount} athlete{recips.athleteCount === 1 ? '' : 's'} compete in this session: {recips.athletes.length} athlete email{recips.athletes.length === 1 ? '' : 's'} and {recips.coaches.length} coach email{recips.coaches.length === 1 ? '' : 's'}.
+              {recips.athleteCount} athlete{recips.athleteCount === 1 ? '' : 's'} compete in this session: {recips.coaches.length} coach email{recips.coaches.length === 1 ? '' : 's'} and {recips.athletes.length} athlete email{recips.athletes.length === 1 ? '' : 's'}{sendAthletes ? '' : ' (athletes go through iContact)'}.
             </p>
           )}
           {recips && recips.missing.length > 0 && (
@@ -369,6 +400,7 @@ export default function SessionDetailsPanel(props: {
               </ul>
             </details>
           )}
+          <label className="cl-check"><input type="checkbox" checked={sendAthletes} onChange={(e) => setSendAthletes(e.target.checked)} /> Also send the athlete emails from here (normally they go through iContact)</label>
           {everyone.length === 0 ? (
             <p className="adm-muted">Nobody in this session has an address yet.</p>
           ) : (
@@ -446,6 +478,30 @@ export default function SessionDetailsPanel(props: {
     </section>
   );
 
+  const icontactCard = (
+    <section className="adm-card" aria-labelledby="sd-ic-h">
+      <h2 className="display" id="sd-ic-h">Athletes for iContact</h2>
+      <p className="adm-muted">
+        A zip for every session at once: each session’s athlete contacts (CSV) and its email (HTML), plus <b>Sessions.csv</b> with each list name and subject.
+        In iContact, import each contacts file as its own list, paste the email HTML into a new message with that subject, and schedule it to that list.
+        Uses the saved email text and the people in Who gets it (an athlete who is also a coach gets the coach email from here instead). Publish sheets first so the links work.
+      </p>
+      <label className="cl-field sd-tag">
+        <span>First-name merge tag</span>
+        <input value={fnameTag} onChange={(e) => setFnameTag(e.target.value)} aria-describedby="sd-tag-hint" />
+      </label>
+      <small id="sd-tag-hint" className="sd-hint">Goes where the email says “Hello …!”. Check it matches iContact’s first-name personalization tag.</small>
+      <div className="adm-actions">
+        <button type="button" className="btn primary" disabled={sessions.length === 0 || tplDirty || icState.kind === 'busy'} onClick={() => void downloadIcontact()}>
+          {icState.kind === 'busy' ? 'Making files…' : 'Download for iContact (zip)'}
+        </button>
+        {tplDirty && <span className="cl-state">Save the email text first (Draft email).</span>}
+      </div>
+      {icState.kind === 'ok' && <div className="adm-banner ok" role="status">{icState.text}</div>}
+      {icState.kind === 'err' && <div className="adm-banner err" role="alert">{icState.text}</div>}
+    </section>
+  );
+
   const logCard = (
     <section className="adm-card" aria-labelledby="sd-log-h">
       <h2 className="display" id="sd-log-h">Send log</h2>
@@ -477,7 +533,7 @@ export default function SessionDetailsPanel(props: {
       <Tabs pill tabs={STEPS} active={step} onChange={setStep} />
       {step === 'draft' && (previewMode ? previewCard : draftCard)}
       {step === 'publish' && <PublicSheetsCard meetId={meetId} sessions={sessions.map((s) => ({ id: s.id, title: sessionTitle(s) }))} headingId="sd-pub-h" />}
-      {step === 'send' && <>{whoCard}{sendCard}</>}
+      {step === 'send' && <>{whoCard}{sendCard}{icontactCard}</>}
       {step === 'log' && logCard}
 
       {confirm && session && (
