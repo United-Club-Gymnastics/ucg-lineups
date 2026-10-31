@@ -17,8 +17,6 @@ import { formatDeadline, formatWhen, pacificDay } from '../../lib/pacific';
 import { buildReminders, REMINDER_LABEL, type ReminderEntry, type ReminderKind } from '../../lib/reminders';
 
 const KINDS: ReminderKind[] = ['az', 'split'];
-/** The two club reminders plus the per-person "Session details" email (Julia 2026-10-30). */
-type MessageKind = ReminderKind | 'session';
 const LOG_LABEL: Record<LogTemplate, string> = { ...REMINDER_LABEL, session: 'Session details' };
 
 /** What the Session details email needs beyond the club rows. Optional so older callers (and tests) still render. */
@@ -30,6 +28,7 @@ export interface SessionDetailsData {
   schedule?: ScheduleRows;
   meetDate?: string;
   sessionTemplate?: ReminderTemplate;
+  sessionTemplateSaved?: boolean;
   coachRoles?: string[] | null;
 }
 
@@ -38,12 +37,13 @@ function devGmailToken(): string | undefined {
   return import.meta.env.DEV ? (window as unknown as { __ucgGmailToken?: string }).__ucgGmailToken : undefined;
 }
 
-/** The page's three pills (Julia 2026-10-18). The panel stays mounted across them so ticks, choice and preview survive. */
-export type ClubsView = 'clubs' | 'email' | 'message';
+/** The page's pills (Julia 2026-10-18; Session reminders 2026-10-31). The panel stays mounted across them so ticks, choice and
+ * preview survive. */
+export type ClubsView = 'clubs' | 'email' | 'message' | 'session';
 
 export default function ReminderPanel({ meetId, rows: liveRows, templates: savedTemplates, meetName, deadline, linkBase, adminEmail, log: liveLog, onLogged, pauseMs, view = 'email', onView, details }: {
   details?: SessionDetailsData;
-  /** Which pill is showing: 'email' shows the lists, Send and the log; 'message' the wording and preview. */
+  /** Which pill is showing: 'email' shows the lists, Send and the log; 'message' the wording and preview; 'session' Session reminders. */
   view?: ClubsView;
   onView?: (v: ClubsView) => void;
   meetId: string;
@@ -65,10 +65,10 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
   const reminders = useMemo(() => buildReminders(rows), [rows]);
   const rowById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
 
-  const [messageKind, setMessageKind] = useState<MessageKind>('az');
-  const isSession = messageKind === 'session';
-  // The club reminder whose list and wording show (its cards are hidden while Session details is chosen).
-  const kind: ReminderKind = messageKind === 'session' ? 'az' : messageKind;
+  // The club reminder whose list and wording show. Session details has its own pill, Session reminders (Julia 2026-10-31).
+  const [kind, setKind] = useState<ReminderKind>('az');
+  const [sessionOpened, setSessionOpened] = useState(view === 'session');
+  if (view === 'session' && !sessionOpened) setSessionOpened(true);
   const [templates, setTemplates] = useState<Templates>(savedTemplates);
   const [stored, setStored] = useState<Templates>(savedTemplates);
   const [tplState, setTplState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -176,21 +176,21 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
     if (expired) setGmailToken(null);
   }
 
-  const logRows = log.slice(0, 200);
+  // The club reminders' log; Session details has its own, in Session reminders.
+  const logRows = log.filter((e) => e.template !== 'session').slice(0, 200);
   const switcher = (label: string): ReactNode => (
     <div className="cl-seg" role="group" aria-label={label}>
       {KINDS.map((k) => (
-        <button key={k} type="button" aria-pressed={messageKind === k} onClick={() => { setMessageKind(k); setPreviewId(''); setSummary(null); }}>
+        <button key={k} type="button" aria-pressed={kind === k} onClick={() => { setKind(k); setPreviewId(''); setSummary(null); }}>
           {REMINDER_LABEL[k]} ({reminders[k].length})
         </button>
       ))}
-      {details && <button type="button" aria-pressed={isSession} onClick={() => { setMessageKind('session'); setSummary(null); }}>Session details</button>}
     </div>
   );
 
   return (
     <>
-      <section className="adm-card" aria-labelledby="cl-rem-h" hidden={isSession || view !== 'email'}>
+      <section className="adm-card" aria-labelledby="cl-rem-h" hidden={view !== 'email'}>
         <div className="cl-head">
           <h2 className="display" id="cl-rem-h">Reminders</h2>
           <span className="badge warn">Test mode: real club addresses are off</span>
@@ -243,7 +243,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-tpl-h" hidden={isSession || view !== 'message'}>
+      <section className="adm-card" aria-labelledby="cl-tpl-h" hidden={view !== 'message'}>
         <h2 className="display" id="cl-tpl-h">Message: {REMINDER_LABEL[kind]}</h2>
         {/* The same switch as on "Who to email", so every message can be edited and previewed here. */}
         {switcher('Which message')}
@@ -264,7 +264,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         </div>
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-prev-h" hidden={isSession || view !== 'message'}>
+      <section className="adm-card" aria-labelledby="cl-prev-h" hidden={view !== 'message'}>
         <h2 className="display" id="cl-prev-h" tabIndex={-1}>Preview</h2>
         {!preview || !rendered ? (
           <p className="adm-muted">No clubs on this list.</p>
@@ -294,7 +294,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
-      <section className="adm-card" aria-labelledby="cl-send-h" hidden={isSession || view !== 'email'}>
+      <section className="adm-card" aria-labelledby="cl-send-h" hidden={view !== 'email'}>
         <h2 className="display" id="cl-send-h">Send</h2>
         <div className="adm-banner warn" role="note">
           <strong>Test mode.</strong> Every message goes to a test alias, never to a club. Sent from your Gmail as {FROM.address}.
@@ -339,20 +339,20 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
         )}
       </section>
 
-      {details && isSession && (
+      {details && sessionOpened && (
+        // Mounted the first time Session reminders opens, then kept while other pills show, so an unsaved draft survives.
+        <div hidden={view !== 'session'}>
         <SessionDetailsPanel
-          view={view}
-          switcher={switcher(view === 'message' ? 'Which message' : 'Which reminder')}
           meetId={meetId} meetName={meetName} linkBase={linkBase} adminEmail={adminEmail}
           sessions={details.sessions} athletes={details.athletes} clubs={details.clubs} gymOrder={details.gymOrder}
           schedule={details.schedule ?? {}} meetDate={details.meetDate ?? ''}
-          template={details.sessionTemplate ?? LINEUPS_SESSION_TEMPLATE} coachRoles={details.coachRoles ?? null}
+          template={details.sessionTemplate ?? LINEUPS_SESSION_TEMPLATE} templateSaved={!!details.sessionTemplate && details.sessionTemplateSaved !== false} coachRoles={details.coachRoles ?? null}
           log={liveLog} onLogged={onLogged}
           who={who} onWho={setWho}
           gmailToken={gmailToken} gmailError={gmailError} onConnect={() => void connect()} onExpired={() => setGmailToken(null)}
-          onPreview={() => jumpToPreview('sd-prev-h')}
           pauseMs={pauseMs}
         />
+        </div>
       )}
 
       <section className="adm-card" aria-labelledby="cl-log-h" hidden={view !== 'email'}>

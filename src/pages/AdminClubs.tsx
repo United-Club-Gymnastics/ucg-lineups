@@ -61,6 +61,7 @@ const VIEWS: { id: ClubsView; label: string }[] = [
   { id: 'clubs', label: 'Clubs' },
   { id: 'email', label: 'Who to email' },
   { id: 'message', label: 'Message & preview' },
+  { id: 'session', label: 'Session reminders' },
 ];
 
 export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connecting', onRetryLive, pauseMs }: {
@@ -140,7 +141,7 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
         pauseMs={pauseMs}
         details={{
           sessions, athletes, clubs, gymOrder: data.gymOrder,
-          schedule: data.schedule, meetDate: data.meetDate, sessionTemplate: data.sessionTemplate, coachRoles: data.coachRoles,
+          schedule: data.schedule, meetDate: data.meetDate, sessionTemplate: data.sessionTemplate, sessionTemplateSaved: data.sessionTemplateSaved ?? true, coachRoles: data.coachRoles,
         }}
       />
     </div>

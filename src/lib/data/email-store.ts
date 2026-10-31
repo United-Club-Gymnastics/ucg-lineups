@@ -170,6 +170,8 @@ export interface ClubsScreenData {
   /** The "Session details" email: the saved template (the default when none), and the contact roles counted as coaches (null
    *  until the admin saves a choice). */
   sessionTemplate: ReminderTemplate;
+  /** False while the meet has no saved session template (the editor says it starts from the UCG default). */
+  sessionTemplateSaved?: boolean;
   coachRoles: string[] | null;
   /** For the session detail emails' dates and times (the Exports screen's schedule). */
   schedule: ScheduleRows;
@@ -198,6 +200,7 @@ export async function loadClubsScreenData(db: Firestore, meetId: string): Promis
     deadline: dl && typeof dl.toDate === 'function' ? dl.toDate() : null,
     templates: parseTemplates(email),
     sessionTemplate: parseSessionTemplate(email?.sessionTemplate),
+    sessionTemplateSaved: !!email?.sessionTemplate,
     coachRoles: Array.isArray(roles) && roles.every((r: unknown) => typeof r === 'string') ? (roles as string[]) : null,
     schedule: parseRows(s.schedule),
     meetDate: typeof s.meetDate === 'string' ? s.meetDate : '',

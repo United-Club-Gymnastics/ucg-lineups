@@ -113,3 +113,11 @@
 .sd-missing ul { margin: 6px 0 0; padding-left: 20px; max-height: 220px; overflow: auto; }
 .sd-hint { display: block; font-size: 12.5px; color: var(--ink); margin: -4px 0 10px; }
 .sd-frame { height: 640px; }
+/* Session reminders, laid out like the UCG platform's (Julia 2026-10-31). */
+.sd-top { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 10px; }
+.sd-top p { margin: 0; flex: 1 1 320px; min-width: 0; }
+.sd .tabs-pill { margin-bottom: 14px; }
+.sd-cardhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.sd-cardhead h2 { margin: 0; }
+.sd-note { margin: 0 0 10px; padding: 10px 12px; border-left: 3px solid var(--navy-800); background: var(--ice-100); color: var(--ink); font-size: 13.5px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.sd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }

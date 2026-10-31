@@ -253,7 +253,7 @@ describe('Exports screen', () => {
 describe('Publish sheets (the public sheets page)', () => {
   it('publishes one document per session from what is saved; Unpublish asks first', async () => {
     const user = await open();
-    expect(await screen.findByText('Not published.')).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('.ps-state')?.textContent).toMatch(/^Sheets are not published\./));
     store.loadExportsInput.mockClear();
     await user.click(screen.getByRole('button', { name: 'Publish sheets' }));
     await waitFor(() => expect(store.publishSheets).toHaveBeenCalledTimes(1));
@@ -265,7 +265,9 @@ describe('Publish sheets (the public sheets page)', () => {
     expect(docs['s1-orange']).toMatchObject({ v: 1, title: 'Session 1 – Orange' });
     expect(JSON.parse(docs['s1-orange'].input).type).toBe('artistic');
     expect(await screen.findByText('Published 4 sessions.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /page$/ })).toHaveAttribute('href', expect.stringMatching(/#\/sheets\/m1\/[^?]+\?doc=scorecards$/));
+    // One row per session with its page and a Copy link (laid out like the UCG platform's, Julia 2026-10-31).
+    expect(screen.getByRole('link', { name: 'Open the sheets page for Session 1 – Orange' })).toHaveAttribute('href', expect.stringMatching(/#\/sheets\/m1\/s1-orange\?doc=rotation$/));
+    expect(screen.getAllByRole('button', { name: /^Copy link for / })).toHaveLength(4);
 
     await user.click(screen.getByRole('button', { name: 'Unpublish' }));
     expect(store.unpublishSheets).not.toHaveBeenCalled();
@@ -284,7 +286,7 @@ describe('Publish sheets (the public sheets page)', () => {
   it('says what is already published', async () => {
     store.loadPublishedSheets.mockResolvedValue({ 's1-orange': new Date('2027-04-01T16:00:00Z'), 's2-green': null });
     await open();
-    expect(await screen.findByText(/^Published: 2 of 4 sessions, last Apr 1, 9:00 AM PT\.$/)).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('.ps-state')?.textContent).toBe('Sheets are published: 2 of 4 sessions, last Apr 1, 9:00 AM PT.'));
     expect(screen.getByRole('button', { name: 'Publish sheets again' })).toBeEnabled();
   });
 });

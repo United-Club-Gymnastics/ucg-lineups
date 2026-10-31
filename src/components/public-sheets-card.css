@@ -1,0 +1,7 @@
+.ps-state { font-size: 13.5px; color: var(--ink); min-height: 18px; }
+.ps-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.ps-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--white); }
+.ps-name { font-weight: 700; flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.ps-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.ps-manual { flex: 1 1 100%; display: grid; gap: 4px; font-size: 12.5px; color: var(--ink); }
+.ps-manual input { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); min-width: 0; }
