@@ -1,7 +1,8 @@
 // Firestore access for the admin Exports screen (admins only; see firestore.rules). Reads everything the sheets need and writes
 // only the meet name/date (meets/{id}/settings/meet), session schedule overrides (meets/{id}/sessions/{id}) and the sessions' sheet
 // lists for the scorecard photo app (meets/{id}/sheetLists/{id}), all admin-write.
-import { collection, deleteField, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
+import { collection, deleteField, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
+import { parsePublicSheet, type PublicSheet, type PublicSheetDoc } from '../public-sheets';
 import { DEFAULT_GYM_ORDER } from '../import/types';
 import { parseRows, type MigrationPlan, type ScheduleFields, type ScheduleRows } from '../schedule';
 import { fetchSynchroPairs, type SynchroPair } from '../synchro-source';
@@ -38,6 +39,47 @@ export async function saveMeetNameDate(db: Firestore, meetId: string, value: { m
   batch.set(doc(db, p.settings), { meetName, meetDate: value.meetDate.trim() }, { merge: true });
   if (meetName) batch.set(doc(db, p.root), { name: meetName }, { merge: true });
   await batch.commit();
+}
+
+/**
+ * Publish sheets: one public document per session (replacing what was there), stamped with the time. A published session that
+ * is not in `docs` any more (removed or renamed by a re-import) is deleted, so its old roster does not stay public.
+ */
+export async function publishSheets(db: Firestore, meetId: string, docs: Record<string, PublicSheetDoc>): Promise<void> {
+  const p = meetPaths(meetId);
+  const stale = (await getDocs(collection(db, p.publicSheets))).docs.filter((d) => !(d.id in docs)).map((d) => d.ref);
+  const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [
+    ...Object.keys(docs).map((id) => (b: ReturnType<typeof writeBatch>) => { b.set(doc(db, p.publicSheet(id)), { ...docs[id], publishedAt: serverTimestamp() }); }),
+    ...stale.map((ref) => (b: ReturnType<typeof writeBatch>) => { b.delete(ref); }),
+  ];
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const op of ops.slice(i, i + 400)) op(batch);
+    await batch.commit();
+  }
+}
+
+/** Unpublish: delete every public sheet of the meet. Returns how many there were. */
+export async function unpublishSheets(db: Firestore, meetId: string): Promise<number> {
+  const snap = await getDocs(collection(db, meetPaths(meetId).publicSheets));
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const d of snap.docs.slice(i, i + 400)) batch.delete(d.ref);
+    await batch.commit();
+  }
+  return snap.docs.length;
+}
+
+/** Admin: which sessions are published, and when. */
+export async function loadPublishedSheets(db: Firestore, meetId: string): Promise<Record<string, Date | null>> {
+  const snap = await getDocs(collection(db, meetPaths(meetId).publicSheets));
+  return Object.fromEntries(snap.docs.map((d) => [d.id, parsePublicSheet(d.data())?.publishedAt ?? null]));
+}
+
+/** Anyone: one session's public sheets, or null when they are not published. */
+export async function loadPublicSheet(db: Firestore, meetId: string, sessionId: string): Promise<PublicSheet | null> {
+  const snap = await getDoc(doc(db, meetPaths(meetId).publicSheet(sessionId)));
+  return snap.exists() ? parsePublicSheet(snap.data()) : null;
 }
 
 /**

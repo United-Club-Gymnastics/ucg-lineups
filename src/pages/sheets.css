@@ -1,0 +1,20 @@
+/* Public sheets page. Navy ink on light surfaces; the paper previews are black on white by design. */
+.sh { max-width: 1100px; margin: 0 auto; padding: 16px; min-width: 0; color: var(--ink); }
+.sh h1 { font-size: 40px; margin: 0 0 6px; overflow-wrap: anywhere; }
+.sh-eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--navy-700); }
+.sh-when { margin: 0 0 4px; font-weight: 700; }
+.sh-updated { margin: 0 0 12px; font-size: 13px; }
+.sh-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 8px 0; }
+.sh-seg { display: inline-flex; border: 1px solid var(--navy-600); border-radius: var(--radius-sm); overflow: hidden; max-width: 100%; }
+.sh-seg button { font: inherit; font-weight: 700; padding: 9px 14px; border: 0; background: var(--white); color: var(--ink); cursor: pointer; min-height: 40px; }
+.sh-seg button + button { border-left: 1px solid var(--navy-600); }
+.sh-seg button[aria-pressed='true'] { background: var(--navy-800); color: var(--white); }
+.sh-seg button:focus-visible, .sh .btn:focus-visible { outline: 2px solid var(--navy-800); outline-offset: 2px; }
+.sh-note { margin: 4px 0 12px; font-size: 14px; max-width: 75ch; overflow-wrap: anywhere; }
+.sh-banner { border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; margin: 8px 0 12px; }
+.sh-banner.err { background: var(--coral-100); border: 1px solid var(--coral-500); }
+.sh-pages { display: grid; gap: 16px; min-width: 0; }
+@media (max-width: 480px) {
+  .sh { padding: 12px; }
+  .sh h1 { font-size: 30px; }
+}

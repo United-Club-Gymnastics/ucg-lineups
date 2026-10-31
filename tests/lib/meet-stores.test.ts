@@ -12,7 +12,7 @@ const fs = vi.hoisted(() => {
     updateDoc: vi.fn(),
     deleteField: vi.fn(() => 'DELETE'),
     serverTimestamp: vi.fn(() => 'NOW'),
-    writeBatch: vi.fn(() => ({ set: (...a: unknown[]) => { batchOps.push(a); }, commit: vi.fn(async () => {}) })),
+    writeBatch: vi.fn(() => ({ set: (...a: unknown[]) => { batchOps.push(a); }, delete: (...a: unknown[]) => { batchOps.push(['DELETE', ...a]); }, commit: vi.fn(async () => {}) })),
   };
 });
 vi.mock('firebase/firestore', () => fs);
@@ -22,7 +22,7 @@ import { loadAthletes, loadClubs, loadSessions, publishClubLinks, unpublishMeetF
 import { loadGymOrder, loadSquadDoc, saveSquadDoc } from '../../src/lib/data/squad-store';
 import { loadTntDoc, saveTntDoc } from '../../src/lib/data/tnt-store';
 import { loadPublicMeet } from '../../src/lib/data/club-store';
-import { loadMeetSettings, saveMeetNameDate, saveScheduleOverride, saveScheduleRow } from '../../src/lib/data/export-store';
+import { loadMeetSettings, publishSheets, saveMeetNameDate, saveScheduleOverride, saveScheduleRow } from '../../src/lib/data/export-store';
 
 const db = {} as never;
 beforeEach(() => { vi.clearAllMocks(); fs.batchOps.length = 0; });
@@ -140,5 +140,19 @@ describe('data store functions take the meet id', () => {
     expect(fs.getDoc).toHaveBeenCalledWith('meets/m6/settings/meet');
     fs.getDoc.mockResolvedValue({ exists: () => false });
     expect(await loadPublicMeet(db, 'm6')).toEqual({ deadline: null, name: '' });
+  });
+});
+
+describe('publish sheets', () => {
+  it('writes every session with the time and deletes published sessions that are gone', async () => {
+    fs.getDocs.mockResolvedValue({ docs: [{ id: 's1-orange', ref: 'meets/m1/publicSheets/s1-orange' }, { id: 'old-session', ref: 'meets/m1/publicSheets/old-session' }] });
+    const doc = { v: 1, title: 'Session 1 – Orange', input: '{}' };
+    await publishSheets(db, 'm1', { 's1-orange': doc, 's2-green': { ...doc, title: 'Session 2 – Green' } });
+    expect(fs.collection).toHaveBeenCalledWith(db, 'meets/m1/publicSheets');
+    expect(fs.batchOps).toEqual([
+      ['meets/m1/publicSheets/s1-orange', { ...doc, publishedAt: 'NOW' }],
+      ['meets/m1/publicSheets/s2-green', { ...doc, title: 'Session 2 – Green', publishedAt: 'NOW' }],
+      ['DELETE', 'meets/m1/publicSheets/old-session'],
+    ]);
   });
 });
