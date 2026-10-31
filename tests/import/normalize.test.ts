@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assembleInput } from '../../src/lib/import/assemble';
 import { detectWorkbook, type Detected } from '../../src/lib/import/detect';
-import { mapLevel, normalizeImport, slug, splitEmails, tntLevelCode } from '../../src/lib/import/normalize';
+import { LICENSED_COACH, mapLevel, normalizeImport, slug, splitEmails, tntLevelCode } from '../../src/lib/import/normalize';
 import { readWorkbook } from '../../src/lib/import/read-workbook';
 import { ATH_HEADERS, MAG_HEADERS, TNT_HEADERS, WAG_HEADERS, athRow, makeWorkbook } from './helpers';
 
@@ -9,7 +9,7 @@ const a = (o: Partial<Parameters<typeof athRow>[0]> & { bib?: string }) =>
   athRow({ bib: '', first: 'Ada', last: 'Test', level: 'Platinum', short: 'XP', type: 'WAG', club: 'Alpha Gymnastics', session: 'Session 1 - Orange', ...o });
 
 async function run(sheets: {
-  ath: unknown[][]; athHeaders?: string[]; wag?: unknown[][]; mag?: unknown[][]; tnt?: unknown[][]; emails?: unknown[][]; emailHeaders?: string[];
+  ath: unknown[][]; athHeaders?: string[]; wag?: unknown[][]; mag?: unknown[][]; tnt?: unknown[][]; emails?: unknown[][]; emailHeaders?: string[]; licensed?: unknown[][];
 }) {
   const found: Detected[] = [];
   const add = async (rows?: unknown[][], headers?: string[]) => {
@@ -22,8 +22,11 @@ async function run(sheets: {
   await add(sheets.mag, MAG_HEADERS);
   await add(sheets.tnt, TNT_HEADERS);
   await add(sheets.emails, sheets.emailHeaders ?? ['Club', 'Email']);
+  await add(sheets.licensed, LICENSED_HEADERS);
   return normalizeImport(assembleInput(found)!);
 }
+
+const LICENSED_HEADERS = ['Edit', 'Coach', 'Status', 'Registered', 'Approved', 'Details', 'Rookie', 'Uploads'];
 
 const noNoise = (m: { warnings: { code: string }[] }) => m.warnings.filter((w) => w.code !== 'no-export');
 
@@ -277,6 +280,33 @@ describe('normalizeImport', () => {
     expect(by['State University - Northside']).toEqual([
       { name: 'Robin Coach', email: 'robin@x.org', role: 'Coach' },
       { name: 'Sam Manager', email: 'sam@x.org', role: 'Club Manager' },
+    ]);
+  });
+
+  it('reads the Licensed Coaches export: club from Details, else the club League Communications lists the address for', async () => {
+    const m = await run({
+      ath: [a({ bib: '1' }), a({ bib: '2', first: 'Bo', club: 'Beta Gym' })],
+      emailHeaders: ['', 'Name', 'Club', 'Contact', 'Role', 'Season', 'State'],
+      emails: [
+        ['', 'Casey Coach', 'Alpha Gymnastics - Alpha', 'casey@x.org', 'Coach', '', 'CO'],
+        ['', 'Dana Blank', 'Beta Gym', 'dana@x.org', 'Club Manager', '', 'CO'],
+      ],
+      licensed: [
+        ['Casey@x.org', 'Casey Coach', 'Approved', '', '', 'Alpha Gymnastics', 'ROOKIE', '0'],
+        ['dana@x.org', 'Dana Blank', 'Approved', '', '', '', 'ROOKIE', '0'],
+        ['gil@x.org', 'Gil Ghost', 'Approved', '', '', 'Ghost Club', 'ROOKIE', '0'],
+        ['ivy@x.org', 'Ivy Indie', 'Approved', '', '', 'Independent Community Athlete', 'ROOKIE', '0'],
+        ['pat@x.org', 'Pat Pending', 'Pending', '', '', 'Alpha Gymnastics', 'ROOKIE', '0'],
+      ],
+    });
+    const by = Object.fromEntries(m.clubs.map((c) => [c.name, c.contacts]));
+    expect(by['Alpha Gymnastics']).toEqual([
+      { name: 'Casey Coach', email: 'casey@x.org', role: 'Coach' },
+      { name: 'Casey Coach', email: 'casey@x.org', role: LICENSED_COACH },
+    ]);
+    expect(by['Beta Gym']).toEqual([
+      { name: 'Dana Blank', email: 'dana@x.org', role: 'Club Manager' },
+      { name: 'Dana Blank', email: 'dana@x.org', role: LICENSED_COACH },
     ]);
   });
 

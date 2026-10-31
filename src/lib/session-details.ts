@@ -9,6 +9,7 @@
 import { DEFAULT_REMINDER_TEMPLATE, validateReminderTemplate, type ReminderContext, type ReminderTemplate } from './email/session-reminder-email';
 import { sessionDateText } from './email/session-date';
 import type { StoredAthlete } from './import/diff';
+import { LICENSED_COACH } from './import/normalize';
 import type { ClubContact, Discipline, Session } from './import/types';
 import type { StoredClub } from './data/plan';
 import { sessionLocation, sessionName } from './session-names';
@@ -29,6 +30,9 @@ export function parseSessionTemplate(raw: unknown): ReminderTemplate {
 /** The roles counted as coaches before the admin picks: any role with "coach" in it. */
 export const isDefaultCoachRole = (role: string): boolean => /coach/i.test(role);
 
+/** The role the Licensed Coaches import gives its coaches (`src/lib/import/normalize.ts`). */
+export { LICENSED_COACH };
+
 /** Every role on the clubs' contacts, A–Z, with how many contacts have it. */
 export function contactRoles(clubs: Pick<StoredClub, 'contacts'>[]): { role: string; count: number }[] {
   const n = new Map<string, number>();
@@ -36,9 +40,10 @@ export function contactRoles(clubs: Pick<StoredClub, 'contacts'>[]): { role: str
   return [...n].map(([role, count]) => ({ role, count })).sort((a, b) => a.role.localeCompare(b.role));
 }
 
-/** The saved choice, or the default rule applied to the roles there are. */
+/** The saved choice, or the default: only Licensed Coach when the Licensed Coaches export was imported (it says who counts,
+ *  Julia 2026-10-31), else every role with "coach" in it. */
 export const coachRolesOrDefault = (saved: string[] | null, roles: { role: string }[]): string[] =>
-  saved ?? roles.map((r) => r.role).filter(isDefaultCoachRole);
+  saved ?? (roles.some((r) => r.role === LICENSED_COACH) ? [LICENSED_COACH] : roles.map((r) => r.role).filter(isDefaultCoachRole));
 
 export interface SessionRecipient {
   /** Unique within the session: `a:<athleteId>` or `c:<address>`. */

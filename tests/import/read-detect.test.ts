@@ -50,6 +50,7 @@ describe('detection', () => {
     expect(detectSheet(sheet(MAG_HEADERS))).toBe('mag');
     expect(detectSheet(sheet(TNT_HEADERS))).toBe('tnt');
     expect(detectSheet(sheet(['Club', 'Email']))).toBe('clubEmails');
+    expect(detectSheet(sheet(['Edit', 'Coach', 'Status', 'Registered', 'Approved', 'Details', 'Rookie', 'Uploads']))).toBe('licensedCoaches');
     expect(detectSheet(sheet(['Item', 'Purchaser']))).toBeNull();
   });
   it('copes with odd header cells read from a real workbook', async () => {

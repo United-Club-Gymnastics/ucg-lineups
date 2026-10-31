@@ -20,6 +20,7 @@ export interface ImportInput {
   mag?: Row[];
   tnt?: Row[];
   clubEmails?: Row[];
+  licensedCoaches?: Row[];
   gymOrder?: string[];
 }
 
@@ -77,6 +78,9 @@ export function splitEmails(cell: string): string[] {
   }
   return out;
 }
+
+/** The contact role given to everyone on the Licensed Coaches export. */
+export const LICENSED_COACH = 'Licensed Coach';
 
 export const isIndependent = (club: string) => /^independent\b/i.test(club.trim());
 
@@ -285,17 +289,19 @@ export function normalizeImport(input: ImportInput): ImportModel {
     if (a.independent || !a.clubName) continue;
     if (!clubs.has(a.clubId)) clubs.set(a.clubId, { id: a.clubId, name: a.clubName, emails: [] });
   }
+  // Coach rows name the club `<full name> - <short name>` ("Tech U Club - Tech"); other roles use the full name alone. Try the
+  // whole name first (some names contain " - ", like "State University - Northside"), then without each trailing " - …" part.
+  const clubFor = (name: string): Club | undefined => {
+    const parts = name.split(' - ');
+    for (let n = parts.length; n > 0; n--) {
+      const c = clubs.get(slug(parts.slice(0, n).join(' - ')));
+      if (c) return c;
+    }
+    return undefined;
+  };
+  // Every address on League Communications (any role) -> the club it is listed for: a licensed coach with no club on their row.
+  const clubByAddress = new Map<string, Club>();
   if (input.clubEmails) {
-    // Coach rows name the club `<full name> - <short name>` ("Tech U Club - Tech"); other roles use the full name alone. Try the
-    // whole name first (some names contain " - ", like "State University - Northside"), then without each trailing " - …" part.
-    const clubFor = (name: string): Club | undefined => {
-      const parts = name.split(' - ');
-      for (let n = parts.length; n > 0; n--) {
-        const c = clubs.get(slug(parts.slice(0, n).join(' - ')));
-        if (c) return c;
-      }
-      return undefined;
-    };
     const matched = new Set<string>();
     for (const r of input.clubEmails) {
       const name = g(r, 'club');
@@ -309,6 +315,7 @@ export function normalizeImport(input: ImportInput): ImportModel {
       if (!club) {
         continue; // clubs in the email list with no athletes here are expected (not competing)
       }
+      for (const e of splitEmails(cell)) if (!clubByAddress.has(e)) clubByAddress.set(e, club);
       // Athlete rows are skipped: athletes' addresses come from the Athletes export (Athlete_Email).
       if (/^athletes?$/i.test(role)) continue;
       if (role && !/e-?mail/i.test(role)) {
@@ -323,6 +330,22 @@ export function normalizeImport(input: ImportInput): ImportModel {
     }
     for (const c of clubs.values()) {
       if (c.emails.length === 0) warn('no-email', `${c.name} has no contact email.`);
+    }
+  }
+  if (input.licensedCoaches) {
+    // The Licensed Coaches export says who counts as a coach (Julia 2026-10-31): the coach's email is in its "Edit" column, their
+    // name in "Coach" and their club in "Details". A blank Details falls back to the club League Communications lists the address
+    // for. Coaches whose club has no athletes here (or who coach independents) are skipped quietly; only Approved rows count.
+    for (const r of input.licensedCoaches) {
+      if (g(r, 'status') && !/^approved$/i.test(g(r, 'status'))) continue;
+      const emails = splitEmails(g(r, 'edit') || g(r, 'email'));
+      const details = g(r, 'details');
+      for (const e of emails) {
+        const club = details ? clubFor(details) : clubByAddress.get(e);
+        if (!club) continue;
+        const contacts = (club.contacts ??= []);
+        if (!contacts.some((c) => c.email === e && c.role === LICENSED_COACH)) contacts.push({ name: g(r, 'coach'), email: e, role: LICENSED_COACH });
+      }
     }
   }
 

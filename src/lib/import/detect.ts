@@ -13,6 +13,8 @@ export function detectSheet(s: SheetData): ExportKind | null {
   if (has(s, 'club', 'email') && !hasAny(s, 'bib', 'firstname')) return 'clubEmails';
   // League Communications export (ScoreFlippers): Club, Contact, Role ('Club Email'), Season, State
   if (has(s, 'club', 'contact', 'role') && !hasAny(s, 'bib', 'firstname')) return 'clubEmails';
+  // Licensed Coaches export (ScoreFlippers): Edit (the coach's email), Coach (name), Status, Registered, Approved, Details (club)…
+  if (has(s, 'coach', 'status', 'details') && !hasAny(s, 'club', 'bib')) return 'licensedCoaches';
   return null;
 }
 
@@ -42,4 +44,5 @@ export const KIND_LABEL: Record<ExportKind, string> = {
   mag: 'MAG export',
   tnt: 'T&T export',
   clubEmails: 'League Communications',
+  licensedCoaches: 'Licensed Coaches',
 };

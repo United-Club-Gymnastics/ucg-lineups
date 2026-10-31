@@ -50,7 +50,8 @@ export interface Session {
   scheduleOverride?: Partial<Record<'date' | 'stretch' | 'warmups' | 'competition', string>>;
 }
 
-/** A person on the League Communications export with a role other than "Club Email" (a coach, a club officer…). */
+/** A person on the League Communications export with a role other than "Club Email" (a coach, a club officer…), or a coach on the
+ *  Licensed Coaches export (role `Licensed Coach`). */
 export interface ClubContact {
   /** As the export has it; '' when blank. */
   name: string;
@@ -82,7 +83,7 @@ export interface ImportModel {
 
 export type Row = Record<string, string>;
 
-export type ExportKind = 'athletes' | 'wag' | 'mag' | 'tnt' | 'clubEmails';
+export type ExportKind = 'athletes' | 'wag' | 'mag' | 'tnt' | 'clubEmails' | 'licensedCoaches';
 
 /** The default location order (today's gym order). A meet's own order is `settings/meet.gymOrder` and may hold any location names. */
 export const DEFAULT_GYM_ORDER = ['Green', 'Red', 'Yellow', 'Orange', 'Purple'];

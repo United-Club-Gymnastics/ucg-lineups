@@ -126,7 +126,7 @@ export default function AdminImport({ meetId }: { meetId: string }) {
       <section className="adm-card">
         <h2 className="display">Import</h2>
         <p className="adm-muted">
-          Drop the ScoreFlippers exports here (Athletes, WAG, MAG, T&T and League Communications, exported with all roles). Each file is identified by
+          Drop the ScoreFlippers exports here (Athletes, WAG, MAG, T&T, League Communications exported with all roles, and Licensed Coaches). Each file is identified by
           its columns. Nothing is saved until you press Apply import.
         </p>
         <label

@@ -71,6 +71,9 @@ describe('session detail recipients', () => {
     expect(roles).toEqual([{ role: 'Assistant Coach', count: 1 }, { role: 'Head Coach', count: 2 }, { role: 'Treasurer', count: 1 }]);
     expect(coachRolesOrDefault(null, roles)).toEqual(['Assistant Coach', 'Head Coach']);
     expect(coachRolesOrDefault(['Treasurer'], roles)).toEqual(['Treasurer']);
+    // Once the Licensed Coaches export is imported, only its role is ticked by default.
+    expect(coachRolesOrDefault(null, [...roles, { role: 'Licensed Coach' }])).toEqual(['Licensed Coach']);
+    expect(coachRolesOrDefault(['Coach'], [...roles, { role: 'Licensed Coach' }])).toEqual(['Coach']);
   });
 });
 
