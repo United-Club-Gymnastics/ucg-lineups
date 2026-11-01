@@ -146,22 +146,15 @@ describe('Session details', () => {
     expect(log).toHaveTextContent('Casey Coach · Session 1 - Orange (WAG)');
   });
 
-  it('Athletes for iContact downloads one list and one email, with fields named for the meet', async () => {
+  it("Athletes for iContact downloads one list and one email with last year's fields", async () => {
     const created: Blob[] = [];
     const url = Object.assign(URL, { createObjectURL: vi.fn((b: Blob) => { created.push(b); return 'blob:x'; }), revokeObjectURL: vi.fn() });
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const user = await open();
     await pick(user, 'Send');
     expect(screen.getByRole('textbox', { name: 'First-name merge tag' })).toHaveValue('[fname]');
-    // Field names carry the meet name, so next year's meet does not overwrite this year's details.
-    const prefix = screen.getByRole('textbox', { name: 'Custom field names start with' });
-    expect(prefix).toHaveValue('testnationals');
-    await user.clear(prefix);
-    await user.type(prefix, 'Test Nats 2027');
-    await user.tab();
-    expect(prefix).toHaveValue('testnats2027');
     await user.click(screen.getByRole('button', { name: 'Download for iContact (zip)' }));
-    expect(await screen.findByText(/athletes for iContact\.zip: 2 athlete contacts across \d+ sessions? \(0 in more than one\)\. Custom fields: testnats2027_session1, testnats2027_sheets\./)).toBeInTheDocument();
+    expect(await screen.findByText(/athletes for iContact\.zip: 2 athlete contacts across \d+ sessions? \(0 in more than one discipline\)\.$/)).toBeInTheDocument();
     expect(url.createObjectURL).toHaveBeenCalledTimes(1);
     expect(created[0].size).toBeGreaterThan(0);
     expect(click).toHaveBeenCalled();

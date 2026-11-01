@@ -9,7 +9,7 @@ import type { StoredAthlete } from '../../lib/import/diff';
 import type { Session } from '../../lib/import/types';
 import { buildSessionReminderEmail, REMINDER_PLACEHOLDERS, type ReminderTemplate } from '../../lib/email/session-reminder-email';
 import { FROM, sendTestBatch, SEND_MODE, testAlias, type FetchLike, type SendResult, type TestWho } from '../../lib/email-send';
-import { fieldPrefix, fileSafe, icontactAthleteExport, ICONTACT_FIRST_NAME_TAG } from '../../lib/icontact-export';
+import { fileSafe, icontactAthleteExport, ICONTACT_FIELDS, ICONTACT_FIRST_NAME_TAG } from '../../lib/icontact-export';
 import { formatWhen } from '../../lib/pacific';
 import { resolveSchedule } from '../../lib/schedule';
 import { scheduleKey, sortByName } from '../../lib/session-names';
@@ -214,17 +214,14 @@ export default function SessionDetailsPanel(props: {
     if (expired) props.onExpired();
   }
 
-  // Athletes for iContact: one list and one email for every session; each contact's sessions go in custom fields named for the meet.
+  // Athletes for iContact: one list and one email for every session; each contact's sessions go in last year's custom fields.
   const [fnameTag, setFnameTag] = useState(ICONTACT_FIRST_NAME_TAG);
-  const [prefixText, setPrefixText] = useState<string | null>(null);
-  const prefix = fieldPrefix(prefixText ?? props.meetName);
   const [icState, setIcState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'err'; text?: string }>({ kind: 'idle' });
   async function downloadIcontact() {
     setIcState({ kind: 'busy' });
     try {
       const built = icontactAthleteExport({
-        meetName: props.meetName, meetId, linkBase, athletes: props.athletes, clubs: props.clubs, coachRoles, template, firstNameTag: fnameTag, prefix,
-        sessions: sessions.map((s) => ({ session: s, schedule: resolveSchedule(scheduleKey(s), props.schedule, s.scheduleOverride, props.meetDate) })),
+        meetName: props.meetName, meetId, linkBase, athletes: props.athletes, clubs: props.clubs, coachRoles, template, firstNameTag: fnameTag, sessions,
       });
       const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
@@ -238,7 +235,7 @@ export default function SessionDetailsPanel(props: {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      setIcState({ kind: 'ok', text: `Downloaded ${name}: ${built.contacts} athlete contact${built.contacts === 1 ? '' : 's'} across ${sessions.length} session${sessions.length === 1 ? '' : 's'} (${built.multiSession} in more than one). Custom fields: ${built.fields.join(', ')}.` });
+      setIcState({ kind: 'ok', text: `Downloaded ${name}: ${built.contacts} athlete contact${built.contacts === 1 ? '' : 's'} across ${sessions.length} session${sessions.length === 1 ? '' : 's'} (${built.multiSession} in more than one discipline).${built.clashes.length ? ` ${built.clashes.length} address${built.clashes.length === 1 ? ' has' : 'es have'} two sessions in one discipline: see How to use.txt.` : ''}` });
     } catch (e) {
       setIcState({ kind: 'err', text: `Could not make the files: ${e instanceof Error ? e.message : 'try again'}` });
     }
@@ -485,26 +482,15 @@ export default function SessionDetailsPanel(props: {
       <h2 className="display" id="sd-ic-h">Athletes for iContact</h2>
       <p className="adm-muted">
         One list and one email for every session. The zip has the contacts (CSV), the email (HTML) and <b>How to use.txt</b> with the steps.
-        Each contact’s sessions, dates and times, and a link to their sheets, are in custom fields, and the email fills them in with merge tags.
-        Someone in two or three sessions (more than one discipline) gets one email listing them all.
+        Each contact’s sessions go in last year’s iContact custom fields, one set per discipline: {ICONTACT_FIELDS.map((f, i) => <span key={f}>{i ? ', ' : ''}<code>[{f}]</code></span>)}.
+        The email lists each of the contact’s sessions as a link to its sheets page; a discipline they’re not in shows nothing.
         Uses the saved email text and the people in Who gets it (an athlete who is also a coach gets the coach email from here instead). Publish sheets first so the links work.
       </p>
-      <div className="sd-ic-fields">
-        <div className="sd-ic-field">
-          <label className="cl-field sd-tag">
-            <span>Custom field names start with</span>
-            <input value={prefixText ?? prefix} onChange={(e) => setPrefixText(e.target.value)} onBlur={() => { if (prefixText !== null) setPrefixText(prefix); }} aria-describedby="sd-prefix-hint" />
-          </label>
-          <small id="sd-prefix-hint" className="sd-hint">From the meet name, so next year’s meet gets new fields and this year’s keep their details. Fields: <code>{prefix}_session1</code>… and <code>{prefix}_sheets</code>.</small>
-        </div>
-        <div className="sd-ic-field">
-          <label className="cl-field sd-tag">
-            <span>First-name merge tag</span>
-            <input value={fnameTag} onChange={(e) => setFnameTag(e.target.value)} aria-describedby="sd-tag-hint" />
-          </label>
-          <small id="sd-tag-hint" className="sd-hint">Goes where the email says “Hello …!”. Check it against iContact’s personalization menu.</small>
-        </div>
-      </div>
+      <label className="cl-field sd-tag">
+        <span>First-name merge tag</span>
+        <input value={fnameTag} onChange={(e) => setFnameTag(e.target.value)} aria-describedby="sd-tag-hint" />
+      </label>
+      <small id="sd-tag-hint" className="sd-hint">Goes where the email says “Hello …!”.</small>
       <div className="adm-actions">
         <button type="button" className="btn primary" disabled={sessions.length === 0 || tplDirty || icState.kind === 'busy'} onClick={() => void downloadIcontact()}>
           {icState.kind === 'busy' ? 'Making files…' : 'Download for iContact (zip)'}
