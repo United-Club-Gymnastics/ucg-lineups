@@ -9,7 +9,8 @@ import type { SavedLevel } from '../club-overview';
 import { parseTemplates, type Templates } from '../email-templates';
 import type { ReminderTemplate } from '../email/session-reminder-email';
 import { parseRows, type ScheduleRows } from '../schedule';
-import { parseSessionTemplate } from '../session-details';
+import { parseSessionTemplates, type SessionTemplates } from '../session-details';
+import type { Discipline } from '../apparatus';
 import type { StoredAthlete } from '../import/diff';
 import { DEFAULT_GYM_ORDER, type Session } from '../import/types';
 import { newClubToken } from '../import/token';
@@ -167,11 +168,11 @@ export interface ClubsScreenData {
   meetName: string;
   deadline: Date | null;
   templates: Templates;
-  /** The "Session details" email: the saved template (the default when none), and the contact roles counted as coaches (null
+  /** The "Session details" email text per discipline (the default when none), and the contact roles counted as coaches (null
    *  until the admin saves a choice). */
-  sessionTemplate: ReminderTemplate;
-  /** False while the meet has no saved session template (the editor says it starts from the UCG default). */
-  sessionTemplateSaved?: boolean;
+  sessionTemplates: SessionTemplates;
+  /** False for a discipline with no text of its own yet (the editor says where it starts from). */
+  sessionTemplatesSaved?: Record<Discipline, boolean>;
   coachRoles: string[] | null;
   /** For the session detail emails' dates and times (the Exports screen's schedule). */
   schedule: ScheduleRows;
@@ -199,8 +200,7 @@ export async function loadClubsScreenData(db: Firestore, meetId: string): Promis
     meetName: typeof s.meetName === 'string' ? s.meetName : '',
     deadline: dl && typeof dl.toDate === 'function' ? dl.toDate() : null,
     templates: parseTemplates(email),
-    sessionTemplate: parseSessionTemplate(email?.sessionTemplate),
-    sessionTemplateSaved: !!email?.sessionTemplate,
+    ...(({ templates, saved }) => ({ sessionTemplates: templates, sessionTemplatesSaved: saved }))(parseSessionTemplates(email?.sessionTemplates, email?.sessionTemplate)),
     coachRoles: Array.isArray(roles) && roles.every((r: unknown) => typeof r === 'string') ? (roles as string[]) : null,
     schedule: parseRows(s.schedule),
     meetDate: typeof s.meetDate === 'string' ? s.meetDate : '',
@@ -222,21 +222,24 @@ export async function saveEmailTemplates(db: Firestore, meetId: string, template
   await setDoc(doc(db, meetPaths(meetId).emailSettings), { templates }, { merge: true });
 }
 
-export async function saveSessionTemplate(db: Firestore, meetId: string, template: ReminderTemplate): Promise<void> {
-  await setDoc(doc(db, meetPaths(meetId).emailSettings), { sessionTemplate: template }, { merge: true });
+/** One discipline's text. Merge: the other disciplines' text is untouched. */
+export async function saveSessionTemplate(db: Firestore, meetId: string, discipline: Discipline, template: ReminderTemplate): Promise<void> {
+  await setDoc(doc(db, meetPaths(meetId).emailSettings), { sessionTemplates: { [discipline]: template } }, { merge: true });
 }
 
 export async function saveCoachRoles(db: Firestore, meetId: string, roles: string[]): Promise<void> {
   await setDoc(doc(db, meetPaths(meetId).emailSettings), { coachRoles: roles }, { merge: true });
 }
 
-/** "Copy text from": the session detail templates other meets have saved, newest meet first. */
-export async function loadOtherSessionTemplates(db: Firestore, meetId: string): Promise<{ meetId: string; meetName: string; template: ReminderTemplate }[]> {
+/** "Copy text from": the session detail text other meets have saved (per discipline), newest meet first. */
+export async function loadOtherSessionTemplates(db: Firestore, meetId: string): Promise<{ meetId: string; meetName: string; templates: SessionTemplates }[]> {
   const meets = (await listMeets(db)).filter((m) => m.id !== meetId).sort((a, b) => b.createdAt - a.createdAt);
   const found = await Promise.all(meets.map(async (m) => {
     const snap = await getDoc(doc(db, meetPaths(m.id).emailSettings));
-    const raw = snap.exists() ? snap.data().sessionTemplate : undefined;
-    return raw ? { meetId: m.id, meetName: m.name || m.id, template: parseSessionTemplate(raw) } : null;
+    const d = snap.exists() ? snap.data() : {};
+    return d.sessionTemplates || d.sessionTemplate
+      ? { meetId: m.id, meetName: m.name || m.id, templates: parseSessionTemplates(d.sessionTemplates, d.sessionTemplate).templates }
+      : null;
   }));
   return found.filter((x): x is NonNullable<typeof x> => x !== null);
 }

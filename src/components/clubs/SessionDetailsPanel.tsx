@@ -15,8 +15,10 @@ import { resolveSchedule } from '../../lib/schedule';
 import { scheduleKey, sortByName } from '../../lib/session-names';
 import { sessionTitle } from '../../lib/squad-data';
 import {
-  buildSessionRecipients, coachRolesOrDefault, contactRoles, LICENSED_COACH, LINEUPS_SESSION_TEMPLATE, sessionEmailContext, sessionEmailLabel, type SessionRecipient,
+  buildSessionRecipients, coachRolesOrDefault, contactRoles, DISCIPLINE_LABEL, LICENSED_COACH, LINEUPS_SESSION_TEMPLATE, SESSION_DISCIPLINES, sessionEmailContext,
+  sessionEmailLabel, type SessionRecipient, type SessionTemplates,
 } from '../../lib/session-details';
+import type { Discipline } from '../../lib/apparatus';
 import type { ScheduleRows } from '../../lib/schedule';
 
 type Role = 'athlete' | 'coach';
@@ -64,9 +66,10 @@ export default function SessionDetailsPanel(props: {
   gymOrder: string[];
   schedule: ScheduleRows;
   meetDate: string;
-  template: ReminderTemplate;
-  /** False while the meet still uses the UCG default text (nothing saved yet). */
-  templateSaved: boolean;
+  /** The email text per discipline (Julia 2026-11-01: WAG, MAG and T&T have different instructions). */
+  templates: SessionTemplates;
+  /** False for a discipline still on its starting text (nothing saved for it yet). */
+  templatesSaved: Record<Discipline, boolean>;
   coachRoles: string[] | null;
   log: EmailLogEntry[];
   onLogged: (e: EmailLogEntry) => void;
@@ -85,31 +88,45 @@ export default function SessionDetailsPanel(props: {
   const [sessionId, setSessionId] = useState('');
   const session = sessions.find((s) => s.id === sessionId) ?? sessions[0];
 
-  // Wording.
-  const [template, setTemplate] = useState<ReminderTemplate>(props.template);
-  const [stored, setStored] = useState<ReminderTemplate>(props.template);
-  const [everSaved, setEverSaved] = useState(props.templateSaved);
+  // Wording, one text per discipline. The editor shows one discipline at a time; the session picked elsewhere switches it.
+  const disciplines = useMemo(() => {
+    const here = SESSION_DISCIPLINES.filter((d) => sessions.some((s) => s.discipline === d));
+    return here.length ? here : SESSION_DISCIPLINES;
+  }, [sessions]);
+  const [editD, setEditD] = useState<Discipline>(() => session?.discipline ?? disciplines[0]);
+  const [drafts, setDrafts] = useState<SessionTemplates>(props.templates);
+  const [stored, setStored] = useState<SessionTemplates>(props.templates);
+  const [everSaved, setEverSaved] = useState(props.templatesSaved);
   const [tplState, setTplState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const tplDirty = !sameTemplate(template, stored);
-  const [others, setOthers] = useState<{ meetId: string; meetName: string; template: ReminderTemplate }[]>([]);
+  const template = drafts[editD];
+  const dirtyFor = (d: Discipline) => !sameTemplate(drafts[d], stored[d]);
+  const tplDirty = dirtyFor(editD);
+  const [others, setOthers] = useState<{ meetId: string; meetName: string; templates: SessionTemplates }[]>([]);
   const [copyFrom, setCopyFrom] = useState('');
   useEffect(() => {
     let off = false;
     Promise.resolve().then(() => loadOtherSessionTemplates(db, meetId)).then((x) => { if (!off) setOthers(x); }, () => {});
     return () => { off = true; };
   }, [meetId]);
+  const setTemplate = (t: ReminderTemplate) => setDrafts((prev) => ({ ...prev, [editD]: t }));
   const setField = (key: keyof ReminderTemplate, value: string) => {
-    setTemplate((t) => ({ ...t, [key]: key === 'reminders' ? value.split('\n') : value }));
+    setDrafts((prev) => ({ ...prev, [editD]: { ...prev[editD], [key]: key === 'reminders' ? value.split('\n') : value } }));
     setTplState('idle');
+  };
+  const pickSession = (id: string) => {
+    setSessionId(id);
+    const d = sessions.find((s) => s.id === id)?.discipline;
+    if (d && d !== editD) { setEditD(d); setTplState('idle'); }
   };
   async function saveTemplate() {
     setTplState('saving');
+    const d = editD;
     const clean = { ...template, reminders: template.reminders.map((r) => r.trim()).filter(Boolean) };
     try {
-      await saveSessionTemplate(db, meetId, clean);
-      setTemplate(clean);
-      setStored(clean);
-      setEverSaved(true);
+      await saveSessionTemplate(db, meetId, d, clean);
+      setDrafts((prev) => ({ ...prev, [d]: clean }));
+      setStored((prev) => ({ ...prev, [d]: clean }));
+      setEverSaved((prev) => ({ ...prev, [d]: true }));
       setTplState('saved');
     } catch {
       setTplState('error');
@@ -161,7 +178,8 @@ export default function SessionDetailsPanel(props: {
     : { key: 'sample', role, name: 'Sample Athlete', firstName: 'Sample', email: '', clubName: 'Sample club' };
   const previewed = ofRole.find((r) => r.key === previewKey) ?? ofRole[0] ?? sample;
   const ctxFor = (r: SessionRecipient) => sessionEmailContext({ meetName: props.meetName, meetId, session: session!, schedule: schedule!, recipient: r, linkBase });
-  const rendered = session && schedule ? buildSessionReminderEmail(template, ctxFor(previewed)) : null;
+  const sessionText = session ? drafts[session.discipline] : template;
+  const rendered = session && schedule ? buildSessionReminderEmail(sessionText, ctxFor(previewed)) : null;
   // "Preview" on a person in Send: show their email in Draft email's preview.
   const showPreview = (r: SessionRecipient) => {
     setRole(r.role);
@@ -186,7 +204,7 @@ export default function SessionDetailsPanel(props: {
     setProgress({ done: 0, total: list.length });
     const label = sessionEmailLabel(session);
     const byKey = new Map(list.map((r) => [`${session.id}|${r.key}`, r]));
-    const messages = list.map((r) => ({ clubId: `${session.id}|${r.key}`, clubName: `${r.name || r.email} (${r.role})`, ...buildSessionReminderEmail(template, ctxFor(r)) }));
+    const messages = list.map((r) => ({ clubId: `${session.id}|${r.key}`, clubName: `${r.name || r.email} (${r.role})`, ...buildSessionReminderEmail(drafts[session.discipline], ctxFor(r)) }));
     const out = await sendTestBatch({
       token: props.gmailToken,
       who: props.who,
@@ -221,7 +239,7 @@ export default function SessionDetailsPanel(props: {
     setIcState({ kind: 'busy' });
     try {
       const built = icontactAthleteExport({
-        meetName: props.meetName, meetId, linkBase, athletes: props.athletes, clubs: props.clubs, coachRoles, template, firstNameTag: fnameTag, sessions,
+        meetName: props.meetName, meetId, linkBase, athletes: props.athletes, clubs: props.clubs, coachRoles, templates: drafts, firstNameTag: fnameTag, sessions,
         schedules: Object.fromEntries(sessions.map((s) => [s.id, resolveSchedule(scheduleKey(s), props.schedule, s.scheduleOverride, props.meetDate)])),
       });
       const { default: JSZip } = await import('jszip');
@@ -236,7 +254,9 @@ export default function SessionDetailsPanel(props: {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      setIcState({ kind: 'ok', text: `Downloaded ${name}: ${built.contacts} athlete contact${built.contacts === 1 ? '' : 's'} across ${sessions.length} session${sessions.length === 1 ? '' : 's'} (${built.multiSession} in more than one discipline).${built.clashes.length ? ` ${built.clashes.length} address${built.clashes.length === 1 ? ' has' : 'es have'} two sessions in one discipline: see How to use.txt.` : ''}` });
+      const clashes = built.lists.reduce((n, l) => n + l.clashes.length, 0);
+      const lists = built.lists.map((l) => `${DISCIPLINE_LABEL[l.discipline]} ${l.contacts}`).join(', ');
+      setIcState({ kind: 'ok', text: `Downloaded ${name}: ${built.lists.length} list${built.lists.length === 1 ? '' : 's'} (${lists} contacts).${clashes ? ` ${clashes} address${clashes === 1 ? ' has' : 'es have'} two sessions in one discipline: see How to use.txt.` : ''}` });
     } catch (e) {
       setIcState({ kind: 'err', text: `Could not make the files: ${e instanceof Error ? e.message : 'try again'}` });
     }
@@ -245,15 +265,18 @@ export default function SessionDetailsPanel(props: {
   const sessionPicker = (
     <label className="cl-field">
       <span>Session</span>
-      <Select aria-label="Session" value={session?.id ?? ''} onChange={(v) => { setSessionId(v); setPreviewKey(''); setSummary(null); setResults([]); }}
+      <Select aria-label="Session" value={session?.id ?? ''} onChange={(v) => { pickSession(v); setPreviewKey(''); setSummary(null); setResults([]); }}
         options={sessions.map((s) => ({ value: s.id, label: sessionTitle(s) }))} />
     </label>
   );
 
 
+  const dLabel = DISCIPLINE_LABEL[editD];
   const statusLine = tplDirty
-    ? 'Unsaved changes. Nothing is saved until you press Save; the preview uses what is typed here.'
-    : everSaved ? 'This meet’s saved text.' : 'Starting text: UCG default, not saved yet. Nothing is saved until you press Save.';
+    ? `Unsaved changes to the ${dLabel} text. Nothing is saved until you press Save; the preview uses what is typed here.`
+    : everSaved[editD] ? `This meet’s saved ${dLabel} text.` : `Starting ${dLabel} text, not saved yet: the meet’s earlier text or the UCG default. Nothing is saved until you press Save.`;
+  const sessionDirty = !!session && dirtyFor(session.discipline);
+  const anyDirty = disciplines.some(dirtyFor);
   const sessionLog = props.log.filter((e) => e.template === 'session').slice(0, 200);
   const noSessions = <p className="adm-muted">No sessions yet: import the meet first.</p>;
 
@@ -261,16 +284,34 @@ export default function SessionDetailsPanel(props: {
     <section className="adm-card" aria-labelledby="sd-tpl-h">
       <div className="sd-cardhead">
         <h2 className="display" id="sd-tpl-h">Email text</h2>
-        <button type="button" className="btn primary" onClick={() => setPreviewMode(true)}>Preview</button>
+        <button type="button" className="btn primary" onClick={() => {
+          if (session?.discipline !== editD) { const first = sessions.find((s) => s.discipline === editD); if (first) setSessionId(first.id); }
+          setPreviewKey('');
+          setPreviewMode(true);
+        }}>Preview</button>
+      </div>
+      <p className="sd-hint">WAG, MAG and T&amp;T each have their own text. Pick one to edit; its sessions use it.</p>
+      <div className="cl-seg" role="group" aria-label="Email text for">
+        {disciplines.map((d) => (
+          <button key={d} type="button" aria-pressed={editD === d} onClick={() => { setEditD(d); setCopyFrom(''); setTplState('idle'); }}>
+            {DISCIPLINE_LABEL[d]}{dirtyFor(d) ? ' •' : ''}
+          </button>
+        ))}
       </div>
       <div className="cl-filters">
         <label className="cl-field cl-grow">
           <span>Copy text from</span>
           <Select aria-label="Copy text from" value={copyFrom} onChange={setCopyFrom} placeholder="Choose a meet…"
-            options={[{ value: 'default', label: 'UCG default text' }, ...others.map((o) => ({ value: o.meetId, label: o.meetName }))]} />
+            options={[
+              { value: 'default', label: 'UCG default text' },
+              ...disciplines.filter((d) => d !== editD).map((d) => ({ value: `this:${d}`, label: `This meet’s ${DISCIPLINE_LABEL[d]} text` })),
+              ...others.map((o) => ({ value: o.meetId, label: `${o.meetName} (${dLabel} text)` })),
+            ]} />
         </label>
         <button type="button" className="btn ghost" disabled={!copyFrom} onClick={() => {
-          const t = copyFrom === 'default' ? LINEUPS_SESSION_TEMPLATE : others.find((o) => o.meetId === copyFrom)?.template;
+          const t = copyFrom === 'default' ? LINEUPS_SESSION_TEMPLATE
+            : copyFrom.startsWith('this:') ? drafts[copyFrom.slice(5) as Discipline]
+              : others.find((o) => o.meetId === copyFrom)?.templates[editD];
           if (t) { setTemplate(t); setTplState('idle'); }
         }}>Copy</button>
       </div>
@@ -453,10 +494,10 @@ export default function SessionDetailsPanel(props: {
       {props.gmailError && <div className="adm-banner err" role="alert">{props.gmailError}</div>}
       <label className="cl-check"><input type="checkbox" checked={skipSent} onChange={(e) => setSkipSent(e.target.checked)} /> Skip people already sent this session’s email{skipped > 0 ? ` (${skipped} skipped)` : ''}</label>
       <div className="adm-actions">
-        <button type="button" className="btn primary" disabled={!props.gmailToken || targets.length === 0 || sending || tplDirty} onClick={() => setConfirm(targets)}>
+        <button type="button" className="btn primary" disabled={!props.gmailToken || targets.length === 0 || sending || sessionDirty} onClick={() => setConfirm(targets)}>
           Send {targets.length} test email{targets.length === 1 ? '' : 's'}
         </button>
-        {tplDirty && <span className="cl-state">Save the email text first (Draft email).</span>}
+        {sessionDirty && session && <span className="cl-state">Save the {DISCIPLINE_LABEL[session.discipline]} email text first (Draft email).</span>}
       </div>
       {!props.gmailToken && targets.length > 0 && <p className="adm-muted">Connect Gmail first.</p>}
       {progress && (
@@ -482,11 +523,11 @@ export default function SessionDetailsPanel(props: {
     <section className="adm-card" aria-labelledby="sd-ic-h">
       <h2 className="display" id="sd-ic-h">Athletes for iContact</h2>
       <p className="adm-muted">
-        One list and one email for every session. The zip has the contacts (CSV), the email (HTML) and <b>How to use.txt</b> with the steps.
-        Each contact’s sessions go in iContact custom fields, one set per discipline: {ICONTACT_FIELDS.map((f, i) => <span key={f}>{i ? ', ' : ''}<code>[{f}]</code></span>)}.
+        One list and one email per discipline (WAG, MAG, T&amp;T), each email from that discipline’s saved text. The zip has each list’s contacts (CSV), its email (HTML) and <b>How to use.txt</b> with the steps.
+        Each contact’s session goes in iContact custom fields: {ICONTACT_FIELDS.map((f, i) => <span key={f}>{i ? ', ' : ''}<code>[{f}]</code></span>)}.
         Last year’s fields are reused; the <code>times</code> fields (date and open stretch time) are new, so add them in iContact before importing.
-        The email lists each of the contact’s sessions as a link to its sheets page, with its date and arrival time; a discipline they’re not in shows nothing.
-        Uses the saved email text and the people in Who gets it (an athlete who is also a coach gets the coach email from here instead). Publish sheets first so the links work.
+        An athlete in two disciplines is on both lists and gets both emails.
+        Uses the people in Who gets it (an athlete who is also a coach gets the coach email from here instead). Publish sheets first so the links work.
       </p>
       <label className="cl-field sd-tag">
         <span>First-name merge tag</span>
@@ -494,10 +535,10 @@ export default function SessionDetailsPanel(props: {
       </label>
       <small id="sd-tag-hint" className="sd-hint">Goes where the email says “Hello …!”.</small>
       <div className="adm-actions">
-        <button type="button" className="btn primary" disabled={sessions.length === 0 || tplDirty || icState.kind === 'busy'} onClick={() => void downloadIcontact()}>
+        <button type="button" className="btn primary" disabled={sessions.length === 0 || anyDirty || icState.kind === 'busy'} onClick={() => void downloadIcontact()}>
           {icState.kind === 'busy' ? 'Making files…' : 'Download for iContact (zip)'}
         </button>
-        {tplDirty && <span className="cl-state">Save the email text first (Draft email).</span>}
+        {anyDirty && <span className="cl-state">Save the email text first (Draft email): {disciplines.filter(dirtyFor).map((d) => DISCIPLINE_LABEL[d]).join(', ')}.</span>}
       </div>
       {icState.kind === 'ok' && <div className="adm-banner ok" role="status">{icState.text}</div>}
       {icState.kind === 'err' && <div className="adm-banner err" role="alert">{icState.text}</div>}

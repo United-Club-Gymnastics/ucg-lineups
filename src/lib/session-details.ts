@@ -27,6 +27,29 @@ export function parseSessionTemplate(raw: unknown): ReminderTemplate {
   return v?.ok ? v.template : LINEUPS_SESSION_TEMPLATE;
 }
 
+export const SESSION_DISCIPLINES: Discipline[] = ['WAG', 'MAG', 'TNT'];
+/** The email text per discipline (Julia 2026-11-01: WAG, MAG and T&T have different instructions). */
+export type SessionTemplates = Record<Discipline, ReminderTemplate>;
+
+export const DEFAULT_SESSION_TEMPLATES: SessionTemplates = { WAG: LINEUPS_SESSION_TEMPLATE, MAG: LINEUPS_SESSION_TEMPLATE, TNT: LINEUPS_SESSION_TEMPLATE };
+export const NONE_SAVED: Record<Discipline, boolean> = { WAG: false, MAG: false, TNT: false };
+
+/** `emailSettings.sessionTemplates` (one per discipline). A discipline with no valid text of its own starts from the meet's
+ *  older single `sessionTemplate`, else the default; `saved` says which disciplines have their own. */
+export function parseSessionTemplates(raw: unknown, legacy: unknown): { templates: SessionTemplates; saved: Record<Discipline, boolean> } {
+  const byD = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const own = (d: Discipline) => { const v = byD[d] ? validateReminderTemplate(byD[d]) : null; return v?.ok ? v.template : null; };
+  const fallback = parseSessionTemplate(legacy);
+  const templates = {} as SessionTemplates;
+  const saved = {} as Record<Discipline, boolean>;
+  for (const d of SESSION_DISCIPLINES) {
+    const t = own(d);
+    templates[d] = t ?? fallback;
+    saved[d] = !!t;
+  }
+  return { templates, saved };
+}
+
 /** The roles counted as coaches before the admin picks: any role with "coach" in it. */
 export const isDefaultCoachRole = (role: string): boolean => /coach/i.test(role);
 
@@ -145,7 +168,7 @@ export function buildSessionRecipients(input: {
   };
 }
 
-const DISCIPLINE_LABEL: Record<Discipline, string> = { WAG: 'WAG', MAG: 'MAG', TNT: 'T&T' };
+export const DISCIPLINE_LABEL: Record<Discipline, string> = { WAG: 'WAG', MAG: 'MAG', TNT: 'T&T' };
 
 /** `Session 2 - Orange (MAG)`: the email's heading and `{session}`. */
 export function sessionEmailLabel(s: Session): string {

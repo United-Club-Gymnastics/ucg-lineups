@@ -4,7 +4,7 @@ import type { StoredAthlete } from '../../src/lib/import/diff';
 import type { Session } from '../../src/lib/import/types';
 import { DEFAULT_REMINDER_TEMPLATE, buildSessionReminderEmail } from '../../src/lib/email/session-reminder-email';
 import {
-  buildSessionRecipients, coachRolesOrDefault, contactRoles, LINEUPS_SESSION_TEMPLATE, parseSessionTemplate, publicSheetUrl, sessionEmailContext, sessionEmailLabel,
+  buildSessionRecipients, coachRolesOrDefault, contactRoles, LINEUPS_SESSION_TEMPLATE, parseSessionTemplate, parseSessionTemplates, publicSheetUrl, sessionEmailContext, sessionEmailLabel,
 } from '../../src/lib/session-details';
 
 const ath = (o: Partial<StoredAthlete> & { first: string; clubId: string }): StoredAthlete => ({
@@ -109,5 +109,14 @@ describe('session detail email', () => {
     expect(parseSessionTemplate({ subject: 'x' })).toEqual(LINEUPS_SESSION_TEMPLATE);
     const mine = { ...DEFAULT_REMINDER_TEMPLATE, subject: 'Hi {first_name}' };
     expect(parseSessionTemplate(mine)).toEqual(mine);
+  });
+
+  it('per-discipline text: each its own when valid, else the older single text, else the default', () => {
+    const old = { ...DEFAULT_REMINDER_TEMPLATE, intro: 'Older single text.' };
+    const mag = { ...DEFAULT_REMINDER_TEMPLATE, intro: 'MAG text.' };
+    const r = parseSessionTemplates({ MAG: mag, TNT: { subject: 'x' } }, old);
+    expect(r.templates).toEqual({ WAG: old, MAG: mag, TNT: old });
+    expect(r.saved).toEqual({ WAG: false, MAG: true, TNT: false });
+    expect(parseSessionTemplates(undefined, undefined).templates.WAG).toEqual(LINEUPS_SESSION_TEMPLATE);
   });
 });

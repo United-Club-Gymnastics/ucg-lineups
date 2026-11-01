@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClubsScreenData } from '../../src/lib/data/email-store';
 import { DEFAULT_TEMPLATES } from '../../src/lib/email-templates';
-import { LINEUPS_SESSION_TEMPLATE } from '../../src/lib/session-details';
+import { DEFAULT_SESSION_TEMPLATES, LINEUPS_SESSION_TEMPLATE, NONE_SAVED } from '../../src/lib/session-details';
 import { ATHLETES, CLUBS, SAVED, SESSIONS } from '../lib/clubs-fixtures';
 
 const fb = vi.hoisted(() => ({ db: {}, auth: { currentUser: { email: 'admin@unitedclubgymnastics.org' } }, connectGmail: vi.fn() }));
@@ -34,7 +34,7 @@ function data(over: Partial<ClubsScreenData> = {}): ClubsScreenData {
   return {
     sessions: SESSIONS, athletes, clubs, gymOrder: ['Green', 'Red', 'Yellow', 'Orange', 'Purple'], saved: SAVED,
     meetName: 'Test Nationals', deadline: null, templates: DEFAULT_TEMPLATES, log: [],
-    sessionTemplate: LINEUPS_SESSION_TEMPLATE, coachRoles: null, schedule: { 1: { date: '2027-04-09', competition: '8:45 AM' } }, meetDate: '', ...over,
+    sessionTemplates: DEFAULT_SESSION_TEMPLATES, sessionTemplatesSaved: { WAG: true, MAG: true, TNT: true }, coachRoles: null, schedule: { 1: { date: '2027-04-09', competition: '8:45 AM' } }, meetDate: '', ...over,
   };
 }
 
@@ -60,7 +60,7 @@ beforeEach(() => {
   store.saveSessionTemplate.mockResolvedValue(undefined);
   store.saveCoachRoles.mockResolvedValue(undefined);
   sheets.loadPublishedSheets.mockResolvedValue({ 's1-orange': new Date('2027-04-01T16:00:00Z') });
-  store.loadOtherSessionTemplates.mockResolvedValue([{ meetId: 'm0', meetName: 'Prelims', template: { ...LINEUPS_SESSION_TEMPLATE, intro: 'Copied intro.' } }]);
+  store.loadOtherSessionTemplates.mockResolvedValue([{ meetId: 'm0', meetName: 'Prelims', templates: { ...DEFAULT_SESSION_TEMPLATES, WAG: { ...LINEUPS_SESSION_TEMPLATE, intro: 'Copied intro.' } } }]);
   fb.connectGmail.mockResolvedValue('mock-token');
   fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
   vi.stubGlobal('fetch', fetchMock);
@@ -74,7 +74,7 @@ describe('Session details', () => {
     await user.click(screen.getByRole('button', { name: 'Session reminders' }));
     expect(['Draft email', 'Publish sheets', 'Send', 'Send log'].map((n) => screen.getByRole('button', { name: n }))).toHaveLength(4);
     expect(screen.getByRole('heading', { name: 'Email text' })).toBeInTheDocument();
-    expect(screen.getByText(/^This meet’s saved text\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/^This meet’s saved WAG text\.$/)).toBeInTheDocument();
     await pick(user, 'Publish sheets');
     expect(await screen.findByRole('link', { name: /^Open the sheets page for Session 1/ })).toHaveAttribute('href', expect.stringContaining('#/sheets/m1/s1-orange?doc=rotation'));
     await pick(user, 'Send log');
@@ -83,9 +83,9 @@ describe('Session details', () => {
   });
 
   it('Draft email: edit, Preview a real athlete or coach, copy text from another meet, save', async () => {
-    const user = await open(data({ sessionTemplateSaved: false }));
+    const user = await open(data({ sessionTemplatesSaved: NONE_SAVED }));
     await pick(user, 'Draft email');
-    expect(screen.getByText(/^Starting text: UCG default, not saved yet/)).toBeInTheDocument();
+    expect(screen.getByText(/^Starting WAG text, not saved yet/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Preview' }));
     const frame = () => screen.getByTitle(/^Session details email to/) as HTMLIFrameElement;
     expect(frame().getAttribute('srcdoc')).toContain('Hello Ada!');
@@ -102,7 +102,30 @@ describe('Session details', () => {
     await user.click(screen.getByRole('button', { name: 'Copy' }));
     expect(screen.getByLabelText('Introduction')).toHaveValue('Copied intro.');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(store.saveSessionTemplate).toHaveBeenCalledWith(fb.db, 'm1', expect.objectContaining({ intro: 'Copied intro.' })));
+    await waitFor(() => expect(store.saveSessionTemplate).toHaveBeenCalledWith(fb.db, 'm1', 'WAG', expect.objectContaining({ intro: 'Copied intro.' })));
+    expect(screen.getByText(/^This meet’s saved WAG text\./)).toBeInTheDocument();
+  });
+
+  it('WAG, MAG and T&T each have their own text; picking a session switches to its text', async () => {
+    const user = await open();
+    await pick(user, 'Draft email');
+    const seg = screen.getByRole('group', { name: 'Email text for' });
+    expect(within(seg).getByRole('button', { name: 'WAG' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(seg).getByRole('button', { name: 'MAG' }));
+    await user.clear(screen.getByLabelText('Introduction'));
+    await user.type(screen.getByLabelText('Introduction'), 'MAG intro.');
+    expect(within(seg).getByRole('button', { name: 'MAG •' })).toBeInTheDocument();
+    await user.click(within(seg).getByRole('button', { name: 'WAG' }));
+    expect(screen.getByLabelText('Introduction')).not.toHaveValue('MAG intro.');
+    // Preview while editing MAG opens a MAG session with the MAG text.
+    await user.click(within(seg).getByRole('button', { name: 'MAG •' }));
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+    const doc = (screen.getByTitle(/^Session details email to/) as HTMLIFrameElement).getAttribute('srcdoc')!;
+    expect(doc).toContain('(MAG): Competition Details');
+    expect(doc).toContain('MAG intro.');
+    await user.click(screen.getByRole('button', { name: 'View draft' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.saveSessionTemplate).toHaveBeenCalledWith(fb.db, 'm1', 'MAG', expect.objectContaining({ intro: 'MAG intro.' })));
   });
 
   it('refuses a call-out link that is not http(s)', async () => {
@@ -146,7 +169,7 @@ describe('Session details', () => {
     expect(log).toHaveTextContent('Casey Coach · Session 1 - Orange (WAG)');
   });
 
-  it("Athletes for iContact downloads one list and one email with last year's fields", async () => {
+  it('Athletes for iContact downloads one list and one email per discipline', async () => {
     const created: Blob[] = [];
     const url = Object.assign(URL, { createObjectURL: vi.fn((b: Blob) => { created.push(b); return 'blob:x'; }), revokeObjectURL: vi.fn() });
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
@@ -154,7 +177,7 @@ describe('Session details', () => {
     await pick(user, 'Send');
     expect(screen.getByRole('textbox', { name: 'First-name merge tag' })).toHaveValue('[fname]');
     await user.click(screen.getByRole('button', { name: 'Download for iContact (zip)' }));
-    expect(await screen.findByText(/athletes for iContact\.zip: 2 athlete contacts across \d+ sessions? \(0 in more than one discipline\)\.$/)).toBeInTheDocument();
+    expect(await screen.findByText(/athletes for iContact\.zip: 1 list \(WAG 2 contacts\)\.$/)).toBeInTheDocument();
     expect(url.createObjectURL).toHaveBeenCalledTimes(1);
     expect(created[0].size).toBeGreaterThan(0);
     expect(click).toHaveBeenCalled();

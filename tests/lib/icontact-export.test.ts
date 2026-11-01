@@ -2,8 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import type { StoredAthlete } from '../../src/lib/import/diff';
 import type { Session } from '../../src/lib/import/types';
-import { csvCell, fileSafe, icontactAthleteExport, icontactTimesText } from '../../src/lib/icontact-export';
-import { LINEUPS_SESSION_TEMPLATE } from '../../src/lib/session-details';
+import { csvCell, fileSafe, ICONTACT_FIELDS, icontactAthleteExport, icontactTimesText } from '../../src/lib/icontact-export';
+import { DEFAULT_SESSION_TEMPLATES, LINEUPS_SESSION_TEMPLATE } from '../../src/lib/session-details';
 
 const ath = (o: Partial<StoredAthlete> & { first: string; clubId: string }): StoredAthlete => ({
   id: `WAG_${o.clubId}_${o.first.toLowerCase()}`, discipline: 'WAG', last: 'Test', clubName: `${o.clubId[0].toUpperCase()}${o.clubId.slice(1)} Gym`,
@@ -30,69 +30,93 @@ const CLUBS = [
   { id: 'bravo', name: 'Bravo Gym', contacts: [{ name: 'Hal Test', email: 'hal@example.org', role: 'Licensed Coach' }] },
 ];
 
+const TEMPLATES = { ...DEFAULT_SESSION_TEMPLATES, MAG: { ...LINEUPS_SESSION_TEMPLATE, intro: 'MAG only: bring grips.' } };
+
 describe('iContact athlete export', () => {
   const out = icontactAthleteExport({
     meetName: 'Test Meet 2027', meetId: 'm1', linkBase: 'https://lineups.example.org/', athletes: ATHLETES, clubs: CLUBS,
-    coachRoles: ['Licensed Coach'], template: LINEUPS_SESSION_TEMPLATE, sessions: [S1, S2],
+    coachRoles: ['Licensed Coach'], templates: TEMPLATES, sessions: [S1, S2],
     schedules: {
       's1-orange': { date: '2027-04-09', stretch: '7:30', warmups: '8:00', competition: '8:45' },
       's2-red': { date: '2027-04-10', stretch: '', warmups: '', competition: '1:00 PM' },
     },
   });
   const L = 'https://lineups.example.org/#/sheets/m1';
+  const [wag, mag] = out.lists;
 
-  it("one contact per address with last year's per-discipline fields; coaches left out, shared addresses merged", () => {
-    expect(out.fields).toEqual([
-      'wagsession', 'wagtimes', 'wagrotation', 'wagscorecard', 'magsession', 'magtimes', 'magrotation', 'magscorecard',
-      'tntsession', 'tnttimes', 'tntrotation', 'tntscorecard',
+  it("one list per discipline with that discipline's fields; coaches left out, shared addresses merged", () => {
+    expect(out.lists.map((l) => [l.discipline, l.list, l.contacts])).toEqual([['WAG', 'Test Meet 2027 - WAG', 3], ['MAG', 'Test Meet 2027 - MAG', 1]]);
+    expect(out.people).toBe(3);
+    expect(wag.fields).toEqual(['wagsession', 'wagtimes', 'wagrotation', 'wagscorecard']);
+    expect(ICONTACT_FIELDS).toHaveLength(12);
+    const s1 = `Session 1 - Orange (WAG),"Friday, April 9, 2027 · Open stretch 7:30 AM",${L}/s1-orange?doc=rotation,${L}/s1-orange?doc=scorecards`;
+    expect(wag.csv.split('\r\n')).toEqual([
+      'Email,First Name,Last Name,wagsession,wagtimes,wagrotation,wagscorecard',
+      `ada@example.org,Ada,Test,${s1}`,
+      `bea@example.org,Bea,"O""Neil, Jr",${s1}`,
+      `family@example.org,Ava & Mia,,${s1}`,
+      '',
     ]);
-    expect(out.contacts).toBe(3);
-    expect(out.multiSession).toBe(1);
-    expect(out.clashes).toEqual([]);
-    const wag = `Session 1 - Orange (WAG),"Friday, April 9, 2027 · Open stretch 7:30 AM",${L}/s1-orange?doc=rotation,${L}/s1-orange?doc=scorecards`;
-    expect(out.csv.split('\r\n')).toEqual([
-      `Email,First Name,Last Name,${out.fields.join(',')}`,
-      `ada@example.org,Ada,Test,${wag},Session 2 - Red (MAG),"Saturday, April 10, 2027",${L}/s2-red?doc=rotation,${L}/s2-red?doc=scorecards,,,,`,
-      `bea@example.org,Bea,"O""Neil, Jr",${wag},,,,,,,,`,
-      `family@example.org,Ava & Mia,,${wag},,,,,,,,`,
+    expect(mag.csv.split('\r\n')).toEqual([
+      'Email,First Name,Last Name,magsession,magtimes,magrotation,magscorecard',
+      `ada@example.org,Ada,Test,Session 2 - Red (MAG),"Saturday, April 10, 2027",${L}/s2-red?doc=rotation,${L}/s2-red?doc=scorecards`,
       '',
     ]);
   });
 
-  it('one email with the merge tags, the saved text and no addresses', () => {
-    expect(out.html.startsWith('<!DOCTYPE html>')).toBe(true);
-    expect(out.html).toContain('Hello [fname]!');
-    for (const d of ['wag', 'mag', 'tnt']) expect(out.html).toContain(`<a href="[${d}rotation]"`);
-    expect(out.html).toContain('>[magsession]</a>');
-    expect(out.html).toContain('margin:0 0 6px;">[tnttimes]</div>');
-    expect(out.html).toContain('We are so excited to have you at Test Meet 2027.');
-    expect(out.html).not.toContain('ada@example.org');
-    expect(out.subject).toBe('Test Meet 2027: Session Information');
+  it("each email is the athlete email from its discipline's text, with that discipline's tags", () => {
+    expect(wag.html.startsWith('<!DOCTYPE html>')).toBe(true);
+    expect(wag.html).toContain('Hello [fname]!');
+    expect(wag.html).toContain('[wagsession]: Competition Details');
+    expect(wag.html).toContain('>[wagtimes]</div>');
+    expect(wag.html).toContain('<a href="[wagrotation]"');
+    expect(wag.html).toContain('<a href="[wagscorecard]"');
+    expect(wag.html).not.toMatch(/\[mag|invalid/);
+    expect(wag.html).toContain('We are so excited to have you at Test Meet 2027.');
+    expect(mag.html).toContain('MAG only: bring grips.');
+    expect(mag.html).toContain('<a href="[magrotation]"');
+    expect(wag.html).not.toContain('ada@example.org');
+    expect(wag.subject).toBe('Test Meet 2027: WAG Session Information');
+    expect(mag.subject).toBe('Test Meet 2027: MAG Session Information');
   });
 
-  it('zip files: contacts, email and the steps', () => {
-    expect(out.files.map((f) => f.name)).toEqual(['Test Meet 2027 - contacts.csv', 'Test Meet 2027 - email.html', 'How to use.txt']);
-    expect(out.files[2].content).toContain('wagsession, wagtimes, wagrotation');
-    expect(out.files[2].content).toContain('Test Meet 2027: Session Information');
+  it('zip files: contacts and email per list, then the steps', () => {
+    expect(out.files.map((f) => f.name)).toEqual([
+      'Test Meet 2027 - WAG contacts.csv', 'Test Meet 2027 - WAG email.html', 'Test Meet 2027 - MAG contacts.csv', 'Test Meet 2027 - MAG email.html', 'How to use.txt',
+    ]);
+    const how = out.files[4].content;
+    expect(how).toContain('wagsession, wagtimes, wagrotation');
+    expect(how).toContain('Test Meet 2027: MAG Session Information');
+    expect(how).toContain('new list named "Test Meet 2027 - MAG"');
+  });
+
+  it('T&T files say "and" in the name', () => {
+    const S3: Session = { ...S1, id: 's3-tnt', discipline: 'TNT' };
+    const o = icontactAthleteExport({
+      meetName: 'M', meetId: 'm1', linkBase: 'https://x.example/', clubs: CLUBS, coachRoles: [], templates: DEFAULT_SESSION_TEMPLATES, sessions: [S3], schedules: {},
+      athletes: [ath({ first: 'Tia', clubId: 'alpha', email: 'tia@example.org', id: 'TNT_alpha_tia', discipline: 'TNT', sessionId: 's3-tnt' })],
+    });
+    expect(o.files.map((f) => f.name)).toEqual(['M - TandT contacts.csv', 'M - TandT email.html', 'How to use.txt']);
+    expect(o.lists[0].subject).toBe('M: T&T Session Information');
   });
 
   it('two people at one address in two sessions of one discipline: the first session, and the address is listed', () => {
     const S3: Session = { ...S1, id: 's3-blue', name: 'Session 3', location: 'Blue' };
     const o = icontactAthleteExport({
-      meetName: 'M', meetId: 'm1', linkBase: 'https://x.example/', clubs: CLUBS, coachRoles: [], template: LINEUPS_SESSION_TEMPLATE, sessions: [S1, S3], schedules: {},
+      meetName: 'M', meetId: 'm1', linkBase: 'https://x.example/', clubs: CLUBS, coachRoles: [], templates: DEFAULT_SESSION_TEMPLATES, sessions: [S1, S3], schedules: {},
       athletes: [ath({ first: 'Mia', clubId: 'bravo', email: 'family@example.org' }), ath({ first: 'Ava', clubId: 'bravo', email: 'family@example.org', sessionId: 's3-blue' })],
     });
-    expect(o.clashes).toEqual(['family@example.org']);
-    expect(o.csv.split('\r\n')[1].startsWith('family@example.org,Mia & Ava,,Session 1 - Orange (WAG),')).toBe(true);
-    expect(o.files[2].content).toContain('     family@example.org');
+    expect(o.lists[0].clashes).toEqual(['family@example.org']);
+    expect(o.lists[0].csv.split('\r\n')[1].startsWith('family@example.org,Mia & Ava,,Session 1 - Orange (WAG),')).toBe(true);
+    expect(o.files.at(-1)!.content).toContain('     family@example.org');
   });
 
   it('takes another first-name tag', () => {
     const o = icontactAthleteExport({
-      meetName: '', meetId: 'm1', linkBase: 'https://x.example/', athletes: ATHLETES, clubs: CLUBS, coachRoles: [], template: LINEUPS_SESSION_TEMPLATE,
+      meetName: '', meetId: 'm1', linkBase: 'https://x.example/', athletes: ATHLETES, clubs: CLUBS, coachRoles: [], templates: DEFAULT_SESSION_TEMPLATES,
       sessions: [S1], schedules: {}, firstNameTag: ' [first_name] ',
     });
-    expect(o.html).toContain('Hello [first_name]!');
+    expect(o.lists[0].html).toContain('Hello [first_name]!');
   });
 });
 

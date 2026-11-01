@@ -7,9 +7,9 @@ import { addEmailLog, saveEmailTemplates, type EmailLogEntry, type LogTemplate }
 import type { StoredClub } from '../../lib/data/plan';
 import type { StoredAthlete } from '../../lib/import/diff';
 import type { Session } from '../../lib/import/types';
-import type { ReminderTemplate } from '../../lib/email/session-reminder-email';
+import type { Discipline } from '../../lib/apparatus';
 import type { ScheduleRows } from '../../lib/schedule';
-import { LINEUPS_SESSION_TEMPLATE } from '../../lib/session-details';
+import { DEFAULT_SESSION_TEMPLATES, NONE_SAVED, type SessionTemplates } from '../../lib/session-details';
 import SessionDetailsPanel from './SessionDetailsPanel';
 import { clubLinkUrl, DEFAULT_TEMPLATES, PLACEHOLDERS, renderReminder, type MessageContext, type Templates } from '../../lib/email-templates';
 import { FROM, sendTestBatch, SEND_MODE, testAlias, type FetchLike, type SendResult, type TestWho } from '../../lib/email-send';
@@ -27,8 +27,8 @@ export interface SessionDetailsData {
   gymOrder: string[];
   schedule?: ScheduleRows;
   meetDate?: string;
-  sessionTemplate?: ReminderTemplate;
-  sessionTemplateSaved?: boolean;
+  sessionTemplates?: SessionTemplates;
+  sessionTemplatesSaved?: Record<Discipline, boolean>;
   coachRoles?: string[] | null;
 }
 
@@ -346,7 +346,7 @@ export default function ReminderPanel({ meetId, rows: liveRows, templates: saved
           meetId={meetId} meetName={meetName} linkBase={linkBase} adminEmail={adminEmail}
           sessions={details.sessions} athletes={details.athletes} clubs={details.clubs} gymOrder={details.gymOrder}
           schedule={details.schedule ?? {}} meetDate={details.meetDate ?? ''}
-          template={details.sessionTemplate ?? LINEUPS_SESSION_TEMPLATE} templateSaved={!!details.sessionTemplate && details.sessionTemplateSaved !== false} coachRoles={details.coachRoles ?? null}
+          templates={details.sessionTemplates ?? DEFAULT_SESSION_TEMPLATES} templatesSaved={details.sessionTemplatesSaved ?? NONE_SAVED} coachRoles={details.coachRoles ?? null}
           log={liveLog} onLogged={onLogged}
           who={who} onWho={setWho}
           gmailToken={gmailToken} gmailError={gmailError} onConnect={() => void connect()} onExpired={() => setGmailToken(null)}

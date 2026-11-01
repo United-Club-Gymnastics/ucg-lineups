@@ -141,7 +141,7 @@ export function ClubsScreen({ meetId, data, live = null, liveStatus = 'connectin
         pauseMs={pauseMs}
         details={{
           sessions, athletes, clubs, gymOrder: data.gymOrder,
-          schedule: data.schedule, meetDate: data.meetDate, sessionTemplate: data.sessionTemplate, sessionTemplateSaved: data.sessionTemplateSaved ?? true, coachRoles: data.coachRoles,
+          schedule: data.schedule, meetDate: data.meetDate, sessionTemplates: data.sessionTemplates, sessionTemplatesSaved: data.sessionTemplatesSaved, coachRoles: data.coachRoles,
         }}
       />
     </div>
