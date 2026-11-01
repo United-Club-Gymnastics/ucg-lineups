@@ -160,6 +160,11 @@ export function publicSheetUrl(base: string, meetId: string, sessionId: string, 
   return `${base.replace(/#.*$/, '').replace(/\/?$/, '/')}#/sheets/${encodeURIComponent(meetId)}/${encodeURIComponent(sessionId)}?doc=${docKind}`;
 }
 
+/** The public page listing several sessions' sheets (an athlete in more than one session). Ids keep their order. */
+export function publicSessionsUrl(base: string, meetId: string, sessionIds: string[]): string {
+  return `${base.replace(/#.*$/, '').replace(/\/?$/, '/')}#/sheets/${encodeURIComponent(meetId)}?s=${sessionIds.map(encodeURIComponent).join(',')}`;
+}
+
 /** What the email builder needs for one recipient. Times are shown as typed on the Exports screen; Lineups has no end time. */
 export function sessionEmailContext(input: {
   meetName: string;

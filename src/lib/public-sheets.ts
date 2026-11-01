@@ -5,6 +5,7 @@
 // export input is built from named fields only (no emails or contacts), which `publicSheetDoc` checks again. Athlete ids are
 // replaced by opaque ones first: an id carries the birth date when two athletes in a club share a name (review of PR #8).
 import type { SessionExportInput } from './pdf/collate';
+import { formatTime } from './schedule';
 
 export const PUBLIC_SHEET_VERSION = 1;
 
@@ -66,3 +67,11 @@ export type SheetKind = 'rotation' | 'scorecards';
 
 /** `?doc=` on the page: rotation sheet unless it says scorecards. */
 export const sheetKindOf = (q: string | null): SheetKind => (q === 'scorecards' ? 'scorecards' : 'rotation');
+
+/** `April 9, 2027 · Open stretch 7:30 AM · Warm-ups 8:00 AM · Competition 8:45 AM` (T&T: the date and its competition time). */
+export function sheetWhenLine(input: SessionExportInput): string {
+  if (input.type === 'tnt') return [input.input.meet.date, input.input.competitionTime].filter(Boolean).join(' · ');
+  const t = input.input.schedule;
+  const times: [string, string][] = [['Open stretch', t.stretch], ['Warm-ups', t.warmups], ['Competition', t.competition]];
+  return [input.input.meet.date, ...times.filter(([, v]) => v).map(([l, v]) => `${l} ${formatTime(v)}`)].filter(Boolean).join(' · ');
+}

@@ -4,21 +4,12 @@ import { PagePreview } from '../components/PdfPreview';
 import { db } from '../lib/firebase';
 import { loadPublicSheet } from '../lib/data/export-store';
 import { formatWhen } from '../lib/pacific';
-import { sessionFileName, sessionPages, type SessionExportInput } from '../lib/pdf/collate';
-import { formatTime } from '../lib/schedule';
+import { sessionFileName, sessionPages } from '../lib/pdf/collate';
 import { sessionPdf } from '../lib/pdf/files';
-import { sheetKindOf, type PublicSheet, type SheetKind } from '../lib/public-sheets';
+import { sheetKindOf, sheetWhenLine, type PublicSheet, type SheetKind } from '../lib/public-sheets';
 import './sheets.css';
 
 type Loaded = { kind: 'loading' } | { kind: 'missing' } | { kind: 'error'; message: string } | { kind: 'ready'; sheet: PublicSheet };
-
-/** `April 9, 2027 · Open stretch 7:30 AM · Warm-ups 8:00 AM · Competition 8:45 AM` (T&T: the date and its competition time). */
-function whenLine(input: SessionExportInput): string {
-  if (input.type === 'tnt') return [input.input.meet.date, input.input.competitionTime].filter(Boolean).join(' · ');
-  const t = input.input.schedule;
-  const times: [string, string][] = [['Open stretch', t.stretch], ['Warm-ups', t.warmups], ['Competition', t.competition]];
-  return [input.input.meet.date, ...times.filter(([, v]) => v).map(([l, v]) => `${l} ${formatTime(v)}`)].filter(Boolean).join(' · ');
-}
 
 const printedOn = (d: Date | null): string => (d ?? new Date()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -46,7 +37,7 @@ export default function SheetsPage() {
   const drawn = useMemo(() => {
     if (!sheet) return { pages: [], when: '', broken: false };
     try {
-      return { pages: sessionPages(kind, sheet.input, printed), when: whenLine(sheet.input), broken: false };
+      return { pages: sessionPages(kind, sheet.input, printed), when: sheetWhenLine(sheet.input), broken: false };
     } catch {
       return { pages: [], when: '', broken: true };
     }
