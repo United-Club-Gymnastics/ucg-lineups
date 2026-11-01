@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StoredAthlete } from '../../src/lib/import/diff';
 import type { Session } from '../../src/lib/import/types';
-import { csvCell, fileSafe, icontactAthleteExport } from '../../src/lib/icontact-export';
+import { csvCell, fileSafe, icontactAthleteExport, icontactTimesText } from '../../src/lib/icontact-export';
 import { LINEUPS_SESSION_TEMPLATE } from '../../src/lib/session-details';
 
 const ath = (o: Partial<StoredAthlete> & { first: string; clubId: string }): StoredAthlete => ({
@@ -34,20 +34,27 @@ describe('iContact athlete export', () => {
   const out = icontactAthleteExport({
     meetName: 'Test Meet 2027', meetId: 'm1', linkBase: 'https://lineups.example.org/', athletes: ATHLETES, clubs: CLUBS,
     coachRoles: ['Licensed Coach'], template: LINEUPS_SESSION_TEMPLATE, sessions: [S1, S2],
+    schedules: {
+      's1-orange': { date: '2027-04-09', stretch: '7:30', warmups: '8:00', competition: '8:45' },
+      's2-red': { date: '2027-04-10', stretch: '', warmups: '', competition: '1:00 PM' },
+    },
   });
   const L = 'https://lineups.example.org/#/sheets/m1';
 
   it("one contact per address with last year's per-discipline fields; coaches left out, shared addresses merged", () => {
-    expect(out.fields).toEqual(['wagsession', 'wagrotation', 'wagscorecard', 'magsession', 'magrotation', 'magscorecard', 'tntsession', 'tntrotation', 'tntscorecard']);
+    expect(out.fields).toEqual([
+      'wagsession', 'wagtimes', 'wagrotation', 'wagscorecard', 'magsession', 'magtimes', 'magrotation', 'magscorecard',
+      'tntsession', 'tnttimes', 'tntrotation', 'tntscorecard',
+    ]);
     expect(out.contacts).toBe(3);
     expect(out.multiSession).toBe(1);
     expect(out.clashes).toEqual([]);
-    const wag = `Session 1 - Orange (WAG),${L}/s1-orange?doc=rotation,${L}/s1-orange?doc=scorecards`;
+    const wag = `Session 1 - Orange (WAG),"Friday, April 9, 2027 · Open stretch 7:30 AM",${L}/s1-orange?doc=rotation,${L}/s1-orange?doc=scorecards`;
     expect(out.csv.split('\r\n')).toEqual([
       `Email,First Name,Last Name,${out.fields.join(',')}`,
-      `ada@example.org,Ada,Test,${wag},Session 2 - Red (MAG),${L}/s2-red?doc=rotation,${L}/s2-red?doc=scorecards,,,`,
-      `bea@example.org,Bea,"O""Neil, Jr",${wag},,,,,,`,
-      `family@example.org,Ava & Mia,,${wag},,,,,,`,
+      `ada@example.org,Ada,Test,${wag},Session 2 - Red (MAG),"Saturday, April 10, 2027",${L}/s2-red?doc=rotation,${L}/s2-red?doc=scorecards,,,,`,
+      `bea@example.org,Bea,"O""Neil, Jr",${wag},,,,,,,,`,
+      `family@example.org,Ava & Mia,,${wag},,,,,,,,`,
       '',
     ]);
   });
@@ -57,6 +64,7 @@ describe('iContact athlete export', () => {
     expect(out.html).toContain('Hello [fname]!');
     for (const d of ['wag', 'mag', 'tnt']) expect(out.html).toContain(`<a href="[${d}rotation]"`);
     expect(out.html).toContain('>[magsession]</a>');
+    expect(out.html).toContain('margin:0 0 6px;">[tnttimes]</div>');
     expect(out.html).toContain('We are so excited to have you at Test Meet 2027.');
     expect(out.html).not.toContain('ada@example.org');
     expect(out.subject).toBe('Test Meet 2027: Session Information');
@@ -64,14 +72,14 @@ describe('iContact athlete export', () => {
 
   it('zip files: contacts, email and the steps', () => {
     expect(out.files.map((f) => f.name)).toEqual(['Test Meet 2027 - contacts.csv', 'Test Meet 2027 - email.html', 'How to use.txt']);
-    expect(out.files[2].content).toContain('wagsession, wagrotation');
+    expect(out.files[2].content).toContain('wagsession, wagtimes, wagrotation');
     expect(out.files[2].content).toContain('Test Meet 2027: Session Information');
   });
 
   it('two people at one address in two sessions of one discipline: the first session, and the address is listed', () => {
     const S3: Session = { ...S1, id: 's3-blue', name: 'Session 3', location: 'Blue' };
     const o = icontactAthleteExport({
-      meetName: 'M', meetId: 'm1', linkBase: 'https://x.example/', clubs: CLUBS, coachRoles: [], template: LINEUPS_SESSION_TEMPLATE, sessions: [S1, S3],
+      meetName: 'M', meetId: 'm1', linkBase: 'https://x.example/', clubs: CLUBS, coachRoles: [], template: LINEUPS_SESSION_TEMPLATE, sessions: [S1, S3], schedules: {},
       athletes: [ath({ first: 'Mia', clubId: 'bravo', email: 'family@example.org' }), ath({ first: 'Ava', clubId: 'bravo', email: 'family@example.org', sessionId: 's3-blue' })],
     });
     expect(o.clashes).toEqual(['family@example.org']);
@@ -82,9 +90,18 @@ describe('iContact athlete export', () => {
   it('takes another first-name tag', () => {
     const o = icontactAthleteExport({
       meetName: '', meetId: 'm1', linkBase: 'https://x.example/', athletes: ATHLETES, clubs: CLUBS, coachRoles: [], template: LINEUPS_SESSION_TEMPLATE,
-      sessions: [S1], firstNameTag: ' [first_name] ',
+      sessions: [S1], schedules: {}, firstNameTag: ' [first_name] ',
     });
     expect(o.html).toContain('Hello [first_name]!');
+  });
+});
+
+describe('times field', () => {
+  it('date and open stretch, only the parts that are set', () => {
+    expect(icontactTimesText({ date: '2027-04-09', stretch: '7:30 AM', warmups: '8:00', competition: '' })).toBe('Friday, April 9, 2027 · Open stretch 7:30 AM');
+    expect(icontactTimesText({ date: '', stretch: '13:15', warmups: '', competition: '' })).toBe('Open stretch 1:15 PM');
+    expect(icontactTimesText({ date: '', stretch: '', warmups: '', competition: '' })).toBe('');
+    expect(icontactTimesText(undefined)).toBe('');
   });
 });
 

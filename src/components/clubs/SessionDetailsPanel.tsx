@@ -222,6 +222,7 @@ export default function SessionDetailsPanel(props: {
     try {
       const built = icontactAthleteExport({
         meetName: props.meetName, meetId, linkBase, athletes: props.athletes, clubs: props.clubs, coachRoles, template, firstNameTag: fnameTag, sessions,
+        schedules: Object.fromEntries(sessions.map((s) => [s.id, resolveSchedule(scheduleKey(s), props.schedule, s.scheduleOverride, props.meetDate)])),
       });
       const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
@@ -482,8 +483,9 @@ export default function SessionDetailsPanel(props: {
       <h2 className="display" id="sd-ic-h">Athletes for iContact</h2>
       <p className="adm-muted">
         One list and one email for every session. The zip has the contacts (CSV), the email (HTML) and <b>How to use.txt</b> with the steps.
-        Each contact’s sessions go in last year’s iContact custom fields, one set per discipline: {ICONTACT_FIELDS.map((f, i) => <span key={f}>{i ? ', ' : ''}<code>[{f}]</code></span>)}.
-        The email lists each of the contact’s sessions as a link to its sheets page; a discipline they’re not in shows nothing.
+        Each contact’s sessions go in iContact custom fields, one set per discipline: {ICONTACT_FIELDS.map((f, i) => <span key={f}>{i ? ', ' : ''}<code>[{f}]</code></span>)}.
+        Last year’s fields are reused; the <code>times</code> fields (date and open stretch time) are new, so add them in iContact before importing.
+        The email lists each of the contact’s sessions as a link to its sheets page, with its date and arrival time; a discipline they’re not in shows nothing.
         Uses the saved email text and the people in Who gets it (an athlete who is also a coach gets the coach email from here instead). Publish sheets first so the links work.
       </p>
       <label className="cl-field sd-tag">

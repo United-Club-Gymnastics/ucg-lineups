@@ -3,8 +3,9 @@
 // per address; an athlete is in at most one session per discipline, so each contact carries one set of fields per discipline,
 // the same custom fields as last year's iContact email (Julia 2026-10-31, reused each year: last year's people are not emailed
 // again): `[wagsession]` (the session's name), `[wagrotation]` and `[wagscorecard]` (links to its sheets page), and the same for
-// mag and tnt. A discipline the contact is not in is blank, and the email shows nothing for it.
-//  - `<meet> - contacts.csv`: Email, First Name, Last Name, then the nine fields.
+// mag and tnt. `[wagtimes]` is new (Julia 2026-11-01): the date and the open stretch time, when athletes should arrive. A
+// discipline the contact is not in is blank, and the email shows nothing for it.
+//  - `<meet> - contacts.csv`: Email, First Name, Last Name, then the twelve fields.
 //  - `<meet> - email.html`: the email as a whole HTML page, with the merge tags in it.
 //  - `How to use.txt`: the steps and the field names.
 // The people are the athlete emails in Send, so an athlete who is also a coach in a session is left out of that session (Lineups
@@ -16,6 +17,8 @@ import type { StoredAthlete } from './import/diff';
 import type { Discipline } from './apparatus';
 import type { Session } from './import/types';
 import type { StoredClub } from './data/plan';
+import { sessionDateText } from './email/session-date';
+import { formatTime, type ScheduleFields } from './schedule';
 import { buildSessionRecipients, publicSheetUrl, sessionEmailLabel } from './session-details';
 
 /** iContact's first-name personalization tag. The screen lets the admin change it. */
@@ -56,7 +59,15 @@ export const fileSafe = (s: string): string => s.replace(/[\\/:*?"<>|]+/g, '-').
 /** Last year's iContact custom fields, one set per discipline. */
 const FIELD_KEY: Record<Discipline, string> = { WAG: 'wag', MAG: 'mag', TNT: 'tnt' };
 const DISCIPLINES: Discipline[] = ['WAG', 'MAG', 'TNT'];
-export const ICONTACT_FIELDS = DISCIPLINES.flatMap((d) => ['session', 'rotation', 'scorecard'].map((f) => `${FIELD_KEY[d]}${f}`));
+export const ICONTACT_FIELDS = DISCIPLINES.flatMap((d) => ['session', 'times', 'rotation', 'scorecard'].map((f) => `${FIELD_KEY[d]}${f}`));
+
+/** The times field: the date and the open stretch time (when athletes arrive), e.g. "Friday, April 9, 2027 · Open stretch
+ *  7:30 AM". Only the parts that are set. */
+export function icontactTimesText(schedule: ScheduleFields | undefined): string {
+  if (!schedule) return '';
+  const stretch = formatTime(schedule.stretch);
+  return [sessionDateText(schedule.date), stretch && `Open stretch ${stretch}`].filter(Boolean).join(' · ');
+}
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const multiline = (h: string) => h.replace(/\r?\n/g, '<br>');
@@ -69,8 +80,8 @@ const LINK = '#bd3f27';
 const P = 'margin:0 0 14px;';
 const H = `color:${NAVY};font-size:16px;font-weight:700;margin:22px 0 8px;`;
 
-/** The email: the saved template's text around the merge tags. `{session}` reads "Session"; date and times are blank (each
- *  session's page has them). The scorecard fields are in the list for iContact but not used here: the page switches between the
+/** The email: the saved template's text around the merge tags. `{session}` reads "Session"; the template's date and times
+ *  are blank (the times field under each session has them). The scorecard fields are in the list for iContact but not used here: the page switches between the
  *  rotation sheet and scorecards. Tags are inserted as given, not escaped: they are the admin's own text. */
 function buildEmail(t: ReminderTemplate, meetName: string, first: string) {
   const ctx: ReminderContext = {
@@ -82,11 +93,13 @@ function buildEmail(t: ReminderTemplate, meetName: string, first: string) {
   const html: string[] = [];
   html.push(`<p style="${P}color:${NAVY};font-size:16px;font-weight:700;">Hello ${first}!</p>`);
   if (t.intro.trim()) html.push(`<p style="${P}">${fill(t.intro)}</p>`);
-  // Each session's name links to its sheets page. A discipline the contact is not in has a blank name and link, so nothing shows.
+  // Each session's name links to its sheets page, with its date and arrival time under it. A discipline the contact is not in
+  // has blank fields, so nothing shows (an empty div has no height).
   html.push(`<div style="background:${PANEL};border-radius:8px;padding:12px 16px;margin:0 0 14px;color:${NAVY};">
 <div style="font-weight:700;margin:0 0 6px;">Your sessions</div>
-${DISCIPLINES.map((d) => `<div style="margin:0 0 4px;"><a href="[${FIELD_KEY[d]}rotation]" style="color:${LINK};font-weight:700;text-decoration:underline;">[${FIELD_KEY[d]}session]</a></div>`).join('\n')}
-<div style="margin:8px 0 0;font-size:14px;">Each session opens its page with the date and times, the rotation sheet and the scorecards.</div>
+${DISCIPLINES.map((d) => `<div><a href="[${FIELD_KEY[d]}rotation]" style="color:${LINK};font-weight:700;text-decoration:underline;">[${FIELD_KEY[d]}session]</a></div>
+<div style="font-size:14px;margin:0 0 6px;">[${FIELD_KEY[d]}times]</div>`).join('\n')}
+<div style="margin:8px 0 0;font-size:14px;">Please arrive by the open stretch time. Each session opens its page with all the times, the rotation sheet and the scorecards.</div>
 </div>`);
   if (t.facilityNote.trim()) html.push(`<p style="${P}">${fill(t.facilityNote)}</p>`);
   html.push(`<h2 style="${H}">Competition Documents</h2>`);
@@ -120,6 +133,8 @@ export function icontactAthleteExport(input: {
   linkBase: string;
   /** In display order. */
   sessions: Session[];
+  /** Each session's schedule, by session id. */
+  schedules: Record<string, ScheduleFields>;
   athletes: StoredAthlete[];
   clubs: Pick<StoredClub, 'id' | 'name' | 'contacts'>[];
   coachRoles: string[];
@@ -147,8 +162,8 @@ export function icontactAthleteExport(input: {
     const cells = DISCIPLINES.flatMap((d) => {
       const s = p.sessions[d];
       return s
-        ? [sessionEmailLabel(s), publicSheetUrl(input.linkBase, input.meetId, s.id, 'rotation'), publicSheetUrl(input.linkBase, input.meetId, s.id, 'scorecards')]
-        : ['', '', ''];
+        ? [sessionEmailLabel(s), icontactTimesText(input.schedules[s.id]), publicSheetUrl(input.linkBase, input.meetId, s.id, 'rotation'), publicSheetUrl(input.linkBase, input.meetId, s.id, 'scorecards')]
+        : ['', '', '', ''];
     });
     rows.push(csvLine([email, p.first.join(' & '), p.first.length > 1 ? '' : p.last, ...cells]));
   }
@@ -160,7 +175,8 @@ export function icontactAthleteExport(input: {
     `${input.meetName || 'Meet'}: athlete Session details for iContact`,
     '',
     `1. Import "${base} - contacts.csv" into iContact as one new list. Match Email, First Name and Last Name to iContact's`,
-    `   fields, and each other column to the custom field of the same name (last year's fields):`,
+    `   fields, and each other column to the custom field of the same name. Last year's fields are reused; the three`,
+    `   *times fields (date and open stretch time) are new, so add them in iContact first:`,
     `     ${ICONTACT_FIELDS.join(', ')}`,
     `   Importing fills them with this year's sessions; a discipline the athlete is not in is blank.`,
     `2. Make a new message, paste in the HTML from "${base} - email.html", and use this subject:`,
